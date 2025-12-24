@@ -1,7 +1,9 @@
 # Project Status
 
 ## In Progress / Next
-- Task 008 - Azure Portal Setup (Demo Infrastructure)
+- Task 008 - Azure Services Setup (DocQ&A Demo)
+  - Search, OpenAI, and Postgres configured
+  - Blob Storage and Container Apps/Jobs pending
 
 ## Done
 - Task 000 - Repo Bootstrap and Scaffolding

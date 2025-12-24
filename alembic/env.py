@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import os
+import sys
+from pathlib import Path
 from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT))
 
 from apps.api.app.db import Base
 
@@ -16,9 +21,9 @@ target_metadata = Base.metadata
 
 
 def _get_url() -> str:
-    url = os.getenv("DATABASE_URL")
+    url = os.getenv("DB_DATABASE_URL")
     if not url:
-        raise RuntimeError("DATABASE_URL is required for migrations.")
+        raise RuntimeError("DB_DATABASE_URL is required for migrations.")
     return url
 
 

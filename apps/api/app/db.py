@@ -77,7 +77,7 @@ class Telemetry(Base):
 
 def _engine():
     if not DATABASE_URL:
-        raise RuntimeError("DATABASE_URL is required.")
+        raise RuntimeError("DB_DATABASE_URL is required.")
     return create_engine(DATABASE_URL, pool_pre_ping=True)
 
 

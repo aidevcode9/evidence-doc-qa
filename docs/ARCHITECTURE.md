@@ -88,7 +88,7 @@ Indexing reference: `packages/shared/schemas/indexing.md` defines embeddings and
 - **Jobs:** Container Apps Jobs (ingestion/indexing)
 - **Storage:** Azure Blob Storage
 - **Search:** Azure AI Search (vector + BM25)
-- **LLM:** Azure OpenAI if available, else alternate provider
+- **LLM:** Azure OpenAI (demo default)
 - **DB:** Supabase Free Postgres OR smallest Azure Postgres
 - **Cache:** Optional Redis (may be disabled)
 - **Observability:** Application Insights (minimal sampling)
@@ -104,6 +104,7 @@ A change to any of:
 - `parser_mode`
 
 is not considered released unless the eval suite passes configured thresholds.
+Eval gates run in GitHub Actions.
 
 ---
 

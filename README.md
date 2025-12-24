@@ -23,7 +23,7 @@ A demo-first, near-free **evidence-bound Document Q&A** system.
 ```bash
 cd apps/api
 uv sync
-export DATABASE_URL="postgresql+psycopg://USER:PASSWORD@HOST:5432/DBNAME"
+export DB_DATABASE_URL="postgresql+psycopg://USER:PASSWORD@HOST:5432/DBNAME"
 alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
@@ -40,8 +40,13 @@ pnpm dev
 python -m evals.run --suite golden
 ```
 
+## Environment Variables
+See `docs/ENVIRONMENT.md` for required variables, secret handling, and
+environment-specific guidance.
+
 ## Docs
 - `docs/PRD.md`
 - `docs/ARCHITECTURE.md`
 - `docs/EVALS_V1_REQUIREMENTS.md`
 - `docs/OPEN_QUESTIONS.md`
+- `docs/ENVIRONMENT.md`

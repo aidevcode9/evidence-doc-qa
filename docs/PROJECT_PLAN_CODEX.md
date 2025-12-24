@@ -28,6 +28,13 @@ This plan is written to be executed step-by-step using Codex CLI. It emphasizes 
 
 > **Explicitly out of scope for demo:** Front Door/WAF, APIM, private networking.
 
+## 1.1) Deployment prep (must not skip)
+- Build and push the API container image (Docker Hub or Azure Container Registry).
+- Create the Blob container for raw PDFs/snapshots and capture connection details.
+- Create the Postgres database, enable SSL, and allow client IPs via firewall.
+- Set required env vars/secrets in the Container Apps API and Jobs.
+- Capture App Insights connection string or instrumentation key.
+
 ---
 
 ## 2) Repo Skeleton (create first)

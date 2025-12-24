@@ -39,8 +39,8 @@ Tier 2 is disabled in the demo and only documented as an interface.
 - `layout_hint`: string, optional (e.g., `table`, `header`, `footer`)
 
 ## Deterministic Chunking Rules (Tier 0)
-- `CHUNK_SIZE = 900` characters
-- `CHUNK_OVERLAP = 150` characters
+- `DOCQA_CHUNK_SIZE = 900` characters
+- `DOCQA_CHUNK_OVERLAP = 150` characters
 - Fixed `chunk_size` and `chunk_overlap` across all documents.
 - Chunk boundaries align to page text boundaries only (no cross-page spans).
 - Header/footer stripping is disabled in v3.1 demo.

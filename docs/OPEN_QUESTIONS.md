@@ -41,8 +41,8 @@ Codex should treat **Section A as authoritative**.
 
 ### A3) Deterministic chunking (Tier 0)
 **Decision**
-- `CHUNK_SIZE = 900` characters
-- `CHUNK_OVERLAP = 150` characters
+- `DOCQA_CHUNK_SIZE = 900` characters
+- `DOCQA_CHUNK_OVERLAP = 150` characters
 - Whitespace normalization enabled
 - Header/footer stripping **disabled** in v3.1 demo
 
@@ -76,11 +76,11 @@ Each citation MUST resolve to a retrieved chunk.
 **Decision**
 - `confidence = top_evidence.score`
 - Threshold:
-  - `CONF_MIN = 0.35`
+- `DOCQA_CONF_MIN = 0.35`
 
 **Behavior**
 - No evidence → `NO_SUPPORTING_EVIDENCE`
-- Evidence but `confidence < CONF_MIN` → `LOW_RETRIEVAL_CONFIDENCE`
+- Evidence but `confidence < DOCQA_CONF_MIN` → `LOW_RETRIEVAL_CONFIDENCE`
 
 ---
 
