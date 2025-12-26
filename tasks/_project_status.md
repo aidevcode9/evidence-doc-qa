@@ -6,6 +6,7 @@
   - Blob Storage and Container Apps/Jobs pending
 - Task 009 - CI/CD Integration (Evaluation Gate)
 - Task 010 - UI/UX Refinement (Refusal Transparency)
+- Task 011 - Vercel Frontend Deployment (Monorepo Config)
 
 ## Done
 - Task 000 - Repo Bootstrap and Scaffolding

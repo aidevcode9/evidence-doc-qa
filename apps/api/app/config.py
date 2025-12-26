@@ -55,3 +55,7 @@ AZURE_SEARCH_CREATE_INDEX = _is_truthy(_getenv("AZURE_SEARCH_CREATE_INDEX", "0")
 ENABLE_INDEXING = _is_truthy(_getenv("DOCQA_ENABLE_INDEXING", "1"))
 
 METRICS_ADMIN_TOKEN = _getenv("DOCQA_METRICS_ADMIN_TOKEN", "")
+
+# CORS
+_allowed_origins = _getenv("DOCQA_ALLOWED_ORIGINS", "http://localhost:3000")
+ALLOWED_ORIGINS = [o.strip() for o in _allowed_origins.split(",") if o.strip()]

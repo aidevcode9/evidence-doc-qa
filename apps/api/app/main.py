@@ -15,6 +15,7 @@ from .config import (
     PROMPT_VERSION,
     RAW_DIR,
     RETRIEVAL_VERSION,
+    ALLOWED_ORIGINS,
 )
 from .db import Chunk, Document, get_doc_name, get_latest_docs_snapshot_id, insert_chunks, insert_document
 from .schemas import AskRequest, AskResponse, Citation
@@ -25,7 +26,7 @@ app = FastAPI(title="DocQ&A API", version="0.0.0")
 # CORS Configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
