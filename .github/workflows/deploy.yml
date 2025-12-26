@@ -17,9 +17,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RESOURCE_GROUP: doc-qa-demo
-      LOCATION: eastus
+      LOCATION: eastus2
       PREFIX: docqa
-      CONTAINER_APP_ENV: "docqa-env"
+      CONTAINER_APP_ENV: ""
     steps:
       - uses: actions/checkout@v4
 
