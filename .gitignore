@@ -238,4 +238,4 @@ test_*.py
 GEMINI.md
 
 # Infrastructure
-infra/
+infra/provision.ps1
