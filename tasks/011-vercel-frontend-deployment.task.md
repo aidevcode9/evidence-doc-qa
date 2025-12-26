@@ -13,10 +13,10 @@
 - The frontend can successfully communicate with the Azure-hosted API (when configured).
 
 ## Deployment Steps
-1.  **Vercel Configuration:** Add `vercel.json` at the root with `rootDirectory: "apps/web"`.
-2.  **Dashboard Integration:** Link the GitHub repository in the Vercel Dashboard.
+1.  **Dashboard Integration:** Link the GitHub repository in the Vercel Dashboard.
+2.  **Project Settings:** In the "General" settings, set **Root Directory** to `apps/web`.
 3.  **Environment Variables:** Add `NEXT_PUBLIC_API_URL` to the Vercel project settings.
-4.  **CORS Update:** Once the Vercel URL is known, update `apps/api/app/main.py` to include it in `allow_origins`.
+4.  **CORS Update:** Update your Azure API's `DOCQA_ALLOWED_ORIGINS` with the Vercel URL.
 
 ## Files likely touched
 - `vercel.json`
