@@ -205,3 +205,34 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Next.js
+.next/
+out/
+.next-env.d.ts
+next-env.d.ts
+
+# Environments
+.env*.local
+.env
+
+# Project Specific
+data/
+apps/api/data/
+errs/
+*.db
+debug_db.py
+debug_env.py
+check_schema.py
+test_*.py
+
+# Gemini / AI
+.gemini/
+GEMINI.md

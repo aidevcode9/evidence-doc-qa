@@ -4,6 +4,8 @@
 - Task 008 - Azure Services Setup (DocQ&A Demo)
   - Search, OpenAI, and Postgres configured
   - Blob Storage and Container Apps/Jobs pending
+- Task 009 - CI/CD Integration (Evaluation Gate)
+- Task 010 - UI/UX Refinement (Refusal Transparency)
 
 ## Done
 - Task 000 - Repo Bootstrap and Scaffolding

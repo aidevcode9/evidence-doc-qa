@@ -1,9 +1,11 @@
 import json
 import urllib.request
+import urllib.error
 from typing import List, Tuple
 
 from .config import (
     AZURE_SEARCH_API_KEY,
+    AZURE_SEARCH_API_VERSION,
     AZURE_SEARCH_CREATE_INDEX,
     AZURE_SEARCH_ENDPOINT,
     AZURE_SEARCH_INDEX,
@@ -103,30 +105,41 @@ def _ensure_index() -> None:
             {"name": "doc_name", "type": "Edm.String", "filterable": True},
             {"name": "page_num", "type": "Edm.Int32", "filterable": True},
             {"name": "chunk_index", "type": "Edm.Int32", "filterable": True},
-            {"name": "chunk_text", "type": "Edm.String", "searchable": True},
+            {"name": "chunk_text", "type": "Edm.String", "searchable": True, "retrievable": True},
             {
                 "name": "embedding_vector",
                 "type": "Collection(Edm.Single)",
                 "searchable": True,
+                "retrievable": True,
                 "dimensions": EMBEDDINGS_DIM,
                 "vectorSearchProfile": "vprofile",
             },
-            {"name": "indexed_at_utc", "type": "Edm.String"},
-            {"name": "index_version", "type": "Edm.String"},
-            {"name": "retrieval_version", "type": "Edm.String"},
+            {"name": "indexed_at_utc", "type": "Edm.String", "retrievable": True},
+            {"name": "index_version", "type": "Edm.String", "retrievable": True},
+            {"name": "retrieval_version", "type": "Edm.String", "retrievable": True},
         ],
         "vectorSearch": {
-            "profiles": [{"name": "vprofile", "algorithm": "hnsw"}],
-            "algorithms": [{"name": "hnsw", "kind": "hnsw"}],
+            "profiles": [{"name": "vprofile", "algorithm": "halgo"}],
+            "algorithms": [{"name": "halgo", "kind": "hnsw"}],
+        },
+        "semantic": {
+            "configurations": [
+                {
+                    "name": "default",
+                    "prioritizedFields": {
+                        "prioritizedContentFields": [{"fieldName": "chunk_text"}]
+                    },
+                }
+            ]
         },
     }
-    url = _azure_url(f"/indexes/{AZURE_SEARCH_INDEX}?api-version=2023-11-01")
+    url = _azure_url(f"/indexes/{AZURE_SEARCH_INDEX}?api-version={AZURE_SEARCH_API_VERSION}")
     _azure_request("PUT", url, schema)
 
 
 def _azure_upload(records: List[dict]) -> None:
     payload = {"value": [{"@search.action": "upload", **rec} for rec in records]}
-    url = _azure_url(f"/indexes/{AZURE_SEARCH_INDEX}/docs/index?api-version=2023-11-01")
+    url = _azure_url(f"/indexes/{AZURE_SEARCH_INDEX}/docs/index?api-version={AZURE_SEARCH_API_VERSION}")
     _azure_request("POST", url, payload)
 
 
@@ -145,6 +158,17 @@ def _azure_request(method: str, url: str, payload: dict) -> None:
             "api-key": AZURE_SEARCH_API_KEY,
         },
     )
-    with urllib.request.urlopen(req) as resp:
-        if resp.status >= 300:
-            raise RuntimeError(f"Azure Search request failed: {resp.status}")
+    try:
+        with urllib.request.urlopen(req) as resp:
+            if resp.status >= 300:
+                raise RuntimeError(f"Azure Search request failed: {resp.status}")
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8")
+        raise RuntimeError(f"Azure Search request failed: {e.code} - {error_body}") from e
+    except Exception:
+        raise
+
+
+def _azure_enabled() -> bool:
+    return bool(AZURE_SEARCH_ENDPOINT and AZURE_SEARCH_API_KEY and AZURE_SEARCH_INDEX)
+

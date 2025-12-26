@@ -6,6 +6,7 @@ from typing import Generator, Iterable
 
 from sqlalchemy import Boolean, Float, Integer, String, Text, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
+from sqlalchemy.pool import NullPool
 
 from .config import DATABASE_URL
 
@@ -78,7 +79,7 @@ class Telemetry(Base):
 def _engine():
     if not DATABASE_URL:
         raise RuntimeError("DB_DATABASE_URL is required.")
-    return create_engine(DATABASE_URL, pool_pre_ping=True)
+    return create_engine(DATABASE_URL, poolclass=NullPool)
 
 
 SessionLocal = sessionmaker(bind=_engine(), class_=Session, expire_on_commit=False)

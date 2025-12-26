@@ -1,15 +1,19 @@
+import os
 import time
 import uuid
 
 from fastapi import FastAPI, File, Header, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 
 from . import indexing, ingestion, policy, retrieval
 from .config import (
     CONF_MIN,
-    MODEL_ID,
+    DATA_DIR,
     METRICS_ADMIN_TOKEN,
+    MODEL_ID,
     PARSER_MODE,
     PROMPT_VERSION,
+    RAW_DIR,
     RETRIEVAL_VERSION,
 )
 from .db import Chunk, Document, get_doc_name, get_latest_docs_snapshot_id, insert_chunks, insert_document
@@ -17,6 +21,22 @@ from .schemas import AskRequest, AskResponse, Citation
 from .telemetry import compute_metrics, load_window_telemetry, record_telemetry
 
 app = FastAPI(title="DocQ&A API", version="0.0.0")
+
+# CORS Configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.on_event("startup")
+def startup_event():
+    # Bootstrap data directories
+    os.makedirs(DATA_DIR, exist_ok=True)
+    os.makedirs(RAW_DIR, exist_ok=True)
 
 
 @app.get("/healthz")

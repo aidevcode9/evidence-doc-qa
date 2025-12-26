@@ -1,44 +1,81 @@
 import json
 import math
 import re
+import urllib.request
 from typing import Dict, List, Optional
 
-from .config import RRF_K, TOP_K, TOP_K_BM25, TOP_K_VECTOR
+from .config import (
+    AZURE_SEARCH_API_KEY,
+    AZURE_SEARCH_API_VERSION,
+    AZURE_SEARCH_ENDPOINT,
+    AZURE_SEARCH_INDEX,
+    RRF_K,
+    TOP_K,
+    TOP_K_BM25,
+    TOP_K_VECTOR,
+)
 from .db import load_chunks, load_index_records
 from .embeddings import embed_texts
 
 
 def hybrid_search(question: str, docs_snapshot_id: Optional[str]) -> List[Dict]:
+    if _azure_enabled():
+        return _azure_search(question, docs_snapshot_id)
+
     records = _load_index_records(docs_snapshot_id)
     if not records:
         return _fallback_overlap(question, docs_snapshot_id)
 
-    query_tokens = _tokenize(question)
+
+def _azure_enabled() -> bool:
+    return bool(AZURE_SEARCH_ENDPOINT and AZURE_SEARCH_API_KEY and AZURE_SEARCH_INDEX)
+
+
+def _azure_search(question: str, docs_snapshot_id: Optional[str]) -> List[Dict]:
     query_embedding = embed_texts([question])[0]
+    payload = {
+        "search": question,
+        "vectorQueries": [
+            {
+                "kind": "vector",
+                "vector": query_embedding,
+                "fields": "embedding_vector",
+                "k": TOP_K_VECTOR,
+            }
+        ],
+        "top": TOP_K,
+    }
+    if docs_snapshot_id and docs_snapshot_id != "none":
+        payload["filter"] = f"docs_snapshot_id eq '{docs_snapshot_id}'"
 
-    for rec in records:
-        rec["bm25_score"] = _overlap_score(query_tokens, rec["chunk_text"])
-        rec["vector_score"] = _cosine(query_embedding, rec["embedding_vector"])
+    url = f"{AZURE_SEARCH_ENDPOINT.rstrip('/')}/indexes/{AZURE_SEARCH_INDEX}/docs/search?api-version={AZURE_SEARCH_API_VERSION}"
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "api-key": AZURE_SEARCH_API_KEY,
+        },
+    )
+    with urllib.request.urlopen(req) as resp:
+        data = json.load(resp)
 
-    bm25_ranked = sorted(records, key=lambda r: r["bm25_score"], reverse=True)[
-        :TOP_K_BM25
-    ]
-    vec_ranked = sorted(records, key=lambda r: r["vector_score"], reverse=True)[
-        :TOP_K_VECTOR
-    ]
-
-    combined: Dict[str, Dict] = {}
-    _apply_rank_scores(combined, bm25_ranked, key="bm25")
-    _apply_rank_scores(combined, vec_ranked, key="vector")
-
-    max_rrf = 2 / (RRF_K + 1)
-    for rec in combined.values():
-        rec["rrf_score"] = rec["rrf_score_raw"] / max_rrf if max_rrf else 0.0
-
-    fused = sorted(combined.values(), key=lambda r: r["rrf_score"], reverse=True)[:TOP_K]
-    for idx, rec in enumerate(fused, start=1):
-        rec["rrf_rank"] = idx
-    return fused
+    results = []
+    for doc in data.get("value", []):
+        results.append(
+            {
+                "chunk_id": doc["chunk_id"],
+                "docs_snapshot_id": doc["docs_snapshot_id"],
+                "doc_id": doc["doc_id"],
+                "doc_name": doc.get("doc_name"),
+                "page_num": doc["page_num"],
+                "chunk_index": doc["chunk_index"],
+                "chunk_text": doc["chunk_text"],
+                "rrf_score": doc.get("@search.score", 0.0),
+            }
+        )
+    return results
 
 
 def _apply_rank_scores(

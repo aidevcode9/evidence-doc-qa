@@ -1,4 +1,7 @@
 import os
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
 
 
 def _getenv(key, default=None):
@@ -47,6 +50,7 @@ AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT = _getenv("AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT
 AZURE_SEARCH_ENDPOINT = _getenv("AZURE_SEARCH_ENDPOINT", "")
 AZURE_SEARCH_API_KEY = _getenv("AZURE_SEARCH_API_KEY", "")
 AZURE_SEARCH_INDEX = _getenv("AZURE_SEARCH_INDEX", "")
+AZURE_SEARCH_API_VERSION = _getenv("AZURE_SEARCH_API_VERSION", "2023-11-01")
 AZURE_SEARCH_CREATE_INDEX = _is_truthy(_getenv("AZURE_SEARCH_CREATE_INDEX", "0"))
 ENABLE_INDEXING = _is_truthy(_getenv("DOCQA_ENABLE_INDEXING", "1"))
 

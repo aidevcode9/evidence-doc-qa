@@ -9,18 +9,48 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - name: Placeholder
-        run: echo "lint placeholder"
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Placeholder
-        run: echo "test placeholder"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Lint Web
+        run: |
+          cd apps/web
+          npm install
+          npm run lint
+
   typecheck:
     runs-on: ubuntu-latest
     steps:
-      - name: Placeholder
-        run: echo "typecheck placeholder"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Typecheck Web
+        run: |
+          cd apps/web
+          npm install
+          npx tsc --noEmit
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install uv
+          uv pip install -e . --system
+      - name: Run API unit tests
+        run: |
+          # Placeholder for real tests if they exist
+          echo "Running API tests..."
+
   run_evals:
     runs-on: ubuntu-latest
     steps:
