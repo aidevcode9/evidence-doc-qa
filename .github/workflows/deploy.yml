@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RESOURCE_GROUP: doc-qa-demo
-      LOCATION: northcentralus
+      LOCATION: canadacentral
       PREFIX: docqa
     steps:
       - uses: actions/checkout@v4

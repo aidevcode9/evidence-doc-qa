@@ -19,9 +19,11 @@ var uniqueSuffix = uniqueString(resourceGroup().id, location)
 var searchName = '${prefix}-search-${uniqueSuffix}'
 var storageName = take('${prefix}stg${uniqueSuffix}', 24)
 var postgresName = '${prefix}-db-${uniqueSuffix}'
-var appServicePlanName = '${prefix}-plan-${uniqueSuffix}'
-var webAppName = '${prefix}-api-${uniqueSuffix}'
 var acrName = take('${prefix}reg${uniqueSuffix}', 24)
+
+// --- Existing Resources ---
+// Using the details provided for the existing docqa web app
+var existingWebAppName = 'docqa'
 
 // --- Container Registry ---
 resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
@@ -97,67 +99,24 @@ resource postgresFirewall 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRul
   }
 }
 
-// --- App Service (Web App for Containers) ---
-resource appServicePlan 'Microsoft.Web/serverfarms@2022-09-01' = {
-  name: appServicePlanName
-  location: location
-  sku: {
-    name: 'F1'
-    tier: 'Free'
-  }
-  kind: 'linux'
-  properties: {
-    reserved: true
-  }
+// --- Update Existing App Service Configuration ---
+resource webApp 'Microsoft.Web/sites@2022-09-01' existing = {
+  name: existingWebAppName
 }
 
-resource webApp 'Microsoft.Web/sites@2022-09-01' = {
-  name: webAppName
-  location: location
-  kind: 'app,linux,container'
+resource webAppConfig 'Microsoft.Web/sites/config@2022-09-01' = {
+  parent: webApp
+  name: 'appsettings'
   properties: {
-    serverFarmId: appServicePlan.id
-    siteConfig: {
-      linuxFxVersion: 'DOCKER|${acr.properties.loginServer}/docqa-api:latest'
-      appSettings: [
-        {
-          name: 'DOCKER_REGISTRY_SERVER_URL'
-          value: 'https://${acr.properties.loginServer}'
-        }
-        {
-          name: 'DOCKER_REGISTRY_SERVER_USERNAME'
-          value: acr.listCredentials().username
-        }
-        {
-          name: 'DOCKER_REGISTRY_SERVER_PASSWORD'
-          value: acr.listCredentials().passwords[0].value
-        }
-        {
-          name: 'DB_DATABASE_URL'
-          value: 'postgresql+psycopg://${dbAdminLogin}:${dbAdminPassword}@${postgresServer.properties.fullyQualifiedDomainName}:5432/docqa?sslmode=require'
-        }
-        {
-          name: 'AZURE_SEARCH_ENDPOINT'
-          value: 'https://${searchName}.search.windows.net'
-        }
-        {
-          name: 'AZURE_SEARCH_API_KEY'
-          value: searchService.listAdminKeys().primaryKey
-        }
-        {
-          name: 'AZURE_SEARCH_INDEX'
-          value: 'docqa-index-v3'
-        }
-        {
-          name: 'DOCQA_ALLOWED_ORIGINS'
-          value: 'http://localhost:3000,${vercelUrl}'
-        }
-        {
-          name: 'WEBSITES_PORT'
-          value: '8000'
-        }
-      ]
-    }
+    DOCKER_REGISTRY_SERVER_URL: 'https://${acr.properties.loginServer}'
+    DOCKER_REGISTRY_SERVER_USERNAME: acr.listCredentials().username
+    DOCKER_REGISTRY_SERVER_PASSWORD: acr.listCredentials().passwords[0].value
+    DB_DATABASE_URL: 'postgresql+psycopg://${dbAdminLogin}:${dbAdminPassword}@${postgresServer.properties.fullyQualifiedDomainName}:5432/docqa?sslmode=require'
+    AZURE_SEARCH_ENDPOINT: 'https://${searchName}.search.windows.net'
+    AZURE_SEARCH_API_KEY: searchService.listAdminKeys().primaryKey
+    AZURE_SEARCH_INDEX: 'docqa-index-v3'
+    DOCQA_ALLOWED_ORIGINS: 'http://localhost:3000,${vercelUrl}'
+    WEBSITES_PORT: '8000'
   }
 }
 
