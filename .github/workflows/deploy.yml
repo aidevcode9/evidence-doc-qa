@@ -1,0 +1,61 @@
+name: deploy-backend
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "apps/api/**"
+      - "infra/**"
+      - ".github/workflows/deploy.yml"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  infra-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      RESOURCE_GROUP: doc-qa-demo-rg
+      LOCATION: eastus
+      PREFIX: docqa
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Provision Infrastructure
+        id: provision
+        uses: azure/arm-deploy@v2
+        with:
+          resourceGroupName: ${{ env.RESOURCE_GROUP }}
+          template: ./infra/main.bicep
+          parameters: >
+            prefix=${{ env.PREFIX }}
+            dbAdminPassword=${{ secrets.DB_ADMIN_PASSWORD }}
+            vercelUrl=${{ secrets.VERCEL_URL }}
+          failOnStdErr: false
+
+      - name: Get Infrastructure Outputs
+        run: |
+          echo "ACR_NAME=${{ steps.provision.outputs.acrName }}" >> $GITHUB_ENV
+          echo "ACR_LOGIN_SERVER=${{ steps.provision.outputs.acrLoginServer }}" >> $GITHUB_ENV
+
+      - name: Log in to ACR
+        run: |
+          az acr login --name ${{ env.ACR_NAME }}
+
+      - name: Build and Push API Image
+        run: |
+          docker build -t ${{ env.ACR_LOGIN_SERVER }}/docqa-api:${{ github.sha }} -f apps/api/Dockerfile apps/api
+          docker push ${{ env.ACR_LOGIN_SERVER }}/docqa-api:${{ github.sha }}
+
+      - name: Deploy to Container App
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          imageToDeploy: ${{ env.ACR_LOGIN_SERVER }}/docqa-api:${{ github.sha }}
+          resourceGroup: ${{ env.RESOURCE_GROUP }}
+          containerAppName: ${{ env.PREFIX }}-api
