@@ -4,15 +4,6 @@ param location string = resourceGroup().location
 @description('Prefix for resource names.')
 param prefix string = 'docqa'
 
-@description('The name of the existing Container App Environment. If empty, a new one will be created.')
-param containerAppEnvName string = ''
-
-@description('The image for the API container.')
-param apiImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
-
-@description('The name of the database.')
-param dbName string = 'docqa'
-
 @description('The admin username for the Postgres server.')
 param dbAdminLogin string = 'pgadmin'
 
@@ -24,12 +15,11 @@ param dbAdminPassword string
 param vercelUrl string = ''
 
 var logAnalyticsName = '${prefix}-logs'
-var defaultContainerAppEnvName = '${prefix}-env'
-var actualContainerAppEnvName = empty(containerAppEnvName) ? defaultContainerAppEnvName : containerAppEnvName
 var searchName = '${prefix}-search'
 var storageName = take('${prefix}${uniqueString(resourceGroup().id)}', 24)
 var postgresName = '${prefix}-db-server'
-var apiAppName = '${prefix}-api'
+var appServicePlanName = '${prefix}-plan'
+var webAppName = '${prefix}-api-app'
 var acrName = take('${prefix}reg${uniqueString(resourceGroup().id)}', 24)
 
 // --- Container Registry ---
@@ -41,18 +31,6 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   }
   properties: {
     adminUserEnabled: true
-  }
-}
-
-// --- Observability (Log Analytics only) ---
-resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
-  name: logAnalyticsName
-  location: location
-  properties: {
-    sku: {
-      name: 'PerGB2018'
-    }
-    retentionInDays: 30
   }
 }
 
@@ -79,9 +57,6 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2022-09-01' = {
     name: 'Standard_LRS'
   }
   kind: 'StorageV2'
-  properties: {
-    accessTier: 'Hot'
-  }
 }
 
 resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2022-09-01' = {
@@ -112,12 +87,6 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2022-12-01' =
   }
 }
 
-resource postgresDb 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2022-12-01' = {
-  parent: postgresServer
-  name: dbName
-}
-
-// Allow Azure services to connect to Postgres
 resource postgresFirewall 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2022-12-01' = {
   parent: postgresServer
   name: 'AllowAllAzureServices'
@@ -127,91 +96,70 @@ resource postgresFirewall 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRul
   }
 }
 
-// --- Container App Environment ---
-resource env 'Microsoft.App/managedEnvironments@2023-05-01' = if (empty(containerAppEnvName)) {
-  name: actualContainerAppEnvName
+// --- App Service (Web App for Containers) ---
+resource appServicePlan 'Microsoft.Web/serverfarms@2022-09-01' = {
+  name: appServicePlanName
   location: location
+  sku: {
+    name: 'B1'
+    tier: 'Basic'
+  }
+  kind: 'linux'
   properties: {
-    appLogsConfiguration: {
-      destination: 'log-analytics'
-      logAnalyticsConfiguration: {
-        customerId: logAnalytics.properties.customerId
-        sharedKey: logAnalytics.listKeys().primarySharedKey
-      }
-    }
+    reserved: true
   }
 }
 
-// Existing env reference for the API app
-resource existingEnv 'Microsoft.App/managedEnvironments@2023-05-01' existing = if (!empty(containerAppEnvName)) {
-  name: containerAppEnvName
-}
-
-resource apiApp 'Microsoft.App/containerApps@2023-05-01' = {
-  name: apiAppName
+resource webApp 'Microsoft.Web/sites@2022-09-01' = {
+  name: webAppName
   location: location
+  kind: 'app,linux,container'
   properties: {
-    managedEnvironmentId: empty(containerAppEnvName) ? env.id : existingEnv.id
-    configuration: {
-      ingress: {
-        external: true
-        targetPort: 8000
-      }
-      registries: [
+    serverFarmId: appServicePlan.id
+    siteConfig: {
+      linuxFxVersion: 'DOCKER|${acr.properties.loginServer}/docqa-api:latest'
+      appSettings: [
         {
-          server: acr.properties.loginServer
-          username: acr.listCredentials().username
-          passwordSecretRef: 'acr-password'
-        }
-      ]
-      secrets: [
-        {
-          name: 'db-url'
-          value: 'postgresql+psycopg://${dbAdminLogin}:${dbAdminPassword}@${postgresServer.properties.fullyQualifiedDomainName}:5432/${dbName}?sslmode=require'
+          name: 'DOCKER_REGISTRY_SERVER_URL'
+          value: 'https://${acr.properties.loginServer}'
         }
         {
-          name: 'search-key'
+          name: 'DOCKER_REGISTRY_SERVER_USERNAME'
+          value: acr.listCredentials().username
+        }
+        {
+          name: 'DOCKER_REGISTRY_SERVER_PASSWORD'
+          value: acr.listCredentials().passwords[0].value
+        }
+        {
+          name: 'DB_DATABASE_URL'
+          value: 'postgresql+psycopg://${dbAdminLogin}:${dbAdminPassword}@${postgresServer.properties.fullyQualifiedDomainName}:5432/docqa?sslmode=require'
+        }
+        {
+          name: 'AZURE_SEARCH_ENDPOINT'
+          value: 'https://${searchName}.search.windows.net'
+        }
+        {
+          name: 'AZURE_SEARCH_API_KEY'
           value: searchService.listAdminKeys().primaryKey
         }
         {
-          name: 'acr-password'
-          value: acr.listCredentials().passwords[0].value
+          name: 'AZURE_SEARCH_INDEX'
+          value: 'docqa-index-v3'
         }
-      ]
-    }
-    template: {
-      containers: [
         {
-          image: apiImage
-          name: 'api'
-          env: [
-            {
-              name: 'DB_DATABASE_URL'
-              secretRef: 'db-url'
-            }
-            {
-              name: 'AZURE_SEARCH_ENDPOINT'
-              value: 'https://${searchName}.search.windows.net'
-            }
-            {
-              name: 'AZURE_SEARCH_API_KEY'
-              secretRef: 'search-key'
-            }
-            {
-              name: 'AZURE_SEARCH_INDEX'
-              value: 'docqa-index-v3'
-            }
-            {
-              name: 'DOCQA_ALLOWED_ORIGINS'
-              value: 'http://localhost:3000,${vercelUrl}'
-            }
-          ]
+          name: 'DOCQA_ALLOWED_ORIGINS'
+          value: 'http://localhost:3000,${vercelUrl}'
+        }
+        {
+          name: 'WEBSITES_PORT'
+          value: '8000'
         }
       ]
     }
   }
 }
 
-output apiFqdn string = apiApp.properties.configuration.ingress.fqdn
-output acrLoginServer string = acr.properties.loginServer
+output apiFqdn string = webApp.properties.defaultHostName
 output acrName string = acr.name
+output acrLoginServer string = acr.properties.loginServer

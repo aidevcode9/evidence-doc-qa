@@ -19,7 +19,6 @@ jobs:
       RESOURCE_GROUP: doc-qa-demo
       LOCATION: eastus2
       PREFIX: docqa
-      CONTAINER_APP_ENV: ""
     steps:
       - uses: actions/checkout@v4
 
@@ -36,7 +35,6 @@ jobs:
           template: ./infra/main.bicep
           parameters: >
             prefix=${{ env.PREFIX }}
-            containerAppEnvName=${{ env.CONTAINER_APP_ENV }}
             dbAdminPassword=${{ secrets.DB_ADMIN_PASSWORD }}
             vercelUrl=${{ secrets.VERCEL_URL }}
           failOnStdErr: false
@@ -52,12 +50,12 @@ jobs:
 
       - name: Build and Push API Image
         run: |
-          docker build -t ${{ env.ACR_LOGIN_SERVER }}/docqa-api:${{ github.sha }} -f apps/api/Dockerfile apps/api
+          docker build -t ${{ env.ACR_LOGIN_SERVER }}/docqa-api:${{ github.sha }} -t ${{ env.ACR_LOGIN_SERVER }}/docqa-api:latest -f apps/api/Dockerfile apps/api
           docker push ${{ env.ACR_LOGIN_SERVER }}/docqa-api:${{ github.sha }}
+          docker push ${{ env.ACR_LOGIN_SERVER }}/docqa-api:latest
 
-      - name: Deploy to Container App
-        uses: azure/container-apps-deploy-action@v1
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
         with:
-          imageToDeploy: ${{ env.ACR_LOGIN_SERVER }}/docqa-api:${{ github.sha }}
-          resourceGroup: ${{ env.RESOURCE_GROUP }}
-          containerAppName: ${{ env.PREFIX }}-api
+          app-name: ${{ env.PREFIX }}-api-app
+          images: ${{ env.ACR_LOGIN_SERVER }}/docqa-api:${{ github.sha }}
