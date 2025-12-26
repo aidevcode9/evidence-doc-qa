@@ -16,7 +16,7 @@ jobs:
   infra-and-deploy:
     runs-on: ubuntu-latest
     env:
-      RESOURCE_GROUP: doc-qa-demo-rg
+      RESOURCE_GROUP: doc-qa-demo
       LOCATION: eastus
       PREFIX: docqa
     steps:
