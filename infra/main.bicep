@@ -14,7 +14,6 @@ param dbAdminPassword string
 @description('The Vercel frontend URL for CORS.')
 param vercelUrl string = ''
 
-var logAnalyticsName = '${prefix}-logs'
 var searchName = '${prefix}-search'
 var storageName = take('${prefix}${uniqueString(resourceGroup().id)}', 24)
 var postgresName = '${prefix}-db-server'
