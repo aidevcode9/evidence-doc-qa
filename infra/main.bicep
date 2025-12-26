@@ -4,6 +4,9 @@ param location string = resourceGroup().location
 @description('Prefix for resource names.')
 param prefix string = 'docqa'
 
+@description('The name of the existing Container App Environment. If empty, a new one will be created.')
+param containerAppEnvName string = ''
+
 @description('The image for the API container.')
 param apiImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 
@@ -22,12 +25,13 @@ param vercelUrl string = ''
 
 var logAnalyticsName = '${prefix}-logs'
 var appInsightsName = '${prefix}-insights'
-var containerAppEnvName = '${prefix}-env'
+var defaultContainerAppEnvName = '${prefix}-env'
+var actualContainerAppEnvName = empty(containerAppEnvName) ? defaultContainerAppEnvName : containerAppEnvName
 var searchName = '${prefix}-search'
-var storageName = '${prefix}storage'
+var storageName = take('${prefix}${uniqueString(resourceGroup().id)}', 24)
 var postgresName = '${prefix}-db-server'
 var apiAppName = '${prefix}-api'
-var acrName = '${prefix}registry${uniqueString(resourceGroup().id)}' // must be globally unique
+var acrName = take('${prefix}reg${uniqueString(resourceGroup().id)}', 24)
 
 // --- Container Registry ---
 resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
@@ -134,9 +138,9 @@ resource postgresFirewall 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRul
   }
 }
 
-// --- Container Apps ---
-resource env 'Microsoft.App/managedEnvironments@2023-05-01' = {
-  name: containerAppEnvName
+// --- Container App Environment ---
+resource env 'Microsoft.App/managedEnvironments@2023-05-01' = if (empty(containerAppEnvName)) {
+  name: actualContainerAppEnvName
   location: location
   properties: {
     appLogsConfiguration: {
@@ -149,11 +153,16 @@ resource env 'Microsoft.App/managedEnvironments@2023-05-01' = {
   }
 }
 
+// Existing env reference for the API app
+resource existingEnv 'Microsoft.App/managedEnvironments@2023-05-01' existing = if (!empty(containerAppEnvName)) {
+  name: containerAppEnvName
+}
+
 resource apiApp 'Microsoft.App/containerApps@2023-05-01' = {
   name: apiAppName
   location: location
   properties: {
-    managedEnvironmentId: env.id
+    managedEnvironmentId: empty(containerAppEnvName) ? env.id : existingEnv.id
     configuration: {
       ingress: {
         external: true

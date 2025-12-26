@@ -19,6 +19,7 @@ jobs:
       RESOURCE_GROUP: doc-qa-demo
       LOCATION: eastus
       PREFIX: docqa
+      CONTAINER_APP_ENV: "" # Add your existing environment name here if needed
     steps:
       - uses: actions/checkout@v4
 
@@ -35,6 +36,7 @@ jobs:
           template: ./infra/main.bicep
           parameters: >
             prefix=${{ env.PREFIX }}
+            containerAppEnvName=${{ env.CONTAINER_APP_ENV }}
             dbAdminPassword=${{ secrets.DB_ADMIN_PASSWORD }}
             vercelUrl=${{ secrets.VERCEL_URL }}
           failOnStdErr: false
