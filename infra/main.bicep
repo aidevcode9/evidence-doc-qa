@@ -14,12 +14,14 @@ param dbAdminPassword string
 @description('The Vercel frontend URL for CORS.')
 param vercelUrl string = ''
 
-var searchName = '${prefix}-search'
-var storageName = take('${prefix}${uniqueString(resourceGroup().id)}', 24)
-var postgresName = '${prefix}-db-server'
-var appServicePlanName = '${prefix}-plan'
-var webAppName = '${prefix}-api-app'
-var acrName = take('${prefix}reg${uniqueString(resourceGroup().id)}', 24)
+// Unique suffix to avoid collisions between regions
+var uniqueSuffix = uniqueString(resourceGroup().id, location)
+var searchName = '${prefix}-search-${uniqueSuffix}'
+var storageName = take('${prefix}stg${uniqueSuffix}', 24)
+var postgresName = '${prefix}-db-${uniqueSuffix}'
+var appServicePlanName = '${prefix}-plan-${uniqueSuffix}'
+var webAppName = '${prefix}-api-${uniqueSuffix}'
+var acrName = take('${prefix}reg${uniqueSuffix}', 24)
 
 // --- Container Registry ---
 resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
@@ -160,5 +162,6 @@ resource webApp 'Microsoft.Web/sites@2022-09-01' = {
 }
 
 output apiFqdn string = webApp.properties.defaultHostName
+output webAppName string = webApp.name
 output acrName string = acr.name
 output acrLoginServer string = acr.properties.loginServer
