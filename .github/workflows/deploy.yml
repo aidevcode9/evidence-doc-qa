@@ -19,7 +19,7 @@ jobs:
       RESOURCE_GROUP: doc-qa-demo
       LOCATION: eastus
       PREFIX: docqa
-      CONTAINER_APP_ENV: "" # Add your existing environment name here if needed
+      CONTAINER_APP_ENV: "docqa-env"
     steps:
       - uses: actions/checkout@v4
 
