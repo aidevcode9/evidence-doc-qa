@@ -236,3 +236,6 @@ test_*.py
 # Gemini / AI
 .gemini/
 GEMINI.md
+
+# Infrastructure
+infra/
