@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DocQ&A v3.1 - Azure Native Presentation</title>
+    <style>
+        :root {
+            --bg-color: #0b0f1a;
+            --text-color: #f1f5f9;
+            --accent-color: #0ea5e9;
+            --secondary-bg: #1e293b;
+            --border-color: #334155;
+        }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            scroll-snap-type: y mandatory;
+            overflow-y: scroll;
+            height: 100vh;
+        }
+        .slide {
+            height: 100vh;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            scroll-snap-align: start;
+            padding: 2rem;
+            box-sizing: border-box;
+            border-bottom: 1px solid var(--border-color);
+            text-align: center;
+        }
+        h1 { font-size: 3.5rem; color: var(--accent-color); margin-bottom: 0.5rem; }
+        h2 { font-size: 2.5rem; color: var(--accent-color); margin-bottom: 1.5rem; }
+        .content { max-width: 900px; width: 100%; text-align: left; }
+        .card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; width: 100%; }
+        .card { background: var(--secondary-bg); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color); }
+        .card h4 { margin: 0 0 10px 0; color: #94a3b8; }
+        .highlight { color: var(--accent-color); font-weight: bold; }
+        .download-btn {
+            margin-top: 2rem;
+            padding: 12px 24px;
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        ul { font-size: 1.2rem; line-height: 1.6; }
+        .footer { position: absolute; bottom: 20px; font-size: 0.8rem; color: #475569; }
+    </style>
+</head>
+<body>
+
+    <div class="slide">
+        <h1>Evidence-Bound DocQ&A</h1>
+        <h3>v3.1 | Azure-Native Implementation</h3>
+        <p style="color: #64748b;">Correctness & Auditability First</p>
+        <div class="footer">Scroll down ↓</div>
+    </div>
+
+    <div class="slide">
+        <div class="content">
+            <h2>The "Gated" Architecture</h2>
+            <div class="card-grid">
+                <div class="card">
+                    <h4>Gate 1: Confidence</h4>
+                    <p>If retrieval confidence < threshold, the system returns <code class="highlight">LOW_RETRIEVAL_CONFIDENCE</code>.</p>
+                </div>
+                <div class="card">
+                    <h4>Gate 2: Citations</h4>
+                    <p>Post-LLM validation ensures all claims map to chunks, else <code class="highlight">NO_SUPPORTING_EVIDENCE</code>.</p>
+                </div>
+                <div class="card">
+                    <h4>Telemetry</h4>
+                    <p>Logs <code class="highlight">request_id</code> and version snapshots for every single interaction.</p>
+                </div>
+                <div class="card">
+                    <h4>CI/CD Evals</h4>
+                    <p>Golden suites gate all configuration and model promotions.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="slide">
+        <div class="content">
+            <h2>Deployed Tech Stack</h2>
+            <ul>
+                <li><strong>Compute:</strong> Azure App Service (Linux Web App)</li>
+                <li><strong>Intelligence:</strong> GPT-5 Mini (serving) + Large Embeddings</li>
+                <li><strong>Search:</strong> Azure AI Search (Hybrid RRF)</li>
+                <li><strong>Database:</strong> Azure PostgreSQL Flexible Server</li>
+                <li><strong>Storage:</strong> Azure Blob Storage (Raw & Snapshots)</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="slide">
+        <h2>Save this Presentation</h2>
+        <p>Click the button below to download this file to your device.</p>
+        <button class="download-btn" onclick="saveFile()">Save Presentation (.html)</button>
+    </div>
+
+    <script>
+        function saveFile() {
+            const html = document.documentElement.outerHTML;
+            const blob = new Blob([html], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'DocQA_Presentation_v3.1.html';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>

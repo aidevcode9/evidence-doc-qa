@@ -37,11 +37,11 @@ This document serves as a human-readable reference for all configuration variabl
 | :--- | :--- | :--- |
 | `EMBEDDINGS_LOCAL` | Use hash-based local embeddings if `true`. | `true` |
 | `EMBEDDINGS_MODE` | Embedding mode override (`local`/`remote`). | `local` |
-| `EMBEDDINGS_DIM` | Dimensions of the embedding vector. | `3072` |
+| `EMBEDDINGS_DIM` | Dimensions of the embedding vector (Large uses 3072). | `3072` |
 | `AZURE_OPENAI_ENDPOINT` | Azure OpenAI URL. | (Secret) |
 | `AZURE_OPENAI_API_KEY` | Azure OpenAI Key. | (Secret) |
 | `AZURE_OPENAI_API_VERSION` | Azure OpenAI API Version. | `2024-02-01` |
-| `AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT` | Deployment name for embeddings. | `text-embedding-3-large` |
+| `AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT` | Deployment name (e.g. `text-embedding-3-large`). | `text-embedding-3-large` |
 
 ## 5. Retrieval Tuning
 | Variable | Description | Value |

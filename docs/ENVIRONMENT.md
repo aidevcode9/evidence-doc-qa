@@ -19,7 +19,7 @@ All project-specific variables are prefixed (for example, `DOCQA_`, `DB_`,
 `EMBEDDINGS_`, `AZURE_`) to avoid collisions.
 
 ## Azure OpenAI (optional)
-When using remote embeddings or generation, set:
+When using remote embeddings or generation (e.g., gpt5-mini and text-embedding-3-large), set:
 - `AZURE_OPENAI_ENDPOINT`
 - `AZURE_OPENAI_API_KEY`
 - `AZURE_OPENAI_API_VERSION`
