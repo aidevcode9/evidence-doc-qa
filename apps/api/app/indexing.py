@@ -63,7 +63,7 @@ def index_chunk_rows(
         )
 
     if _azure_enabled():
-        _ensure_index()
+        ensure_index()
         _azure_upload(records)
     else:
         insert_index_records(
@@ -88,8 +88,8 @@ def _azure_enabled() -> bool:
     return bool(AZURE_SEARCH_ENDPOINT and AZURE_SEARCH_API_KEY and AZURE_SEARCH_INDEX)
 
 
-def _ensure_index() -> None:
-    if not AZURE_SEARCH_CREATE_INDEX:
+def ensure_index(force: bool = False) -> None:
+    if not AZURE_SEARCH_CREATE_INDEX and not force:
         return
 
     schema = {
@@ -134,7 +134,11 @@ def _ensure_index() -> None:
         },
     }
     url = _azure_url(f"/indexes/{AZURE_SEARCH_INDEX}?api-version={AZURE_SEARCH_API_VERSION}")
-    _azure_request("PUT", url, schema)
+    
+    try:
+        _azure_request("PUT", url, schema)
+    except Exception as e:
+        print(f"Warning: Index creation/update failed: {e}")
 
 
 def _azure_upload(records: List[dict]) -> None:

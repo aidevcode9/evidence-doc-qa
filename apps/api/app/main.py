@@ -18,6 +18,7 @@ from .config import (
     ALLOWED_ORIGINS,
 )
 from .db import Chunk, Document, get_doc_name, get_latest_docs_snapshot_id, insert_chunks, insert_document, init_db
+from .indexing import ensure_index
 from .schemas import AskRequest, AskResponse, Citation
 from .telemetry import compute_metrics, load_window_telemetry, record_telemetry
 
@@ -40,6 +41,12 @@ def startup_event():
         init_db()
     except Exception as e:
         print(f"Warning: DB initialization failed: {e}")
+
+    # Ensure Search Index exists
+    try:
+        ensure_index()
+    except Exception as e:
+        print(f"Warning: Search index initialization failed: {e}")
 
     # Bootstrap data directories
     os.makedirs(DATA_DIR, exist_ok=True)
