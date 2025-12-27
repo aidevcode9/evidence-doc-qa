@@ -82,6 +82,11 @@ def _engine():
     return create_engine(DATABASE_URL, poolclass=NullPool)
 
 
+def init_db():
+    engine = _engine()
+    Base.metadata.create_all(bind=engine)
+
+
 SessionLocal = sessionmaker(bind=_engine(), class_=Session, expire_on_commit=False)
 
 

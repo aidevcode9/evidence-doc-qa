@@ -4,12 +4,9 @@ param location string = resourceGroup().location
 @description('Prefix for resource names.')
 param prefix string = 'docqa'
 
-@description('The admin username for the Postgres server.')
-param dbAdminLogin string = 'pgadmin'
-
-@description('The admin password for the Postgres server.')
+@description('The full Postgres connection string.')
 @secure()
-param dbAdminPassword string
+param dbDatabaseUrl string
 
 @description('The Vercel frontend URL for CORS.')
 param vercelUrl string = ''
@@ -18,11 +15,9 @@ param vercelUrl string = ''
 var uniqueSuffix = uniqueString(resourceGroup().id, location)
 var searchName = '${prefix}-search-${uniqueSuffix}'
 var storageName = take('${prefix}stg${uniqueSuffix}', 24)
-var postgresName = '${prefix}-db-${uniqueSuffix}'
 var acrName = take('${prefix}reg${uniqueSuffix}', 24)
 
 // --- Existing Resources ---
-// Using the details provided for the existing docqa web app
 var existingWebAppName = 'docqa'
 
 // --- Container Registry ---
@@ -72,33 +67,6 @@ resource container 'Microsoft.Storage/storageAccounts/blobServices/containers@20
   name: 'docqa-raw'
 }
 
-// --- Database (Postgres) ---
-resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2022-12-01' = {
-  name: postgresName
-  location: location
-  sku: {
-    name: 'Standard_B1ms'
-    tier: 'Burstable'
-  }
-  properties: {
-    administratorLogin: dbAdminLogin
-    administratorLoginPassword: dbAdminPassword
-    version: '15'
-    storage: {
-      storageSizeGB: 32
-    }
-  }
-}
-
-resource postgresFirewall 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2022-12-01' = {
-  parent: postgresServer
-  name: 'AllowAllAzureServices'
-  properties: {
-    startIpAddress: '0.0.0.0'
-    endIpAddress: '0.0.0.0'
-  }
-}
-
 // --- Update Existing App Service Configuration ---
 resource webApp 'Microsoft.Web/sites@2022-09-01' existing = {
   name: existingWebAppName
@@ -111,7 +79,7 @@ resource webAppConfig 'Microsoft.Web/sites/config@2022-09-01' = {
     DOCKER_REGISTRY_SERVER_URL: 'https://${acr.properties.loginServer}'
     DOCKER_REGISTRY_SERVER_USERNAME: acr.listCredentials().username
     DOCKER_REGISTRY_SERVER_PASSWORD: acr.listCredentials().passwords[0].value
-    DB_DATABASE_URL: 'postgresql+psycopg://${dbAdminLogin}:${dbAdminPassword}@${postgresServer.properties.fullyQualifiedDomainName}:5432/docqa?sslmode=require'
+    DB_DATABASE_URL: dbDatabaseUrl
     AZURE_STORAGE_CONNECTION_STRING: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
     AZURE_STORAGE_CONTAINER: 'docqa-raw'
     AZURE_SEARCH_ENDPOINT: 'https://${searchName}.search.windows.net'

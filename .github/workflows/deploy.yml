@@ -36,7 +36,7 @@ jobs:
           parameters: >
             prefix=${{ env.PREFIX }}
             location=${{ env.LOCATION }}
-            dbAdminPassword=${{ secrets.DB_ADMIN_PASSWORD }}
+            dbDatabaseUrl=${{ secrets.DB_DATABASE_URL }}
             vercelUrl=${{ secrets.VERCEL_URL }}
           failOnStdErr: false
 
