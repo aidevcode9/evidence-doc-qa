@@ -107,13 +107,14 @@ resource webApp 'Microsoft.Web/sites@2022-09-01' existing = {
 resource webAppConfig 'Microsoft.Web/sites/config@2022-09-01' = {
   parent: webApp
   name: 'appsettings'
-  properties: {
-    DOCKER_REGISTRY_SERVER_URL: 'https://${acr.properties.loginServer}'
-    DOCKER_REGISTRY_SERVER_USERNAME: acr.listCredentials().username
-    DOCKER_REGISTRY_SERVER_PASSWORD: acr.listCredentials().passwords[0].value
-    DB_DATABASE_URL: 'postgresql+psycopg://${dbAdminLogin}:${dbAdminPassword}@${postgresServer.properties.fullyQualifiedDomainName}:5432/docqa?sslmode=require'
-    AZURE_SEARCH_ENDPOINT: 'https://${searchName}.search.windows.net'
-    AZURE_SEARCH_API_KEY: searchService.listAdminKeys().primaryKey
+      properties: {
+      DOCKER_REGISTRY_SERVER_URL: 'https://${acr.properties.loginServer}'
+      DOCKER_REGISTRY_SERVER_USERNAME: acr.listCredentials().username
+      DOCKER_REGISTRY_SERVER_PASSWORD: acr.listCredentials().passwords[0].value
+      DB_DATABASE_URL: 'postgresql+psycopg://${dbAdminLogin}:${dbAdminPassword}@${postgresServer.properties.fullyQualifiedDomainName}:5432/docqa?sslmode=require'
+      AZURE_STORAGE_CONNECTION_STRING: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
+      AZURE_STORAGE_CONTAINER: 'docqa-raw'
+      AZURE_SEARCH_ENDPOINT: 'https://${searchName}.search.windows.net'    AZURE_SEARCH_API_KEY: searchService.listAdminKeys().primaryKey
     AZURE_SEARCH_INDEX: 'docqa-index-v3'
     DOCQA_ALLOWED_ORIGINS: 'http://localhost:3000,${vercelUrl}'
     WEBSITES_PORT: '8000'

@@ -5,14 +5,9 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir \
-    fastapi==0.115.5 \
-    uvicorn==0.30.6 \
-    python-multipart==0.0.9 \
-    pypdf==4.3.1 \
-    sqlalchemy==2.0.36 \
-    alembic==1.14.0 \
-    "psycopg[binary]==3.2.3"
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 COPY app /app/app
 

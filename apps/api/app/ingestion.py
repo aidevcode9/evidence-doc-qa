@@ -4,8 +4,16 @@ from datetime import datetime, timezone
 from typing import List, Tuple
 
 from pypdf import PdfReader
+from azure.storage.blob import BlobServiceClient
 
-from .config import CHUNK_OVERLAP, CHUNK_SIZE, PARSER_MODE, RAW_DIR
+from .config import (
+    AZURE_STORAGE_CONNECTION_STRING,
+    AZURE_STORAGE_CONTAINER,
+    CHUNK_OVERLAP,
+    CHUNK_SIZE,
+    PARSER_MODE,
+    RAW_DIR,
+)
 
 
 def compute_sha256(data: bytes) -> str:
@@ -19,9 +27,33 @@ def docs_snapshot_id_for(doc_sha256: str) -> str:
 def save_raw_pdf(doc_id: str, filename: str, data: bytes) -> str:
     safe_name = filename.replace(" ", "_")
     path = os.path.join(RAW_DIR, f"{doc_id}_{safe_name}")
+    
+    # Save locally
     with open(path, "wb") as f:
         f.write(data)
+    
+    # Save to Azure if configured
+    if AZURE_STORAGE_CONNECTION_STRING:
+        _upload_to_azure(f"{doc_id}_{safe_name}", data)
+        
     return path
+
+
+def _upload_to_azure(blob_name: str, data: bytes) -> None:
+    try:
+        service_client = BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING)
+        container_client = service_client.get_container_client(AZURE_STORAGE_CONTAINER)
+        
+        # Try to create container if it doesn't exist
+        try:
+            container_client.create_container()
+        except Exception:
+            pass
+            
+        blob_client = container_client.get_blob_client(blob_name)
+        blob_client.upload_blob(data, overwrite=True)
+    except Exception as e:
+        print(f"Warning: Failed to upload to Azure Blob Storage: {e}")
 
 
 def parse_pdf_pages(path: str) -> List[str]:

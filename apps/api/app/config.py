@@ -1,7 +1,10 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv(override=True)
+try:
+    load_dotenv(override=True)
+except Exception as e:
+    print(f"Warning: Failed to load .env file: {e}")
 
 
 def _getenv(key, default=None):
@@ -46,6 +49,9 @@ AZURE_OPENAI_ENDPOINT = _getenv("AZURE_OPENAI_ENDPOINT", "")
 AZURE_OPENAI_API_KEY = _getenv("AZURE_OPENAI_API_KEY", "")
 AZURE_OPENAI_API_VERSION = _getenv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")
 AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT = _getenv("AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT", "")
+
+AZURE_STORAGE_CONNECTION_STRING = _getenv("AZURE_STORAGE_CONNECTION_STRING", "")
+AZURE_STORAGE_CONTAINER = _getenv("AZURE_STORAGE_CONTAINER", "docqa-raw")
 
 AZURE_SEARCH_ENDPOINT = _getenv("AZURE_SEARCH_ENDPOINT", "")
 AZURE_SEARCH_API_KEY = _getenv("AZURE_SEARCH_API_KEY", "")

@@ -13,4 +13,6 @@ dependencies = [
     "alembic==1.14.0",
     "psycopg[binary]==3.2.3",
     "python-dotenv>=1.2.1",
+    "azure-storage-blob==12.24.1",
+    "azure-identity==1.19.0",
 ]
