@@ -10,8 +10,8 @@ environments.
 
 ## Hosted environments
 - Web (Vercel): use project environment variables (Development/Preview/Prod).
-- API/Jobs (Azure Container Apps): use secrets and secret refs, not plaintext.
-- CI/CD (Azure DevOps): store secrets in pipeline variables or variable groups.
+- API (Azure App Service): use "Configuration" settings in the Azure Portal or Bicep/GitHub Secrets.
+- Jobs (Azure): In the current demo, ingestion runs within the main API App Service for simplicity.
 
 ## Required variables
 Use `.env.example` as the source of truth for required keys and defaults.

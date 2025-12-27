@@ -84,14 +84,13 @@ Indexing reference: `packages/shared/schemas/indexing.md` defines embeddings and
 
 ## 4) Azure Mapping (Demo Default)
 
-- **API:** Azure Container Apps (public ingress)
-- **Jobs:** Container Apps Jobs (ingestion/indexing)
+- **API:** Azure App Service (Web App for Containers)
+- **Jobs:** Azure Container Apps Jobs (ingestion/indexing) - *Note: In demo, these run within the App Service or as async tasks.*
 - **Storage:** Azure Blob Storage
 - **Search:** Azure AI Search (vector + BM25)
 - **LLM:** Azure OpenAI (demo default)
-- **DB:** Supabase Free Postgres OR smallest Azure Postgres
-- **Cache:** Optional Redis (may be disabled)
-- **Observability:** Application Insights (minimal sampling)
+- **DB:** Azure PostgreSQL Flexible Server (existing)
+- **Observability:** Log Analytics (minimal sampling)
 
 ---
 

@@ -3,7 +3,7 @@
 ## In Progress / Next
 - Task 008 - Azure Services Setup (DocQ&A Demo)
   - Search, OpenAI, and Postgres configured
-  - Blob Storage and Container Apps/Jobs pending
+  - Blob Storage and App Service deployment in progress
 - Task 009 - CI/CD Integration (Evaluation Gate)
 - Task 010 - UI/UX Refinement (Refusal Transparency)
 - Task 011 - Vercel Frontend Deployment (Monorepo Config)

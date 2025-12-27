@@ -11,7 +11,7 @@ A demo-first, near-free **evidence-bound Document Q&A** system.
 ## Repo layout
 ```
 /apps/web        Next.js UI (Vercel)
-/apps/api        FastAPI service (Azure Container Apps)
+/apps/api        FastAPI service (Azure App Service)
 /packages/shared Shared schemas/types
 /docs            PRD + architecture + eval requirements
 /tasks           One file per task
