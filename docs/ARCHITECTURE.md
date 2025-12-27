@@ -88,7 +88,7 @@ Indexing reference: `packages/shared/schemas/indexing.md` defines embeddings and
 - **Jobs:** Ingestion and indexing run as async background tasks within the App Service.
 - **Storage:** Azure Blob Storage (LRS)
 - **Search:** Azure AI Search (Basic SKU, Hybrid: Vector + BM25 + Semantic Ranker)
-- **LLM:** Azure OpenAI (text-embedding-3-large)
+- **LLM:** Azure OpenAI (gpt5 mini)
 - **DB:** Azure PostgreSQL Flexible Server (Existing shared resource)
 - **Observability:** Log Analytics Workspace
 

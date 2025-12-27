@@ -10,7 +10,7 @@ This document serves as a human-readable reference for all configuration variabl
 | `DOCQA_PROMPT_VERSION` | Version of LLM prompts. | `v3.1.0` |
 | `DOCQA_RETRIEVAL_VERSION` | Version of retrieval logic. | `v3.1.0` |
 | `DOCQA_INDEX_VERSION` | Version of the search index. | `v3.1.0` |
-| `DOCQA_MODEL_ID` | Model identifier (e.g. `azure-openai`). | `azure-openai` |
+| `DOCQA_MODEL_ID` | Model identifier (e.g. `gpt5-mini`). | `gpt5-mini` |
 
 ## 2. Ingestion & Storage
 | Variable | Description | Default/Value |

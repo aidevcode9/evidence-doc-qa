@@ -65,7 +65,7 @@ All fields are ASCII and stable unless a new `*_version` is promoted via evals.
     "docs_snapshot_id": "snap_2025_12_21_0001",
     "prompt_version": "v3.1.0",
     "retrieval_version": "v3.1.0",
-    "model_id": "azure-openai-gpt-4o-mini",
+    "model_id": "gpt5-mini",
     "parser_mode": "tier0"
   }
 }
@@ -92,7 +92,7 @@ All fields are ASCII and stable unless a new `*_version` is promoted via evals.
     "docs_snapshot_id": "snap_2025_12_21_0001",
     "prompt_version": "v3.1.0",
     "retrieval_version": "v3.1.0",
-    "model_id": "azure-openai-gpt-4o-mini",
+    "model_id": "gpt5-mini",
     "parser_mode": "tier0"
   }
 }
@@ -111,7 +111,7 @@ All fields are ASCII and stable unless a new `*_version` is promoted via evals.
     "docs_snapshot_id": "snap_2025_12_21_0001",
     "prompt_version": "v3.1.0",
     "retrieval_version": "v3.1.0",
-    "model_id": "azure-openai-gpt-4o-mini",
+    "model_id": "gpt5-mini",
     "parser_mode": "tier0"
   }
 }
