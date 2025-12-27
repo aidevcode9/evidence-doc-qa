@@ -84,13 +84,13 @@ Indexing reference: `packages/shared/schemas/indexing.md` defines embeddings and
 
 ## 4) Azure Mapping (Demo Default)
 
-- **API:** Azure App Service (Web App for Containers)
-- **Jobs:** Azure Container Apps Jobs (ingestion/indexing) - *Note: In demo, these run within the App Service or as async tasks.*
-- **Storage:** Azure Blob Storage
-- **Search:** Azure AI Search (vector + BM25)
-- **LLM:** Azure OpenAI (demo default)
-- **DB:** Azure PostgreSQL Flexible Server (existing)
-- **Observability:** Log Analytics (minimal sampling)
+- **API:** Azure App Service (Web App for Containers) - Region: `centralus`
+- **Jobs:** Ingestion and indexing run as async background tasks within the App Service.
+- **Storage:** Azure Blob Storage (LRS)
+- **Search:** Azure AI Search (Basic SKU, Hybrid: Vector + BM25 + Semantic Ranker)
+- **LLM:** Azure OpenAI (text-embedding-3-large)
+- **DB:** Azure PostgreSQL Flexible Server (Existing shared resource)
+- **Observability:** Log Analytics Workspace
 
 ---
 
