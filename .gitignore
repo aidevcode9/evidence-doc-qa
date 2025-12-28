@@ -227,6 +227,7 @@ next-env.d.ts
 data/
 apps/api/data/
 errs/
+evals/out/
 *.db
 debug_db.py
 debug_env.py
