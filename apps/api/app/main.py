@@ -24,8 +24,96 @@ from .telemetry import compute_metrics, load_window_telemetry, record_telemetry,
 
 app = FastAPI(title="DocQ&A API", version="0.0.0")
 
+# CORS Configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# ... (skipping ahead to the ask function)
+
+@app.on_event("startup")
+def startup_event():
+    # Initialize DB
+    try:
+        init_db()
+    except Exception as e:
+        logger.error(f"DB initialization failed: {e}")
+
+    # Ensure Search Index exists
+    try:
+        ensure_index()
+    except Exception as e:
+        logger.error(f"Search index initialization failed: {e}")
+
+    # Bootstrap data directories
+    os.makedirs(DATA_DIR, exist_ok=True)
+    os.makedirs(RAW_DIR, exist_ok=True)
+
+
+@app.get("/healthz")
+def healthz() -> dict:
+    return {"status": "ok"}
+
+
+@app.post("/v1/docs/upload")
+async def upload_doc(file: UploadFile = File(...)) -> dict:
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty upload.")
+
+    doc_id = uuid.uuid4().hex
+    doc_sha256 = ingestion.compute_sha256(data)
+    docs_snapshot_id = ingestion.docs_snapshot_id_for(doc_sha256)
+    storage_path = ingestion.save_raw_pdf(doc_id, file.filename or "upload.pdf", data)
+
+    try:
+        pages = ingestion.parse_pdf_pages(storage_path)
+    except Exception as exc:  # noqa: BLE001 - returns structured parse error
+        raise HTTPException(status_code=400, detail=f"PARSE_FAILED: {exc}") from exc
+
+    chunk_rows = ingestion.build_chunk_rows(doc_id, doc_sha256, docs_snapshot_id, pages)
+    insert_chunks(
+        Chunk(
+            chunk_id=row[0],
+            docs_snapshot_id=row[1],
+            doc_id=row[2],
+            doc_sha256=row[3],
+            page_num=row[4],
+            chunk_index=row[5],
+            char_start=row[6],
+            char_end=row[7],
+            chunk_text=row[8],
+            parse_mode=row[9],
+        )
+        for row in chunk_rows
+    )
+    insert_document(
+        Document(
+            doc_id=doc_id,
+            doc_sha256=doc_sha256,
+            doc_name=file.filename or "upload.pdf",
+            storage_path=storage_path,
+            ingested_at_utc=ingestion.utc_now(),
+            docs_snapshot_id=docs_snapshot_id,
+        )
+    )
+
+    indexing.index_chunk_rows(
+        doc_id=doc_id,
+        doc_name=file.filename or "upload.pdf",
+        docs_snapshot_id=docs_snapshot_id,
+        chunk_rows=chunk_rows,
+    )
+
+    return {
+        "doc_id": doc_id,
+        "doc_sha256": doc_sha256,
+        "docs_snapshot_id": docs_snapshot_id,
+    }
+
 
 @app.post("/v1/ask", response_model=AskResponse)
 def ask(payload: AskRequest) -> AskResponse:
@@ -122,7 +210,21 @@ def ask(payload: AskRequest) -> AskResponse:
     return response
 
 
-# ... (update _record_request signature)
+@app.get("/v1/metrics")
+def metrics(x_admin_token: str | None = Header(default=None)) -> dict:
+    if METRICS_ADMIN_TOKEN and x_admin_token != METRICS_ADMIN_TOKEN:
+        raise HTTPException(status_code=401, detail="Unauthorized.")
+    rows = load_window_telemetry()
+    return compute_metrics(rows)
+
+
+def _snippet_for(chunk_text: str, limit: int = 200) -> str:
+    return chunk_text[:limit].strip()
+
+
+def _doc_name_for(doc_id: str) -> str:
+    return get_doc_name(doc_id) or "unknown"
+
 
 def _record_request(
     *,
@@ -186,4 +288,3 @@ def _emit_refusal(
         answer_text="",
     )
     return response
-

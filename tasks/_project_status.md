@@ -1,10 +1,12 @@
 # Project Status
 
 ## In Progress / Next
-- Task 012 - Logging, Observability, and Diagnostics
+- Task 013 - Improve Refusal Correctness (LLM Verification)
 - Task 009 - CI/CD Integration (Evaluation Gate)
 
 ## Done
+- Task 012 - Logging, Observability, and Diagnostics
+
 - Task 000 - Repo Bootstrap and Scaffolding
 - Task 001 - Versioning, IDs, and Shared Schemas
 - Task 002 - Ingestion, Parsing, and Indexing (Tier 0/1)
