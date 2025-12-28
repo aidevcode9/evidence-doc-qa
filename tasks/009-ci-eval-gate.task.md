@@ -6,7 +6,7 @@ Integrate the evaluation suite (`evals/run.py`) into the GitHub Actions workflow
 ## CI Flow
 1.  **Dependency Setup:** Install all Python requirements using `uv`.
 2.  **Mock Environment:** Configure the API to use a local SQLite database (`ci_test.db`) and local hash-based embeddings.
-3.  **Data Seeding:** Run `seed_eval_data.py` to ingest `ARCHITECTURE.md` into the mock database as a standard snapshot.
+3.  **Data Seeding:** Run `evals/seed.py` to ingest `ARCHITECTURE.md` into the mock database as a standard snapshot.
 4.  **API Startup:** Spin up the FastAPI server in the background.
 5.  **Execution:** Run `evals/run.py` against the mock API using the "Golden Set" of questions.
 6.  **Gate Check:** The workflow fails if:
@@ -14,7 +14,7 @@ Integrate the evaluation suite (`evals/run.py`) into the GitHub Actions workflow
     - Refusal Correctness is < 90%
 
 ## Objectives
-- [x] Create `seed_eval_data.py` for automated test data ingestion.
+- [x] Create `evals/seed.py` for automated test data ingestion.
 - [x] Update `evals/run.py` to support thresholds and exit codes.
 - [x] Configure `.github/workflows/ci.yml` with the full automation flow.
 - [ ] Verify local execution against real Azure resources.

@@ -23,7 +23,7 @@ jobs:
         env:
           DB_DATABASE_URL: "sqlite:///./ci_test.db"
           EMBEDDINGS_MODE: "local"
-        run: python seed_eval_data.py
+        run: python evals/seed.py
       - name: Start API
         env:
           DB_DATABASE_URL: "sqlite:///./ci_test.db"
