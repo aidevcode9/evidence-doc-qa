@@ -43,6 +43,16 @@ This document serves as a human-readable reference for all configuration variabl
 | `AZURE_OPENAI_API_VERSION` | Azure OpenAI API Version. | `2024-02-01` |
 | `AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT` | Deployment name (e.g. `text-embedding-3-large`). | `text-embedding-3-large` |
 
+## 5. Chat Model (LLM Verification)
+*These default to the main Azure config if not set, but allow for a separate Verification model.*
+
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `AZURE_OPENAI_CHAT_ENDPOINT` | Endpoint for the Chat model (e.g., gpt-5-nano). | (Same as main) |
+| `AZURE_OPENAI_CHAT_API_KEY` | Key for the Chat resource. | (Same as main) |
+| `AZURE_OPENAI_CHAT_API_VERSION` | API Version for Chat. | (Same as main) |
+| `DOCQA_MODEL_ID` | Deployment name for the verification model. | `gpt-5-nano` |
+
 ## 5. Retrieval Tuning
 | Variable | Description | Value |
 | :--- | :--- | :--- |

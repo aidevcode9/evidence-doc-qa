@@ -5,7 +5,7 @@ import uuid
 from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import indexing, ingestion, policy, retrieval
+from . import indexing, ingestion, policy, retrieval, verification
 from .config import (
     CONF_MIN,
     DATA_DIR,
@@ -163,10 +163,13 @@ def ask(payload: AskRequest) -> AskResponse:
             question_text=question,
         )
 
-    top_chunk = results[0]
-    top_score = top_chunk["rrf_score"]
-    if top_score < CONF_MIN:
-        logger.warning(f"Confidence Fail [{request_id}]: Score {top_score:.4f} below threshold {CONF_MIN}")
+    # LLM Verification Loop (Check Top 3)
+    verified_chunk = None
+    
+    # Filter results by confidence first
+    candidates = [r for r in results if r["rrf_score"] >= CONF_MIN]
+    if not candidates:
+        logger.warning(f"Confidence Fail [{request_id}]: No results met threshold {CONF_MIN}")
         return _emit_refusal(
             request_id=request_id,
             docs_snapshot_id=docs_snapshot_id,
@@ -178,13 +181,31 @@ def ask(payload: AskRequest) -> AskResponse:
             question_text=question,
         )
 
+    for chunk in candidates[:3]:
+        if verification.verify_relevance(question, chunk["chunk_text"]):
+            verified_chunk = chunk
+            break
+    
+    if not verified_chunk:
+        logger.warning(f"Verification Fail [{request_id}]: All top candidates rejected by LLM.")
+        return _emit_refusal(
+            request_id=request_id,
+            docs_snapshot_id=docs_snapshot_id,
+            version_snapshot=version_snapshot,
+            refusal_code="NO_SUPPORTING_EVIDENCE",
+            reason="Retrieval found matches, but they were judged irrelevant by the model.",
+            failure_label="LLM_VERIFICATION_FAILED",
+            start_time=start_time,
+            question_text=question,
+        )
+
     citation = Citation(
-        doc_id=top_chunk["doc_id"],
-        doc_name=top_chunk.get("doc_name") or _doc_name_for(top_chunk["doc_id"]),
-        page_num=top_chunk["page_num"],
-        chunk_id=top_chunk["chunk_id"],
-        snippet=_snippet_for(top_chunk["chunk_text"]),
-        score=round(top_score, 4),
+        doc_id=verified_chunk["doc_id"],
+        doc_name=verified_chunk.get("doc_name") or _doc_name_for(verified_chunk["doc_id"]),
+        page_num=verified_chunk["page_num"],
+        chunk_id=verified_chunk["chunk_id"],
+        snippet=_snippet_for(verified_chunk["chunk_text"]),
+        score=round(verified_chunk["rrf_score"], 4),
     )
     answer_text = f"Based on the document, {citation.snippet}"
 
