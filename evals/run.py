@@ -11,6 +11,8 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--suite", default="golden")
     parser.add_argument("--api-url", default=os.getenv("EVAL_API_URL", "http://localhost:8000"))
+    parser.add_argument("--citation-threshold", type=float, default=0.90)
+    parser.add_argument("--refusal-threshold", type=float, default=0.90)
     args = parser.parse_args()
 
     suite_path = Path("evals") / f"{args.suite}.jsonl"
@@ -113,6 +115,19 @@ def main() -> None:
 
     details_path.write_text("\n".join(json.dumps(d) for d in details) + "\n", encoding="utf-8")
     summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+
+    print(f"Eval Results ({args.suite}):")
+    print(f"  Citation Coverage: {citation_coverage:.2%}")
+    print(f"  Refusal Correctness: {refusal_correctness:.2%}")
+
+    if citation_coverage < args.citation_threshold:
+        print(f"FATAL: Citation coverage below threshold ({args.citation_threshold})")
+        raise SystemExit(1)
+    if refusal_correctness < args.refusal_threshold:
+        print(f"FATAL: Refusal correctness below threshold ({args.refusal_threshold})")
+        raise SystemExit(1)
+    
+    print("Eval PASSED")
 
 
 def _call_ask(api_url: str, case: dict) -> dict:
