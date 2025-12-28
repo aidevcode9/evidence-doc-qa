@@ -21,11 +21,45 @@ from .telemetry import logger
 
 def hybrid_search(question: str, docs_snapshot_id: Optional[str]) -> List[Dict]:
     if _azure_enabled():
-        return _azure_search(question, docs_snapshot_id)
+        logger.info(f"Retrieval: Routing to Azure AI Search (Snapshot: {docs_snapshot_id})")
+        results = _azure_search(question, docs_snapshot_id)
+        if results:
+            return results
+        logger.info("Retrieval: Azure returned zero hits. Falling back to local index.")
 
+    logger.info(f"Retrieval: Using Local Hybrid Logic (Snapshot: {docs_snapshot_id})")
     records = _load_index_records(docs_snapshot_id)
     if not records:
         return _fallback_overlap(question, docs_snapshot_id)
+
+    query_tokens = _tokenize(question)
+    query_embedding = embed_texts([question])[0]
+
+    for rec in records:
+        rec["bm25_score"] = _overlap_score(query_tokens, rec["chunk_text"])
+        rec["vector_score"] = _cosine(query_embedding, rec["embedding_vector"])
+
+    bm25_ranked = sorted(records, key=lambda r: r["bm25_score"], reverse=True)[
+        :TOP_K_BM25
+    ]
+    vec_ranked = sorted(records, key=lambda r: r["vector_score"], reverse=True)[
+        :TOP_K_VECTOR
+    ]
+
+    combined: Dict[str, Dict] = {}
+    _apply_rank_scores(combined, bm25_ranked, key="bm25")
+    _apply_rank_scores(combined, vec_ranked, key="vector")
+
+    max_rrf = 2 / (RRF_K + 1)
+    for rec in combined.values():
+        rec["rrf_score"] = rec["rrf_score_raw"] / max_rrf if max_rrf else 0.0
+
+    fused = sorted(combined.values(), key=lambda r: r["rrf_score"], reverse=True)[:TOP_K]
+    for idx, rec in enumerate(fused, start=1):
+        rec["rrf_rank"] = idx
+    
+    logger.info(f"Local Hybrid Search: Found {len(fused)} fused results")
+    return fused
 
 
 def _azure_enabled() -> bool:

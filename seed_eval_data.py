@@ -101,6 +101,14 @@ def seed():
         for row, embedding in zip(chunk_rows, embeddings)
     )
 
+    # NEW: Also index into Azure Search if enabled
+    indexing.index_chunk_rows(
+        doc_id=doc_id,
+        doc_name="ARCHITECTURE.md",
+        docs_snapshot_id=docs_snapshot_id,
+        chunk_rows=chunk_rows,
+    )
+
     print("Seeding complete.")
 
 if __name__ == "__main__":
