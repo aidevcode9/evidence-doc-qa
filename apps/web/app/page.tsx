@@ -45,9 +45,10 @@ export default function DocQAPage() {
       const assistantMsg: Message = {
         id: data.request_id || crypto.randomUUID(),
         role: "assistant",
-        text: data.answer_text || data.reason || "I could not find an answer.",
+        text: data.answer_text || "The system could not provide an answer.",
         citations: data.citations,
         refusal_code: data.refusal_code,
+        reason: data.reason,
         request_id: data.request_id,
       };
 

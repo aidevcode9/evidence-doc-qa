@@ -13,6 +13,7 @@ export type Message = {
   text: string;
   citations?: Citation[];
   refusal_code?: string;
+  reason?: string;
   request_id?: string;
 };
 
