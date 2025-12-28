@@ -20,100 +20,12 @@ from .config import (
 from .db import Chunk, Document, get_doc_name, get_latest_docs_snapshot_id, insert_chunks, insert_document, init_db
 from .indexing import ensure_index
 from .schemas import AskRequest, AskResponse, Citation
-from .telemetry import compute_metrics, load_window_telemetry, record_telemetry
+from .telemetry import compute_metrics, load_window_telemetry, record_telemetry, logger
 
 app = FastAPI(title="DocQ&A API", version="0.0.0")
 
-# CORS Configuration
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
-
-@app.on_event("startup")
-def startup_event():
-    # Initialize DB
-    try:
-        init_db()
-    except Exception as e:
-        print(f"Warning: DB initialization failed: {e}")
-
-    # Ensure Search Index exists
-    try:
-        ensure_index()
-    except Exception as e:
-        print(f"Warning: Search index initialization failed: {e}")
-
-    # Bootstrap data directories
-    os.makedirs(DATA_DIR, exist_ok=True)
-    os.makedirs(RAW_DIR, exist_ok=True)
-
-
-@app.get("/healthz")
-def healthz() -> dict:
-    return {"status": "ok"}
-
-
-@app.post("/v1/docs/upload")
-async def upload_doc(file: UploadFile = File(...)) -> dict:
-    data = await file.read()
-    if not data:
-        raise HTTPException(status_code=400, detail="Empty upload.")
-
-    doc_id = uuid.uuid4().hex
-    doc_sha256 = ingestion.compute_sha256(data)
-    docs_snapshot_id = ingestion.docs_snapshot_id_for(doc_sha256)
-    storage_path = ingestion.save_raw_pdf(doc_id, file.filename or "upload.pdf", data)
-
-    try:
-        pages = ingestion.parse_pdf_pages(storage_path)
-    except Exception as exc:  # noqa: BLE001 - returns structured parse error
-        raise HTTPException(status_code=400, detail=f"PARSE_FAILED: {exc}") from exc
-
-    chunk_rows = ingestion.build_chunk_rows(doc_id, doc_sha256, docs_snapshot_id, pages)
-    insert_chunks(
-        Chunk(
-            chunk_id=row[0],
-            docs_snapshot_id=row[1],
-            doc_id=row[2],
-            doc_sha256=row[3],
-            page_num=row[4],
-            chunk_index=row[5],
-            char_start=row[6],
-            char_end=row[7],
-            chunk_text=row[8],
-            parse_mode=row[9],
-        )
-        for row in chunk_rows
-    )
-    insert_document(
-        Document(
-            doc_id=doc_id,
-            doc_sha256=doc_sha256,
-            doc_name=file.filename or "upload.pdf",
-            storage_path=storage_path,
-            ingested_at_utc=ingestion.utc_now(),
-            docs_snapshot_id=docs_snapshot_id,
-        )
-    )
-
-    indexing.index_chunk_rows(
-        doc_id=doc_id,
-        doc_name=file.filename or "upload.pdf",
-        docs_snapshot_id=docs_snapshot_id,
-        chunk_rows=chunk_rows,
-    )
-
-    return {
-        "doc_id": doc_id,
-        "doc_sha256": doc_sha256,
-        "docs_snapshot_id": docs_snapshot_id,
-    }
-
+# ... (skipping ahead to the ask function)
 
 @app.post("/v1/ask", response_model=AskResponse)
 def ask(payload: AskRequest) -> AskResponse:
@@ -124,6 +36,9 @@ def ask(payload: AskRequest) -> AskResponse:
 
     request_id = str(uuid.uuid4())
     docs_snapshot_id = payload.docs_snapshot_id or get_latest_docs_snapshot_id() or "none"
+    
+    logger.info(f"Incoming Request [{request_id}] - Snapshot: {docs_snapshot_id}")
+
     version_snapshot = {
         "request_id": request_id,
         "docs_snapshot_id": docs_snapshot_id,
@@ -134,6 +49,7 @@ def ask(payload: AskRequest) -> AskResponse:
     }
 
     if policy.is_injection_attempt(question):
+        logger.warning(f"Policy Trigger [{request_id}]: Injection Attempt Detected")
         return _emit_refusal(
             request_id=request_id,
             docs_snapshot_id=docs_snapshot_id,
@@ -142,10 +58,12 @@ def ask(payload: AskRequest) -> AskResponse:
             reason="Injection heuristics triggered.",
             failure_label="INJECTION_DETECTED",
             start_time=start_time,
+            question_text=question,
         )
 
     results = retrieval.hybrid_search(question, docs_snapshot_id)
     if not results or results[0]["rrf_score"] == 0.0:
+        logger.warning(f"Retrieval Fail [{request_id}]: No evidence found")
         return _emit_refusal(
             request_id=request_id,
             docs_snapshot_id=docs_snapshot_id,
@@ -154,11 +72,13 @@ def ask(payload: AskRequest) -> AskResponse:
             reason="No supporting evidence found.",
             failure_label="NO_EVIDENCE",
             start_time=start_time,
+            question_text=question,
         )
 
     top_chunk = results[0]
     top_score = top_chunk["rrf_score"]
     if top_score < CONF_MIN:
+        logger.warning(f"Confidence Fail [{request_id}]: Score {top_score:.4f} below threshold {CONF_MIN}")
         return _emit_refusal(
             request_id=request_id,
             docs_snapshot_id=docs_snapshot_id,
@@ -167,6 +87,7 @@ def ask(payload: AskRequest) -> AskResponse:
             reason="Insufficient retrieval confidence.",
             failure_label="LOW_CONFIDENCE",
             start_time=start_time,
+            question_text=question,
         )
 
     citation = Citation(
@@ -194,25 +115,14 @@ def ask(payload: AskRequest) -> AskResponse:
         refusal_code=None,
         failure_label=None,
         start_time=start_time,
+        question_text=question,
+        answer_text=answer_text,
     )
+    logger.info(f"Success [{request_id}]: Response returned with citation from {citation.doc_name}")
     return response
 
 
-@app.get("/v1/metrics")
-def metrics(x_admin_token: str | None = Header(default=None)) -> dict:
-    if METRICS_ADMIN_TOKEN and x_admin_token != METRICS_ADMIN_TOKEN:
-        raise HTTPException(status_code=401, detail="Unauthorized.")
-    rows = load_window_telemetry()
-    return compute_metrics(rows)
-
-
-def _snippet_for(chunk_text: str, limit: int = 200) -> str:
-    return chunk_text[:limit].strip()
-
-
-def _doc_name_for(doc_id: str) -> str:
-    return get_doc_name(doc_id) or "unknown"
-
+# ... (update _record_request signature)
 
 def _record_request(
     *,
@@ -222,6 +132,8 @@ def _record_request(
     refusal_code: str | None,
     failure_label: str | None,
     start_time: float,
+    question_text: str = "",
+    answer_text: str = "",
 ) -> None:
     latency_ms = int((time.perf_counter() - start_time) * 1000)
     record_telemetry(
@@ -239,6 +151,8 @@ def _record_request(
         cache_hit=False,
         refusal_code=refusal_code,
         failure_label=failure_label,
+        question_text=question_text,
+        answer_text=answer_text or "",
     )
 
 
@@ -251,6 +165,7 @@ def _emit_refusal(
     reason: str,
     failure_label: str,
     start_time: float,
+    question_text: str = "",
 ) -> AskResponse:
     response = AskResponse(
         request_id=request_id,
@@ -267,6 +182,8 @@ def _emit_refusal(
         refusal_code=refusal_code,
         failure_label=failure_label,
         start_time=start_time,
+        question_text=question_text,
+        answer_text="",
     )
     return response
 

@@ -1,13 +1,10 @@
 # Project Status
 
-## Done
-- Task 010 - UI/UX Refinement (Refusal Transparency)
-  - Refusals styled with distinct colors and icons.
-  - Added user-friendly descriptions for each refusal code.
-  - Verified input/button state management after refusals.
+## In Progress / Next
+- Task 012 - Logging, Observability, and Diagnostics
 - Task 009 - CI/CD Integration (Evaluation Gate)
-  - Automated quality checks (Citation/Refusal) in GitHub Actions.
-  - Idempotent seeding logic implemented.
+
+## Done
 - Task 000 - Repo Bootstrap and Scaffolding
 - Task 001 - Versioning, IDs, and Shared Schemas
 - Task 002 - Ingestion, Parsing, and Indexing (Tier 0/1)

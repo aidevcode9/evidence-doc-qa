@@ -14,6 +14,7 @@ from .config import (
     PARSER_MODE,
     RAW_DIR,
 )
+from .telemetry import logger
 
 
 def compute_sha256(data: bytes) -> str:
@@ -28,12 +29,14 @@ def save_raw_pdf(doc_id: str, filename: str, data: bytes) -> str:
     safe_name = filename.replace(" ", "_")
     path = os.path.join(RAW_DIR, f"{doc_id}_{safe_name}")
     
+    logger.info(f"Saving PDF locally: {path}")
     # Save locally
     with open(path, "wb") as f:
         f.write(data)
     
     # Save to Azure if configured
     if AZURE_STORAGE_CONNECTION_STRING:
+        logger.info(f"Uploading to Azure Container: {AZURE_STORAGE_CONTAINER}")
         _upload_to_azure(f"{doc_id}_{safe_name}", data)
         
     return path

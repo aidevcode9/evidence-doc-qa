@@ -1,7 +1,18 @@
+import logging
+import sys
+import json
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List
+from typing import Dict, List, Any
 
 from .db import Telemetry, insert_telemetry, load_telemetry
+
+# Configure logging to stdout for Azure App Service logs
+logging.basicConfig(
+    stream=sys.stdout,
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+)
+logger = logging.getLogger("docqa")
 
 
 def record_telemetry(
@@ -14,13 +25,20 @@ def record_telemetry(
     parser_mode: str,
     timestamp_utc: str,
     latency_ms: int,
-    tokens_in: int,
-    tokens_out: int,
-    cost_est: float,
-    cache_hit: bool,
-    refusal_code: str | None,
-    failure_label: str | None,
+    tokens_in: int = 0,
+    tokens_out: int = 0,
+    cost_est: float = 0.0,
+    cache_hit: bool = False,
+    refusal_code: str | None = None,
+    failure_label: str | None = None,
+    question_text: str = "",
+    answer_text: str = "",
+    trace_metadata: Dict[str, Any] | None = None,
 ) -> None:
+    # Estimate tokens if not provided (approx 4 chars per token)
+    est_in = tokens_in or (len(question_text) // 4)
+    est_out = tokens_out or (len(answer_text) // 4)
+
     insert_telemetry(
         Telemetry(
             request_id=request_id,
@@ -31,12 +49,13 @@ def record_telemetry(
             parser_mode=parser_mode,
             timestamp_utc=timestamp_utc,
             latency_ms=latency_ms,
-            tokens_in=tokens_in,
-            tokens_out=tokens_out,
+            tokens_in=est_in,
+            tokens_out=est_out,
             cost_est=cost_est,
             cache_hit=cache_hit,
             refusal_code=refusal_code,
             failure_label=failure_label,
+            trace_metadata=json.dumps(trace_metadata) if trace_metadata else None,
         )
     )
 
@@ -59,6 +78,7 @@ def load_window_telemetry(hours: int = 24, limit: int = 500) -> List[Dict]:
             "cache_hit": row.cache_hit,
             "refusal_code": row.refusal_code,
             "failure_label": row.failure_label,
+            "trace_metadata": json.loads(row.trace_metadata) if row.trace_metadata else None,
         }
         for row in rows
     ]

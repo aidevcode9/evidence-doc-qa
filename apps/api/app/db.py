@@ -74,6 +74,7 @@ class Telemetry(Base):
     cache_hit: Mapped[bool] = mapped_column(Boolean, nullable=False)
     refusal_code: Mapped[str | None] = mapped_column(String, nullable=True)
     failure_label: Mapped[str | None] = mapped_column(String, nullable=True)
+    trace_metadata: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 def _engine():

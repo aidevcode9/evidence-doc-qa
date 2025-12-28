@@ -16,6 +16,7 @@ from .config import (
 )
 from .db import load_chunks, load_index_records
 from .embeddings import embed_texts
+from .telemetry import logger
 
 
 def hybrid_search(question: str, docs_snapshot_id: Optional[str]) -> List[Dict]:
@@ -61,8 +62,13 @@ def _azure_search(question: str, docs_snapshot_id: Optional[str]) -> List[Dict]:
     with urllib.request.urlopen(req) as resp:
         data = json.load(resp)
 
+    hits = data.get("value", [])
+    logger.info(f"Azure Search: Found {len(hits)} hits for snapshot {docs_snapshot_id}")
+    for idx, doc in enumerate(hits[:3]):
+        logger.info(f"  Hit {idx+1}: Score={doc.get('@search.score')} ID={doc['chunk_id']}")
+
     results = []
-    for doc in data.get("value", []):
+    for doc in hits:
         results.append(
             {
                 "chunk_id": doc["chunk_id"],
