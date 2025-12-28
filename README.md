@@ -23,21 +23,19 @@ A demo-first, near-free **evidence-bound Document Q&A** system.
 ```bash
 cd apps/api
 uv sync
-export DB_DATABASE_URL="postgresql+psycopg://USER:PASSWORD@HOST:5432/DBNAME"
-alembic upgrade head
-uvicorn app.main:app --reload --port 8000
+uv run uvicorn app.main:app --reload --port 8000
 ```
 
 ### 2) Web
 ```bash
 cd apps/web
-pnpm install
-pnpm dev
+npm install
+npm run dev
 ```
 
 ### 3) Run evals
 ```bash
-python -m evals.run --suite golden
+uv run python -m evals.run --suite golden
 ```
 
 ## Environment Variables
