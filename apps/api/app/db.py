@@ -4,7 +4,7 @@ import contextlib
 from datetime import datetime, timedelta, timezone
 from typing import Generator, Iterable
 
-from sqlalchemy import Boolean, Float, Integer, String, Text, create_engine, select
+from sqlalchemy import Boolean, Float, Integer, String, Text, create_engine, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 from sqlalchemy.pool import NullPool
 
@@ -77,15 +77,24 @@ class Telemetry(Base):
     trace_metadata: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+def init_db():
+    engine = _engine()
+    Base.metadata.create_all(bind=engine)
+    
+    # Auto-migration: Check if trace_metadata exists, if not add it
+    from sqlalchemy import inspect
+    inspector = inspect(engine)
+    columns = [c['name'] for c in inspector.get_columns('telemetry')]
+    if 'trace_metadata' not in columns:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE telemetry ADD COLUMN trace_metadata TEXT"))
+            conn.commit()
+
+
 def _engine():
     if not DATABASE_URL:
         raise RuntimeError("DB_DATABASE_URL is required.")
     return create_engine(DATABASE_URL, poolclass=NullPool)
-
-
-def init_db():
-    engine = _engine()
-    Base.metadata.create_all(bind=engine)
 
 
 SessionLocal = sessionmaker(bind=_engine(), class_=Session, expire_on_commit=False)
