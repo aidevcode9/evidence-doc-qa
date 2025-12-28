@@ -1,14 +1,19 @@
 FROM python:3.12-slim
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# Copy project files
+COPY pyproject.toml .
+COPY uv.lock .
 
+# Install dependencies using uv
+RUN uv pip install --no-cache --system -e .
+
+# Copy application code
 COPY app /app/app
 
 EXPOSE 8000
