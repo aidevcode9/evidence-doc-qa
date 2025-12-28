@@ -102,7 +102,14 @@ def _azure_search(question: str, docs_snapshot_id: Optional[str]) -> List[Dict]:
         logger.info(f"  Hit {idx+1}: Score={doc.get('@search.score')} ID={doc['chunk_id']}")
 
     results = []
+    max_rrf = 2 / (RRF_K + 1) # Same scaling factor as local logic
     for doc in hits:
+        raw_score = doc.get("@search.score", 0.0)
+        # Normalize: raw_score / max_rrf
+        normalized_score = raw_score / max_rrf if max_rrf > 0 else 0.0
+        
+        logger.info(f"  Hit: ID={doc['chunk_id']} Raw={raw_score:.4f} Normalized={normalized_score:.4f}")
+
         results.append(
             {
                 "chunk_id": doc["chunk_id"],
@@ -112,7 +119,7 @@ def _azure_search(question: str, docs_snapshot_id: Optional[str]) -> List[Dict]:
                 "page_num": doc["page_num"],
                 "chunk_index": doc["chunk_index"],
                 "chunk_text": doc["chunk_text"],
-                "rrf_score": doc.get("@search.score", 0.0),
+                "rrf_score": normalized_score,
             }
         )
     return results
