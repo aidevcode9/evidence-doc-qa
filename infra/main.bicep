@@ -1,87 +1,65 @@
-@description('The location for all resources.')
-param location string = 'centralus'
-
-@description('Prefix for resource names.')
-param prefix string = 'docqa'
-
-@description('The full Postgres connection string.')
-@secure()
-param dbDatabaseUrl string
-
-@description('The Vercel frontend URL for CORS.')
+param searchServiceName string = 'docqa-search-${uniqueString(resourceGroup().id)}'
+param openAiResourceName string = 'docqa-openai-${uniqueString(resourceGroup().id)}'
+param storageAccountName string = 'docqastor${uniqueString(resourceGroup().id)}'
+param appServicePlanName string = 'docqa-plan'
+param webAppName string = 'docqa-api-${uniqueString(resourceGroup().id)}'
+param location string = resourceGroup().location
 param vercelUrl string = ''
 
-// Unique suffix to avoid collisions between regions
-var uniqueSuffix = uniqueString(resourceGroup().id, location)
-var searchName = '${prefix}-search-${uniqueSuffix}'
-var storageName = take('${prefix}stg${uniqueSuffix}', 24)
-var acrName = take('${prefix}reg${uniqueSuffix}', 24)
-
-// --- Existing Resources ---
-var existingWebAppName = 'docqa'
-
-// --- Container Registry ---
-resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
-  name: acrName
-  location: location
-  sku: {
-    name: 'Basic'
-  }
-  properties: {
-    adminUserEnabled: true
-  }
-}
-
-// --- Search ---
-resource searchService 'Microsoft.Search/searchServices@2023-11-01' = {
-  name: searchName
-  location: location
-  sku: {
-    name: 'basic'
-  }
-  properties: {
-    replicaCount: 1
-    partitionCount: 1
-    hostingMode: 'default'
-    semanticSearch: 'free'
-  }
-}
-
-// --- Storage ---
-resource storageAccount 'Microsoft.Storage/storageAccounts@2022-09-01' = {
-  name: storageName
+resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
+  name: storageAccountName
   location: location
   sku: {
     name: 'Standard_LRS'
   }
   kind: 'StorageV2'
-}
-
-resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2022-09-01' = {
-  parent: storageAccount
-  name: 'default'
-}
-
-resource container 'Microsoft.Storage/storageAccounts/blobServices/containers@2022-09-01' = {
-  parent: blobService
-  name: 'docqa-raw'
-}
-
-// --- Update Existing App Service Configuration ---
-resource webApp 'Microsoft.Web/sites@2022-09-01' existing = {
-  name: existingWebAppName
-}
-
-resource webAppConfig 'Microsoft.Web/sites/config@2022-09-01' = {
-  parent: webApp
-  name: 'appsettings'
   properties: {
-    DOCKER_REGISTRY_SERVER_URL: 'https://${acr.properties.loginServer}'
-    DOCKER_REGISTRY_SERVER_USERNAME: acr.listCredentials().username
-    DOCKER_REGISTRY_SERVER_PASSWORD: acr.listCredentials().passwords[0].value
-    DB_DATABASE_URL: dbDatabaseUrl
-    AZURE_STORAGE_CONNECTION_STRING: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
-    AZURE_STORAGE_CONTAINER: 'docqa-raw'
+    accessTier: 'Hot'
+  }
+}
+
+resource appServicePlan 'Microsoft.Web/serverfarms@2022-09-01' = {
+  name: appServicePlanName
+  location: location
+  sku: {
+    name: 'B1'
+    tier: 'Basic'
+  }
+  kind: 'linux'
+  properties: {
+    reserved: true
+  }
+}
+
+resource keyVault 'Microsoft.KeyVault/vaults@2023-02-01' = {
+  name: 'docqa-kv-${uniqueString(resourceGroup().id)}'
+  location: location
+  properties: {
+    sku: {
+      family: 'A'
+      name: 'standard'
+    }
+    tenantId: subscription().tenantId
+    accessPolicies: []
+    enabledForDeployment: true
+    enabledForTemplateDeployment: true
+    enabledForDiskEncryption: true
+  }
+}
+
+resource webApp 'Microsoft.Web/sites@2022-09-01' = {
+  name: webAppName
+  location: location
+  kind: 'app,linux'
+  properties: {
+    serverFarmId: appServicePlan.id
+    siteConfig: {
+      linuxFxVersion: 'PYTHON|3.12'
+      appSettings: [
+        {
+          name: 'DB_DATABASE_URL'
+          value: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/DB-DATABASE-URL/)'
+        }
         {
           name: 'AZURE_SEARCH_ENDPOINT'
           value: 'https://${searchServiceName}.search.windows.net'
@@ -92,12 +70,34 @@ resource webAppConfig 'Microsoft.Web/sites/config@2022-09-01' = {
         }
         {
           name: 'AZURE_OPENAI_ENDPOINT'
-
-    WEBSITES_PORT: '8000'
+          value: 'https://${openAiResourceName}.openai.azure.com/'
+        }
+        {
+          name: 'AZURE_OPENAI_API_KEY'
+          value: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/AZURE-OPENAI-API-KEY/)'
+        }
+        {
+          name: 'AZURE_OPENAI_API_VERSION'
+          value: '2024-02-15-preview'
+        }
+        {
+          name: 'AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT'
+          value: 'text-embedding-3-large'
+        }
+        {
+          name: 'AZURE_STORAGE_CONNECTION_STRING'
+          value: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/AZURE-STORAGE-CONNECTION-STRING/)'
+        }
+        {
+          name: 'DOCQA_METRICS_ADMIN_TOKEN'
+          value: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/DOCQA-METRICS-ADMIN-TOKEN/)'
+        }
+        {
+          name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
+          value: 'true'
+        }
+      ]
+      appCommandLine: 'python3 -m uvicorn apps.api.app.main:app --host 0.0.0.0 --port 8000 --log-level info'
+    }
   }
 }
-
-output apiFqdn string = webApp.properties.defaultHostName
-output webAppName string = webApp.name
-output acrName string = acr.name
-output acrLoginServer string = acr.properties.loginServer
