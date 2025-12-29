@@ -96,6 +96,10 @@ resource webApp 'Microsoft.Web/sites@2022-09-01' = {
           name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
           value: 'true'
         }
+        {
+          name: 'DOCQA_ALLOWED_ORIGINS'
+          value: 'http://localhost:3000,${vercelUrl}'
+        }
       ]
       appCommandLine: 'python3 -m uvicorn apps.api.app.main:app --host 0.0.0.0 --port 8000 --log-level info'
     }
