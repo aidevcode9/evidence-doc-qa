@@ -4,9 +4,10 @@ on:
   push:
     branches: ["main"]
     paths:
-      - "apps/api/**"
-      - "infra/**"
-      - ".github/workflows/deploy.yml"
+      - 'apps/api/**'
+      - 'packages/shared/**'
+      - 'requirements.txt'
+      - '.github/workflows/deploy.yml'
 
 permissions:
   id-token: write
