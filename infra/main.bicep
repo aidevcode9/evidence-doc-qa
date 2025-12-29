@@ -71,6 +71,10 @@ resource webApp 'Microsoft.Web/sites@2022-09-01' = {
           value: 'true'
         }
         {
+          name: 'PYTHONPATH'
+          value: '/home/site/wwwroot/.python_packages/lib/site-packages'
+        }
+        {
           name: 'DOCQA_ALLOWED_ORIGINS'
           value: 'http://localhost:3000,${vercelUrl}'
         }
