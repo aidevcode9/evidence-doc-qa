@@ -6,6 +6,7 @@ on:
     paths:
       - 'apps/api/**'
       - 'packages/shared/**'
+      - 'infra/**'
       - '.github/workflows/deploy.yml'
 
 permissions:
