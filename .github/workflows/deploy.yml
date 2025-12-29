@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RESOURCE_GROUP: doc-qa-demo
-      LOCATION: centralus
+      LOCATION: canadacentral
       PREFIX: docqa
       APP_PATH: apps/api
       ARTIFACT_FILE: build/api-package.zip
