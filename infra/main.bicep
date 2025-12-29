@@ -2,7 +2,7 @@ param searchServiceEndpoint string
 param searchServiceApiKey string
 param storageAccountName string = 'docqastor${uniqueString(resourceGroup().id)}'
 param appServicePlanName string = 'docqa-plan'
-param webAppName string = 'docqa-api-${uniqueString(resourceGroup().id)}'
+param webAppName string = 'docqa'
 param location string = resourceGroup().location
 param vercelUrl string = ''
 param databaseUrl string
@@ -68,7 +68,11 @@ resource webApp 'Microsoft.Web/sites@2022-09-01' = {
         }
         {
           name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
-          value: 'true'
+          value: 'false'
+        }
+        {
+          name: 'WEBSITE_RUN_FROM_PACKAGE'
+          value: '1'
         }
         {
           name: 'PYTHONPATH'
@@ -79,6 +83,7 @@ resource webApp 'Microsoft.Web/sites@2022-09-01' = {
           value: 'http://localhost:3000,${vercelUrl}'
         }
       ]
+      appCommandLine: 'bash /home/site/wwwroot/startup.sh'
     }
   }
 }
