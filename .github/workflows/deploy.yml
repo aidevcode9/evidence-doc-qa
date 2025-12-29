@@ -16,12 +16,12 @@ permissions:
 jobs:
   infra-and-deploy:
     runs-on: ubuntu-latest
-env:
-  RESOURCE_GROUP: doc-qa-demo
-  LOCATION: centralus
-  PREFIX: docqa
-  APP_PATH: apps/api
-  ARTIFACT_FILE: build/api-package.zip
+    env:
+      RESOURCE_GROUP: doc-qa-demo
+      LOCATION: centralus
+      PREFIX: docqa
+      APP_PATH: apps/api
+      ARTIFACT_FILE: build/api-package.zip
     steps:
       - uses: actions/checkout@v4
 
