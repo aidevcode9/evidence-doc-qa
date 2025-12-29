@@ -34,9 +34,7 @@ jobs:
           resourceGroupName: ${{ env.RESOURCE_GROUP }}
           template: ./infra/main.bicep
           parameters: >
-            prefix=${{ env.PREFIX }}
             location=${{ env.LOCATION }}
-            dbDatabaseUrl=${{ secrets.DB_DATABASE_URL }}
             vercelUrl=${{ secrets.VERCEL_URL }}
           failOnStdErr: false
 
