@@ -82,10 +82,17 @@ resource webAppConfig 'Microsoft.Web/sites/config@2022-09-01' = {
     DB_DATABASE_URL: dbDatabaseUrl
     AZURE_STORAGE_CONNECTION_STRING: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
     AZURE_STORAGE_CONTAINER: 'docqa-raw'
-    AZURE_SEARCH_ENDPOINT: 'https://${searchName}.search.windows.net'
-    AZURE_SEARCH_API_KEY: searchService.listAdminKeys().primaryKey
-    AZURE_SEARCH_INDEX: 'docqa-index-v3'
-    DOCQA_ALLOWED_ORIGINS: 'http://localhost:3000,${vercelUrl}'
+        {
+          name: 'AZURE_SEARCH_ENDPOINT'
+          value: 'https://${searchServiceName}.search.windows.net'
+        }
+        {
+          name: 'AZURE_SEARCH_API_KEY'
+          value: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/AZURE-SEARCH-API-KEY/)'
+        }
+        {
+          name: 'AZURE_OPENAI_ENDPOINT'
+
     WEBSITES_PORT: '8000'
   }
 }
