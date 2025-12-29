@@ -40,22 +40,10 @@ jobs:
 
       - name: Get Infrastructure Outputs
         run: |
-          echo "ACR_NAME=${{ steps.provision.outputs.acrName }}" >> $GITHUB_ENV
-          echo "ACR_LOGIN_SERVER=${{ steps.provision.outputs.acrLoginServer }}" >> $GITHUB_ENV
           echo "WEB_APP_NAME=${{ steps.provision.outputs.webAppName }}" >> $GITHUB_ENV
-
-      - name: Log in to ACR
-        run: |
-          az acr login --name ${{ env.ACR_NAME }}
-
-      - name: Build and Push API Image
-        run: |
-          docker build -t ${{ env.ACR_LOGIN_SERVER }}/docqa-api:${{ github.sha }} -t ${{ env.ACR_LOGIN_SERVER }}/docqa-api:latest -f apps/api/Dockerfile apps/api
-          docker push ${{ env.ACR_LOGIN_SERVER }}/docqa-api:${{ github.sha }}
-          docker push ${{ env.ACR_LOGIN_SERVER }}/docqa-api:latest
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.WEB_APP_NAME }}
-          images: ${{ env.ACR_LOGIN_SERVER }}/docqa-api:${{ github.sha }}
+          package: apps/api
