@@ -47,6 +47,14 @@ resource webApp 'Microsoft.Web/sites@2022-09-01' = {
           value: databaseUrl
         }
         {
+          name: 'APP_MODULE'
+          value: 'app.main:app'
+        }
+        {
+          name: 'WEBSITES_PORT'
+          value: '8000'
+        }
+        {
           name: 'AZURE_SEARCH_ENDPOINT'
           value: searchServiceEndpoint
         }
@@ -67,7 +75,6 @@ resource webApp 'Microsoft.Web/sites@2022-09-01' = {
           value: 'http://localhost:3000,${vercelUrl}'
         }
       ]
-      appCommandLine: 'python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --log-level info'
     }
   }
 }
