@@ -17,16 +17,16 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: |
-          pip install uv
-          uv pip install -e . --system
+          python -m pip install --upgrade pip
+          python -m pip install -r apps/api/requirements.txt
       - name: Seed Eval Data
         env:
-          DB_DATABASE_URL: "sqlite:///./ci_test.db"
+          DATABASE_URL: "sqlite:///./ci_test.db"
           EMBEDDINGS_MODE: "local"
         run: python evals/seed.py
       - name: Start API
         env:
-          DB_DATABASE_URL: "sqlite:///./ci_test.db"
+          DATABASE_URL: "sqlite:///./ci_test.db"
           DOCQA_ENABLE_INDEXING: "0"
           EMBEDDINGS_MODE: "local"
         run: |
