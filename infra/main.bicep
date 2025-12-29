@@ -18,9 +18,7 @@ resource appSettings 'Microsoft.Web/sites/config@2022-09-01' = {
     AZURE_SEARCH_ENDPOINT: searchServiceEndpoint
     AZURE_SEARCH_API_KEY: searchServiceApiKey
     METRICS_ADMIN_TOKEN: metricsAdminToken
-    SCM_DO_BUILD_DURING_DEPLOYMENT: 'false'
-    WEBSITE_RUN_FROM_PACKAGE: '1'
-    PYTHONPATH: '/home/site/wwwroot/.python_packages/lib/site-packages'
+    SCM_DO_BUILD_DURING_DEPLOYMENT: 'true'
     DOCQA_ALLOWED_ORIGINS: 'http://localhost:3000,${vercelUrl}'
   }
 }
