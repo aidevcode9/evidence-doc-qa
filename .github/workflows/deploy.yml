@@ -36,6 +36,10 @@ jobs:
           parameters: >
             location=${{ env.LOCATION }}
             vercelUrl=${{ secrets.VERCEL_URL }}
+            searchServiceEndpoint=${{ secrets.AZURE_SEARCH_ENDPOINT }}
+            searchServiceApiKey=${{ secrets.AZURE_SEARCH_API_KEY }}
+            databaseUrl=${{ secrets.DATABASE_URL }}
+            metricsAdminToken=${{ secrets.METRICS_ADMIN_TOKEN }}
           failOnStdErr: false
 
       - name: Get Infrastructure Outputs

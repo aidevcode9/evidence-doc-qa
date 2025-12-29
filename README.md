@@ -48,4 +48,4 @@ environment-specific guidance.
 - `docs/EVALS_V1_REQUIREMENTS.md`
 - `docs/OPEN_QUESTIONS.md`
 - `docs/ENVIRONMENT.md`
-- `docs\DECISION_RECORD_001_LLM_VERIFICATION.md`
+- `docs/DECISION_RECORD_001_LLM_VERIFICATION.md`
