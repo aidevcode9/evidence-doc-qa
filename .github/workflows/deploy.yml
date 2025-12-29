@@ -18,7 +18,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RESOURCE_GROUP: doc-qa-demo
-      LOCATION: canadacentral
       PREFIX: docqa
       APP_PATH: apps/api
       ARTIFACT_FILE: build/api-package.zip
@@ -54,7 +53,6 @@ jobs:
           resourceGroupName: ${{ env.RESOURCE_GROUP }}
           template: ./infra/main.bicep
           parameters: >
-            location=${{ env.LOCATION }}
             vercelUrl=${{ secrets.VERCEL_URL }}
             searchServiceEndpoint=${{ secrets.AZURE_SEARCH_ENDPOINT }}
             searchServiceApiKey=${{ secrets.AZURE_SEARCH_API_KEY }}

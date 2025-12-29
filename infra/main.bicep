@@ -1,82 +1,35 @@
 param searchServiceEndpoint string
 param searchServiceApiKey string
-param storageAccountName string = 'docqastor${uniqueString(resourceGroup().id)}'
-param appServicePlanName string = 'docqa-plan'
 param webAppName string = 'docqa'
-param location string = resourceGroup().location
 param vercelUrl string = ''
 param databaseUrl string
 param metricsAdminToken string = ''
 
-resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' existing = {
-  name: storageAccountName
-}
-
-resource appServicePlan 'Microsoft.Web/serverfarms@2022-09-01' = {
-  name: appServicePlanName
-  location: location
-  sku: {
-    name: 'B1'
-    tier: 'Basic'
-  }
-  kind: 'linux'
-  properties: {
-    reserved: true
-  }
-}
-
-resource webApp 'Microsoft.Web/sites@2022-09-01' = {
+resource webApp 'Microsoft.Web/sites@2022-09-01' existing = {
   name: webAppName
-  location: location
-  kind: 'app,linux'
+}
+
+resource appSettings 'Microsoft.Web/sites/config@2022-09-01' = {
+  name: '${webApp.name}/appsettings'
   properties: {
-    serverFarmId: appServicePlan.id
-    siteConfig: {
-      linuxFxVersion: 'PYTHON|3.12'
-      appSettings: [
-        {
-          name: 'DATABASE_URL'
-          value: databaseUrl
-        }
-        {
-          name: 'APP_MODULE'
-          value: 'app.main:app'
-        }
-        {
-          name: 'WEBSITES_PORT'
-          value: '8000'
-        }
-        {
-          name: 'AZURE_SEARCH_ENDPOINT'
-          value: searchServiceEndpoint
-        }
-        {
-          name: 'AZURE_SEARCH_API_KEY'
-          value: searchServiceApiKey
-        }
-        {
-          name: 'METRICS_ADMIN_TOKEN'
-          value: metricsAdminToken
-        }
-        {
-          name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
-          value: 'false'
-        }
-        {
-          name: 'WEBSITE_RUN_FROM_PACKAGE'
-          value: '1'
-        }
-        {
-          name: 'PYTHONPATH'
-          value: '/home/site/wwwroot/.python_packages/lib/site-packages'
-        }
-        {
-          name: 'DOCQA_ALLOWED_ORIGINS'
-          value: 'http://localhost:3000,${vercelUrl}'
-        }
-      ]
-      appCommandLine: 'bash /home/site/wwwroot/startup.sh'
-    }
+    DATABASE_URL: databaseUrl
+    APP_MODULE: 'app.main:app'
+    WEBSITES_PORT: '8000'
+    AZURE_SEARCH_ENDPOINT: searchServiceEndpoint
+    AZURE_SEARCH_API_KEY: searchServiceApiKey
+    METRICS_ADMIN_TOKEN: metricsAdminToken
+    SCM_DO_BUILD_DURING_DEPLOYMENT: 'false'
+    WEBSITE_RUN_FROM_PACKAGE: '1'
+    PYTHONPATH: '/home/site/wwwroot/.python_packages/lib/site-packages'
+    DOCQA_ALLOWED_ORIGINS: 'http://localhost:3000,${vercelUrl}'
+  }
+}
+
+resource siteConfig 'Microsoft.Web/sites/config@2022-09-01' = {
+  name: '${webApp.name}/web'
+  properties: {
+    linuxFxVersion: 'PYTHON|3.12'
+    appCommandLine: 'bash /home/site/wwwroot/startup.sh'
   }
 }
 
