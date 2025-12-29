@@ -27,7 +27,7 @@ resource siteConfig 'Microsoft.Web/sites/config@2022-09-01' = {
   name: '${webApp.name}/web'
   properties: {
     linuxFxVersion: 'PYTHON|3.12'
-    appCommandLine: 'bash /home/site/wwwroot/startup.sh'
+    appCommandLine: 'bash startup.sh'
   }
 }
 
