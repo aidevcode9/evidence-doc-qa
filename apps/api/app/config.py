@@ -26,7 +26,7 @@ INDEX_VERSION = _getenv("DOCQA_INDEX_VERSION", "v3.1.0")
 
 DATA_DIR = _getenv("DOCQA_DATA_DIR", "data")
 RAW_DIR = os.path.join(DATA_DIR, "raw")
-DATABASE_URL = _getenv("DB_DATABASE_URL", "")
+DATABASE_URL = _getenv("DATABASE_URL", _getenv("DB_DATABASE_URL", ""))
 
 CHUNK_SIZE = int(_getenv("DOCQA_CHUNK_SIZE", "900"))
 CHUNK_OVERLAP = int(_getenv("DOCQA_CHUNK_OVERLAP", "150"))
@@ -65,8 +65,17 @@ AZURE_SEARCH_API_VERSION = _getenv("AZURE_SEARCH_API_VERSION", "2023-11-01")
 AZURE_SEARCH_CREATE_INDEX = _is_truthy(_getenv("AZURE_SEARCH_CREATE_INDEX", "0"))
 ENABLE_INDEXING = _is_truthy(_getenv("DOCQA_ENABLE_INDEXING", "1"))
 
-METRICS_ADMIN_TOKEN = _getenv("DOCQA_METRICS_ADMIN_TOKEN", "")
+METRICS_ADMIN_TOKEN = _getenv(
+    "METRICS_ADMIN_TOKEN", _getenv("DOCQA_METRICS_ADMIN_TOKEN", "")
+)
 
 # CORS
 _allowed_origins = _getenv("DOCQA_ALLOWED_ORIGINS", "http://localhost:3000")
-ALLOWED_ORIGINS = [o.strip() for o in _allowed_origins.split(",") if o.strip()]
+_origins_raw = [o.strip() for o in _allowed_origins.split(",") if o.strip()]
+ALLOWED_ORIGINS = []
+for origin in _origins_raw:
+    if "://" in origin:
+        ALLOWED_ORIGINS.append(origin)
+    else:
+        ALLOWED_ORIGINS.append(f"https://{origin}")
+        ALLOWED_ORIGINS.append(f"http://{origin}")
