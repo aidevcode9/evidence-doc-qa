@@ -28,6 +28,16 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install API dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r apps/api/requirements.txt -t apps/api/.python_packages/lib/site-packages
+
       - name: Provision Infrastructure
         id: provision
         uses: azure/arm-deploy@v2
