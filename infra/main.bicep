@@ -8,16 +8,8 @@ param vercelUrl string = ''
 param databaseUrl string
 param metricsAdminToken string = ''
 
-resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
+resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' existing = {
   name: storageAccountName
-  location: location
-  sku: {
-    name: 'Standard_LRS'
-  }
-  kind: 'StorageV2'
-  properties: {
-    accessTier: 'Hot'
-  }
 }
 
 resource appServicePlan 'Microsoft.Web/serverfarms@2022-09-01' = {
