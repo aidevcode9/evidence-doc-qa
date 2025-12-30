@@ -55,6 +55,14 @@ jobs:
             searchServiceApiKey=${{ secrets.AZURE_SEARCH_API_KEY }}
             databaseUrl=${{ secrets.DATABASE_URL }}
             metricsAdminToken=${{ secrets.METRICS_ADMIN_TOKEN }}
+            azureOpenAiEndpoint=${{ secrets.AZURE_OPENAI_ENDPOINT }}
+            azureOpenAiApiKey=${{ secrets.AZURE_OPENAI_API_KEY }}
+            azureOpenAiApiVersion=${{ secrets.AZURE_OPENAI_API_VERSION }}
+            azureOpenAiEmbeddingsDeployment=${{ secrets.AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT }}
+            azureOpenAiChatEndpoint=${{ secrets.AZURE_OPENAI_CHAT_ENDPOINT }}
+            azureOpenAiChatApiKey=${{ secrets.AZURE_OPENAI_CHAT_API_KEY }}
+            azureOpenAiChatApiVersion=${{ secrets.AZURE_OPENAI_CHAT_API_VERSION }}
+            docqaModelId=${{ secrets.DOCQA_MODEL_ID }}
           failOnStdErr: false
 
       - name: Get Infrastructure Outputs

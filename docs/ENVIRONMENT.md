@@ -26,6 +26,11 @@ When using remote embeddings or generation (e.g., gpt5-mini and text-embedding-3
 - `AZURE_OPENAI_API_VERSION`
 - `AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT`
 
+If using a separate verification (chat) model, set:
+- `AZURE_OPENAI_CHAT_ENDPOINT`
+- `AZURE_OPENAI_CHAT_API_KEY`
+- `AZURE_OPENAI_CHAT_API_VERSION`
+
 ## Logging and safety
 - Do not log raw user questions or document text.
 - Redact emails, phone numbers, and SSN-like patterns in any logged text.
