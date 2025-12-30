@@ -32,6 +32,7 @@ export type Message = {
   refusal_code?: string;
   reason?: string;
   request_id?: string;
+  version_snapshot?: VersionSnapshot;
 };
 
 export type VersionSnapshot = {

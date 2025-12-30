@@ -53,6 +53,7 @@ export default function DocQAPage() {
         refusal_code: data.refusal_code,
         reason: data.reason,
         request_id: data.request_id,
+        version_snapshot: data.version_snapshot,
       };
 
       setMessages((prev) => [...prev, assistantMsg]);

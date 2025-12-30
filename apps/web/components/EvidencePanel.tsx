@@ -35,7 +35,7 @@ export function EvidencePanel({ message }: { message: Message | null }) {
   }
 
   if (message.refusal_code) {
-    const { evidence, citations, refusal_code } = message;
+    const { evidence, citations, refusal_code, version_snapshot } = message;
     return (
       <div className="h-full overflow-y-auto border-l border-white/5 bg-white/[0.02] flex flex-col font-sans">
         <div className="p-6 border-b border-white/5">
@@ -80,6 +80,26 @@ export function EvidencePanel({ message }: { message: Message | null }) {
                 <span>{evidence.verdict} ({evidence.verifier_model})</span>
               </div>
             )}
+            {evidence && (
+              <>
+                <div className="flex items-center justify-between">
+                  <span>Top RRF Score</span>
+                  <span>{evidence.top_rrf_score}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>RRF Margin</span>
+                  <span>{evidence.rrf_margin}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Overlap Score</span>
+                  <span>{evidence.overlap_score}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Support Count</span>
+                  <span>{evidence.support_count}</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -107,7 +127,16 @@ export function EvidencePanel({ message }: { message: Message | null }) {
 
         <div className="p-4 border-t border-white/5 bg-black/20 text-[10px] text-gray-600">
           <div className="font-mono">Policy: Evidence-bound, refusal on weak support</div>
-          <div className="mt-1 text-gray-500">
+          {version_snapshot && (
+            <div className="mt-2 space-y-1 text-gray-500">
+              <div>Prompt: {version_snapshot.prompt_version}</div>
+              <div>Retrieval: {version_snapshot.retrieval_version}</div>
+              <div>Model: {version_snapshot.model_id}</div>
+              <div>Parser: {version_snapshot.parser_mode}</div>
+              <div>Snapshot: {version_snapshot.docs_snapshot_id}</div>
+            </div>
+          )}
+          <div className="mt-2 text-gray-500">
             Tip: ask a narrower question or upload a more specific document.
           </div>
         </div>
@@ -141,7 +170,7 @@ export function EvidencePanel({ message }: { message: Message | null }) {
     );
   }
 
-  const { evidence, citations, refusal_code } = message;
+  const { evidence, citations, refusal_code, version_snapshot } = message;
 
   return (
     <div className="h-full overflow-y-auto border-l border-white/5 bg-white/[0.02] flex flex-col font-sans">
@@ -187,6 +216,12 @@ export function EvidencePanel({ message }: { message: Message | null }) {
                     <span>{evidence.verdict}</span>
                     <span>{evidence.support_count} Supporting Snippet(s)</span>
                 </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] text-gray-500">
+                    <div>Top RRF: {evidence.top_rrf_score}</div>
+                    <div>RRF Margin: {evidence.rrf_margin}</div>
+                    <div>Overlap: {evidence.overlap_score}</div>
+                    <div>Support: {evidence.support_count}</div>
+                </div>
             </div>
         )}
       </div>
@@ -215,10 +250,22 @@ export function EvidencePanel({ message }: { message: Message | null }) {
         </div>
       </div>
       
-      {evidence && (
+      {(evidence || version_snapshot) && (
           <div className="p-4 border-t border-white/5 bg-black/20 text-[10px] text-gray-600 font-mono">
-              <div className="mb-1">SNAPSHOT: {evidence.docs_snapshot_id}</div>
-              <div>INDEX: {evidence.index_version}</div>
+              {evidence && (
+                <>
+                  <div className="mb-1">SNAPSHOT: {evidence.docs_snapshot_id}</div>
+                  <div>INDEX: {evidence.index_version}</div>
+                </>
+              )}
+              {version_snapshot && (
+                <div className="mt-2 text-gray-500">
+                  <div>PROMPT: {version_snapshot.prompt_version}</div>
+                  <div>RETRIEVAL: {version_snapshot.retrieval_version}</div>
+                  <div>MODEL: {version_snapshot.model_id}</div>
+                  <div>PARSER: {version_snapshot.parser_mode}</div>
+                </div>
+              )}
           </div>
       )}
 
