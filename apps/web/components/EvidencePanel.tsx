@@ -35,7 +35,7 @@ export function EvidencePanel({ message }: { message: Message | null }) {
   }
 
   if (message.refusal_code) {
-    const { evidence, citations, refusal_code, version_snapshot } = message;
+    const { evidence, citations, refusal_code, version_snapshot, debug_candidates } = message;
     return (
       <div className="h-full overflow-y-auto border-l border-white/5 bg-white/[0.02] flex flex-col font-sans">
         <div className="p-6 border-b border-white/5">
@@ -76,32 +76,98 @@ export function EvidencePanel({ message }: { message: Message | null }) {
             )}
             {evidence?.verifier_model && (
               <div className="flex items-center justify-between">
-                <span>LLM Verification</span>
+                <span className="flex items-center gap-2">
+                  LLM Verification
+                  <span
+                    className="text-[10px] text-gray-500 border border-white/10 rounded-full w-4 h-4 flex items-center justify-center"
+                    title="Checks if the exact answer span exists in the document. If verified, we treat this as stronger evidence."
+                  >
+                    i
+                  </span>
+                </span>
                 <span>{evidence.verdict} ({evidence.verifier_model})</span>
               </div>
             )}
             {evidence && (
               <>
                 <div className="flex items-center justify-between">
-                  <span>Top RRF Score</span>
+                  <span className="flex items-center gap-2">
+                    Top RRF Score
+                    <span
+                      className="text-[10px] text-gray-500 border border-white/10 rounded-full w-4 h-4 flex items-center justify-center"
+                      title="Rank-fusion score for the best chunk across vector + keyword search."
+                    >
+                      i
+                    </span>
+                  </span>
                   <span>{evidence.top_rrf_score}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>RRF Margin</span>
+                  <span className="flex items-center gap-2">
+                    RRF Margin
+                    <span
+                      className="text-[10px] text-gray-500 border border-white/10 rounded-full w-4 h-4 flex items-center justify-center"
+                      title="Gap between the best and second-best chunks. Larger margin means higher confidence."
+                    >
+                      i
+                    </span>
+                  </span>
                   <span>{evidence.rrf_margin}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Overlap Score</span>
+                  <span className="flex items-center gap-2">
+                    Overlap Score
+                    <span
+                      className="text-[10px] text-gray-500 border border-white/10 rounded-full w-4 h-4 flex items-center justify-center"
+                      title="Token overlap between the question and the verified answer span. Short numeric answers can look low, so verification boosts this signal."
+                    >
+                      i
+                    </span>
+                  </span>
                   <span>{evidence.overlap_score}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Support Count</span>
+                  <span className="flex items-center gap-2">
+                    Support Count
+                    <span
+                      className="text-[10px] text-gray-500 border border-white/10 rounded-full w-4 h-4 flex items-center justify-center"
+                      title="How many retrieved chunks provide supporting context above the overlap threshold."
+                    >
+                      i
+                    </span>
+                  </span>
                   <span>{evidence.support_count}</span>
                 </div>
               </>
             )}
           </div>
         </div>
+
+        {debug_candidates?.length ? (
+          <div className="p-6 border-b border-white/5">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-4">Top Candidates</h3>
+            <div className="space-y-3">
+              {debug_candidates.slice(0, 3).map((candidate, idx) => (
+                <div key={`${candidate.chunk_id}-${idx}`} className="rounded-lg border border-white/10 bg-white/5 p-3">
+                  <div className="flex items-center justify-between text-[10px] text-gray-400">
+                    <span className="font-mono">
+                      {candidate.doc_name} - Pg {candidate.page_num}
+                    </span>
+                    <span>{candidate.verifier_verdict}</span>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-gray-500">
+                    <div>RRF: {candidate.rrf_score}</div>
+                    <div>Overlap: {candidate.overlap_score}</div>
+                    <div>Reason: {candidate.reason}</div>
+                  </div>
+                  <div className="mt-2 text-xs text-gray-300 italic">
+                    "{candidate.snippet}"
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div className="p-6 flex-1">
           <h3 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-4">What We Found</h3>
@@ -170,7 +236,7 @@ export function EvidencePanel({ message }: { message: Message | null }) {
     );
   }
 
-  const { evidence, citations, refusal_code, version_snapshot } = message;
+  const { evidence, citations, refusal_code, version_snapshot, debug_candidates } = message;
 
   return (
     <div className="h-full overflow-y-auto border-l border-white/5 bg-white/[0.02] flex flex-col font-sans">
@@ -248,6 +314,32 @@ export function EvidencePanel({ message }: { message: Message | null }) {
                 </div>
             )}
         </div>
+
+        {debug_candidates?.length ? (
+          <div className="mt-8">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-4">Top Candidates</h3>
+            <div className="space-y-3">
+              {debug_candidates.slice(0, 3).map((candidate, idx) => (
+                <div key={`${candidate.chunk_id}-${idx}`} className="rounded-lg border border-white/10 bg-white/5 p-3">
+                  <div className="flex items-center justify-between text-[10px] text-gray-400">
+                    <span className="font-mono">
+                      {candidate.doc_name} - Pg {candidate.page_num}
+                    </span>
+                    <span>{candidate.verifier_verdict}</span>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-gray-500">
+                    <div>RRF: {candidate.rrf_score}</div>
+                    <div>Overlap: {candidate.overlap_score}</div>
+                    <div>Reason: {candidate.reason}</div>
+                  </div>
+                  <div className="mt-2 text-xs text-gray-300 italic">
+                    "{candidate.snippet}"
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
       
       {(evidence || version_snapshot) && (

@@ -50,6 +50,7 @@ export default function DocQAPage() {
         text: data.answer_text || "The system could not provide an answer.",
         citations: data.citations,
         evidence: data.evidence,
+        debug_candidates: data.debug_candidates,
         refusal_code: data.refusal_code,
         reason: data.reason,
         request_id: data.request_id,

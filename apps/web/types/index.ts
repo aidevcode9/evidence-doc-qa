@@ -23,12 +23,25 @@ export type EvidenceSupport = {
   index_version: string;
 };
 
+export type DebugCandidate = {
+  doc_id: string;
+  doc_name: string;
+  page_num: number;
+  chunk_id: string;
+  rrf_score: number;
+  overlap_score: number;
+  verifier_verdict: string;
+  reason: string;
+  snippet: string;
+};
+
 export type Message = {
   id: string;
   role: "user" | "assistant";
   text: string;
   citations?: Citation[];
   evidence?: EvidenceSupport;
+  debug_candidates?: DebugCandidate[];
   refusal_code?: string;
   reason?: string;
   request_id?: string;

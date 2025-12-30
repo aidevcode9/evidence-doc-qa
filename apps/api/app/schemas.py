@@ -33,6 +33,18 @@ class EvidenceSupport(BaseModel):
     index_version: str
 
 
+class DebugCandidate(BaseModel):
+    doc_id: str
+    doc_name: str
+    page_num: int
+    chunk_id: str
+    rrf_score: float
+    overlap_score: float
+    verifier_verdict: str
+    reason: str
+    snippet: str
+
+
 class AskResponse(BaseModel):
     request_id: str
     answer_text: Optional[str]
@@ -40,4 +52,5 @@ class AskResponse(BaseModel):
     refusal_code: Optional[str]
     reason: Optional[str]
     evidence: Optional[EvidenceSupport] = None
+    debug_candidates: Optional[List[DebugCandidate]] = None
     version_snapshot: dict

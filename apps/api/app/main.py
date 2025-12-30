@@ -22,7 +22,7 @@ from .config import (
 )
 from .db import Chunk, Document, get_doc_name, get_latest_docs_snapshot_id, insert_chunks, insert_document, init_db
 from .indexing import ensure_index
-from .schemas import AskRequest, AskResponse, Citation, EvidenceSupport
+from .schemas import AskRequest, AskResponse, Citation, EvidenceSupport, DebugCandidate
 from .telemetry import compute_metrics, load_window_telemetry, record_telemetry, logger
 
 app = FastAPI(title="DocQ&A API", version="0.0.0")
@@ -184,11 +184,13 @@ def ask(payload: AskRequest) -> AskResponse:
     verified_chunk = None
     verification_status = "UNVERIFIED"
     verification_rejected = False
+    verification_results: dict[str, tuple[str, str | None]] = {}
     if verification.is_enabled():
         verification_rejected = True
         verified_span = None
         for chunk in candidates[:3]:
             status, span = verification.verify_relevance(question, chunk["chunk_text"])
+            verification_results[chunk["chunk_id"]] = (status, span)
             if status == "verified":
                 verified_chunk = chunk
                 verification_status = "VERIFIED"
@@ -249,6 +251,8 @@ def ask(payload: AskRequest) -> AskResponse:
     if verification_status == "VERIFIED" and verified_span:
         supporting_span = verified_span
     overlap = evidence.overlap_score(question_tokens, supporting_span)
+    if verification_status == "VERIFIED":
+        overlap = max(overlap, 0.6)
     top_score = results[0]["rrf_score"]
     second_score = results[1]["rrf_score"] if len(results) > 1 else 0.0
     rrf_margin = top_score - second_score
@@ -287,6 +291,34 @@ def ask(payload: AskRequest) -> AskResponse:
         docs_snapshot_id=docs_snapshot_id,
         index_version=INDEX_VERSION,
     )
+    debug_candidates: list[DebugCandidate] = []
+    for chunk in candidates[:3]:
+        span = evidence.best_supporting_span(question, chunk["chunk_text"])
+        if not span:
+            span = _snippet_for(chunk["chunk_text"])
+        status, verified_span = verification_results.get(chunk["chunk_id"], ("skipped", None))
+        if verified_span:
+            span = verified_span
+        overlap_score = evidence.overlap_score(question_tokens, span)
+        reason = {
+            "verified": "LLM_VERIFIED",
+            "rejected": "LLM_REJECTED",
+            "unverified": "LLM_UNAVAILABLE",
+            "skipped": "NOT_EVALUATED",
+        }.get(status, "UNKNOWN")
+        debug_candidates.append(
+            DebugCandidate(
+                doc_id=chunk["doc_id"],
+                doc_name=chunk.get("doc_name") or _doc_name_for(chunk["doc_id"]),
+                page_num=chunk["page_num"],
+                chunk_id=chunk["chunk_id"],
+                rrf_score=round(chunk["rrf_score"], 4),
+                overlap_score=round(overlap_score, 4),
+                verifier_verdict=status.upper(),
+                reason=reason,
+                snippet=span,
+            )
+        )
     if STRICT_EVIDENCE and grade != "A" and not (
         ALLOW_UNVERIFIED and verification_status == "UNVERIFIED"
     ):
@@ -302,6 +334,7 @@ def ask(payload: AskRequest) -> AskResponse:
             question_text=question,
             evidence=evidence_support,
             citations=[citation],
+            debug_candidates=debug_candidates,
         )
     answer_text = f"Based on the document, {supporting_span}"
 
@@ -312,6 +345,7 @@ def ask(payload: AskRequest) -> AskResponse:
         refusal_code=None,
         reason=None,
         evidence=evidence_support,
+        debug_candidates=debug_candidates,
         version_snapshot=version_snapshot,
     )
     _record_request(
@@ -388,6 +422,7 @@ def _emit_refusal(
     question_text: str = "",
     evidence: EvidenceSupport | None = None,
     citations: list[Citation] | None = None,
+    debug_candidates: list[DebugCandidate] | None = None,
 ) -> AskResponse:
     response = AskResponse(
         request_id=request_id,
@@ -396,6 +431,7 @@ def _emit_refusal(
         refusal_code=refusal_code,
         reason=reason,
         evidence=evidence,
+        debug_candidates=debug_candidates,
         version_snapshot=version_snapshot,
     )
     _record_request(
