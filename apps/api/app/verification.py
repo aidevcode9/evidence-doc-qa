@@ -1,6 +1,6 @@
 import json
 import urllib.request
-from typing import Optional
+from typing import Optional, Tuple
 
 from .config import (
     AZURE_OPENAI_CHAT_API_KEY,
@@ -11,14 +11,14 @@ from .config import (
 from .telemetry import logger
 
 
-def verify_relevance(question: str, chunk_text: str) -> bool:
+def verify_relevance(question: str, chunk_text: str) -> Tuple[str, Optional[str]]:
     """
     Uses the LLM to verify if the chunk actually contains the answer.
     Returns True if relevant, False if not.
     """
     if not _llm_enabled():
         logger.warning("LLM Verification skipped: Azure OpenAI not configured.")
-        return True  # Fail open if LLM is missing
+        return "unverified", None
 
     system_prompt = (
         "You are a strict relevance evaluator. "
@@ -51,10 +51,22 @@ def verify_relevance(question: str, chunk_text: str) -> bool:
         content = content.strip().upper()
         
         logger.info(f"Verification Result: '{content}' for Q: '{question[:20]}...'")
-        return "YES" in content
+        if "YES" in content:
+            return "verified", content
+        if "NO" in content:
+            return "rejected", content
+        return "rejected", content
     except Exception as e:
         logger.error(f"Verification Failed: {e}")
-        return True  # Fail open on error to avoid blocking valid answers
+        return "unverified", None  # Fail closed handled by caller
+
+
+def is_enabled() -> bool:
+    return _llm_enabled()
+
+
+def verifier_model() -> Optional[str]:
+    return MODEL_ID if _llm_enabled() else None
 
 
 def _llm_enabled() -> bool:

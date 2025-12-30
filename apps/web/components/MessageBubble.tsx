@@ -10,9 +10,16 @@ const REFUSAL_DESCRIPTIONS: Record<string, string> = {
   POLICY_REFUSAL: "This request was declined according to established safety policies.",
 };
 
+const GRADE_STYLES: Record<string, string> = {
+  A: "bg-green-50 text-green-800 border-green-200",
+  B: "bg-amber-50 text-amber-800 border-amber-200",
+  C: "bg-red-50 text-red-800 border-red-200",
+};
+
 export function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === "user";
   const isRefusal = !!message.refusal_code;
+  const evidence = message.evidence;
 
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
@@ -47,11 +54,51 @@ export function MessageBubble({ message }: { message: Message }) {
           </div>
         )}
 
+        {evidence && !isRefusal && (
+          <div className="mt-4 p-3 bg-white border border-gray-200 rounded-xl shadow-sm space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span
+                  className={`px-2 py-0.5 text-[10px] font-extrabold rounded border ${
+                    GRADE_STYLES[evidence.evidence_grade]
+                  }`}
+                >
+                  {evidence.evidence_grade}
+                </span>
+                <span className="text-xs font-semibold text-gray-700">
+                  {evidence.evidence_label} Evidence
+                </span>
+              </div>
+              <span
+                className={`text-[10px] font-bold uppercase tracking-wider ${
+                  evidence.verdict === "VERIFIED" ? "text-green-700" : "text-amber-700"
+                }`}
+              >
+                {evidence.verdict === "VERIFIED"
+                  ? `Verified by ${evidence.verifier_model || "LLM"}`
+                  : "Unverified (human review)"}
+              </span>
+            </div>
+            <div className="text-[11px] text-gray-600 flex flex-wrap gap-x-4 gap-y-1">
+              <span>
+                Support: {evidence.support_count} snippet{evidence.support_count === 1 ? "" : "s"}
+              </span>
+              <span>Index: {evidence.index_version}</span>
+            </div>
+            <div className="text-xs text-gray-700">
+              <span className="font-semibold">Evidence mapping:</span>{" "}
+              {evidence.supporting_doc_name} - Page {evidence.supporting_page_num} - "
+              {evidence.supporting_span}"
+            </div>
+            <div className="text-[10px] text-gray-500 font-mono">
+              SNAPSHOT: {evidence.docs_snapshot_id}
+            </div>
+          </div>
+        )}
+
         {message.citations && message.citations.length > 0 && (
           <div className="mt-4 pt-4 border-t border-gray-200 space-y-3">
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-              Evidence
-            </p>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Sources</p>
             {message.citations.map((c, idx) => (
               <CitationCard key={idx} citation={c} />
             ))}

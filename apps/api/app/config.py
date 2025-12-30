@@ -32,6 +32,8 @@ CHUNK_SIZE = int(_getenv("DOCQA_CHUNK_SIZE", "900"))
 CHUNK_OVERLAP = int(_getenv("DOCQA_CHUNK_OVERLAP", "150"))
 
 CONF_MIN = float(_getenv("DOCQA_CONF_MIN", "0.35"))
+STRICT_EVIDENCE = _is_truthy(_getenv("DOCQA_STRICT_EVIDENCE", "1"))
+ALLOW_UNVERIFIED = _is_truthy(_getenv("DOCQA_ALLOW_UNVERIFIED", "0"))
 
 TOP_K = int(_getenv("DOCQA_TOP_K", "5"))
 TOP_K_VECTOR = int(_getenv("DOCQA_TOP_K_VECTOR", "5"))

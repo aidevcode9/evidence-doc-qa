@@ -56,8 +56,8 @@ def run_debug():
 
     # 5. Verify
     print("\n--- Verifying ---")
-    is_relevant = verification.verify_relevance(question, top_chunk['chunk_text'])
-    print(f"LLM Verification: {'YES' if is_relevant else 'NO'}")
+    status, _raw = verification.verify_relevance(question, top_chunk['chunk_text'])
+    print(f"LLM Verification: {status.upper()}")
 
 if __name__ == "__main__":
     run_debug()

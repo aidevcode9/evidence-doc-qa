@@ -47,6 +47,7 @@ export default function DocQAPage() {
         role: "assistant",
         text: data.answer_text || "The system could not provide an answer.",
         citations: data.citations,
+        evidence: data.evidence,
         refusal_code: data.refusal_code,
         reason: data.reason,
         request_id: data.request_id,

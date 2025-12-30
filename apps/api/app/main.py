@@ -5,10 +5,11 @@ import uuid
 from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import indexing, ingestion, policy, retrieval, verification
+from . import evidence, indexing, ingestion, policy, retrieval, verification
 from .config import (
     CONF_MIN,
     DATA_DIR,
+    INDEX_VERSION,
     METRICS_ADMIN_TOKEN,
     MODEL_ID,
     PARSER_MODE,
@@ -16,10 +17,12 @@ from .config import (
     RAW_DIR,
     RETRIEVAL_VERSION,
     ALLOWED_ORIGINS,
+    STRICT_EVIDENCE,
+    ALLOW_UNVERIFIED,
 )
 from .db import Chunk, Document, get_doc_name, get_latest_docs_snapshot_id, insert_chunks, insert_document, init_db
 from .indexing import ensure_index
-from .schemas import AskRequest, AskResponse, Citation
+from .schemas import AskRequest, AskResponse, Citation, EvidenceSupport
 from .telemetry import compute_metrics, load_window_telemetry, record_telemetry, logger
 
 app = FastAPI(title="DocQ&A API", version="0.0.0")
@@ -163,9 +166,6 @@ def ask(payload: AskRequest) -> AskResponse:
             question_text=question,
         )
 
-    # LLM Verification Loop (Check Top 3)
-    verified_chunk = None
-    
     # Filter results by confidence first
     candidates = [r for r in results if r["rrf_score"] >= CONF_MIN]
     if not candidates:
@@ -181,20 +181,96 @@ def ask(payload: AskRequest) -> AskResponse:
             question_text=question,
         )
 
-    for chunk in candidates[:3]:
-        if verification.verify_relevance(question, chunk["chunk_text"]):
-            verified_chunk = chunk
-            break
-    
-    if not verified_chunk:
-        logger.warning(f"Verification Fail [{request_id}]: All top candidates rejected by LLM.")
+    verified_chunk = None
+    verification_status = "UNVERIFIED"
+    verification_rejected = False
+    if verification.is_enabled():
+        verification_rejected = True
+        for chunk in candidates[:3]:
+            status, _raw = verification.verify_relevance(question, chunk["chunk_text"])
+            if status == "verified":
+                verified_chunk = chunk
+                verification_status = "VERIFIED"
+                verification_rejected = False
+                break
+            if status == "unverified":
+                verification_status = "UNVERIFIED"
+                verification_rejected = False
+                break
+
+        if verified_chunk is None:
+            if verification_rejected:
+                logger.warning(f"Verification Fail [{request_id}]: All top candidates rejected by LLM.")
+                return _emit_refusal(
+                    request_id=request_id,
+                    docs_snapshot_id=docs_snapshot_id,
+                    version_snapshot=version_snapshot,
+                    refusal_code="NO_SUPPORTING_EVIDENCE",
+                    reason="Retrieval found matches, but they were judged irrelevant by the model.",
+                    failure_label="LLM_VERIFICATION_FAILED",
+                    start_time=start_time,
+                    question_text=question,
+                )
+
+            if STRICT_EVIDENCE and not ALLOW_UNVERIFIED:
+                logger.warning(f"Verification Fail [{request_id}]: LLM verification unavailable (strict mode).")
+                return _emit_refusal(
+                    request_id=request_id,
+                    docs_snapshot_id=docs_snapshot_id,
+                    version_snapshot=version_snapshot,
+                    refusal_code="POLICY_REFUSAL",
+                    reason="LLM verification required but unavailable.",
+                    failure_label="LLM_VERIFICATION_UNAVAILABLE",
+                    start_time=start_time,
+                    question_text=question,
+                )
+            verified_chunk = candidates[0]
+    else:
+        if STRICT_EVIDENCE and not ALLOW_UNVERIFIED:
+            logger.warning(f"Verification Fail [{request_id}]: LLM verification disabled (strict mode).")
+            return _emit_refusal(
+                request_id=request_id,
+                docs_snapshot_id=docs_snapshot_id,
+                version_snapshot=version_snapshot,
+                refusal_code="POLICY_REFUSAL",
+                reason="LLM verification required but not configured.",
+                failure_label="LLM_VERIFICATION_DISABLED",
+                start_time=start_time,
+                question_text=question,
+            )
+        verified_chunk = candidates[0]
+
+    question_tokens = evidence.tokenize(question)
+    supporting_span = evidence.best_supporting_span(question, verified_chunk["chunk_text"])
+    if not supporting_span:
+        supporting_span = _snippet_for(verified_chunk["chunk_text"])
+    overlap = evidence.overlap_score(question_tokens, supporting_span)
+    top_score = results[0]["rrf_score"]
+    second_score = results[1]["rrf_score"] if len(results) > 1 else 0.0
+    rrf_margin = top_score - second_score
+    support_count = sum(
+        1
+        for r in candidates
+        if evidence.overlap_score(question_tokens, r["chunk_text"]) >= 0.2
+    )
+    support_count = max(1, support_count)
+    grade, label = evidence.evidence_grade(
+        verification_status == "VERIFIED",
+        verified_chunk["rrf_score"],
+        rrf_margin,
+        overlap,
+    )
+    if STRICT_EVIDENCE and grade != "A" and not (
+        ALLOW_UNVERIFIED and verification_status == "UNVERIFIED"
+    ):
+        logger.warning(f"Evidence Fail [{request_id}]: Grade {grade} below Strong threshold.")
         return _emit_refusal(
             request_id=request_id,
             docs_snapshot_id=docs_snapshot_id,
             version_snapshot=version_snapshot,
-            refusal_code="NO_SUPPORTING_EVIDENCE",
-            reason="Retrieval found matches, but they were judged irrelevant by the model.",
-            failure_label="LLM_VERIFICATION_FAILED",
+            refusal_code="LOW_RETRIEVAL_CONFIDENCE",
+            reason="Evidence strength below Strong threshold.",
+            failure_label="EVIDENCE_WEAK",
             start_time=start_time,
             question_text=question,
         )
@@ -204,10 +280,26 @@ def ask(payload: AskRequest) -> AskResponse:
         doc_name=verified_chunk.get("doc_name") or _doc_name_for(verified_chunk["doc_id"]),
         page_num=verified_chunk["page_num"],
         chunk_id=verified_chunk["chunk_id"],
-        snippet=_snippet_for(verified_chunk["chunk_text"]),
+        snippet=supporting_span,
         score=round(verified_chunk["rrf_score"], 4),
     )
-    answer_text = f"Based on the document, {citation.snippet}"
+    answer_text = f"Based on the document, {supporting_span}"
+
+    evidence_support = EvidenceSupport(
+        verdict=verification_status,
+        verifier_model=verification.verifier_model(),
+        evidence_grade=grade,
+        evidence_label=label,
+        support_count=support_count,
+        top_rrf_score=round(top_score, 4),
+        rrf_margin=round(rrf_margin, 4),
+        overlap_score=round(overlap, 4),
+        supporting_span=supporting_span,
+        supporting_page_num=citation.page_num,
+        supporting_doc_name=citation.doc_name,
+        docs_snapshot_id=docs_snapshot_id,
+        index_version=INDEX_VERSION,
+    )
 
     response = AskResponse(
         request_id=request_id,
@@ -215,6 +307,7 @@ def ask(payload: AskRequest) -> AskResponse:
         citations=[citation],
         refusal_code=None,
         reason=None,
+        evidence=evidence_support,
         version_snapshot=version_snapshot,
     )
     _record_request(
