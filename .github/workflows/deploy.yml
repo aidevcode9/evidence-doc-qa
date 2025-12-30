@@ -61,8 +61,23 @@ jobs:
         run: |
           echo "WEB_APP_NAME=${{ steps.provision.outputs.webAppName }}" >> $GITHUB_ENV
 
+      - name: Wait for App Service restart
+        run: sleep 45
+
       - name: Deploy to Azure Web App
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: ${{ env.WEB_APP_NAME }}
-          package: ${{ env.ARTIFACT_FILE }}
+        run: |
+          set -e
+          for attempt in 1 2 3; do
+            echo "Deploy attempt $attempt..."
+            if az webapp deployment source config-zip \
+              --resource-group "${{ env.RESOURCE_GROUP }}" \
+              --name "${{ env.WEB_APP_NAME }}" \
+              --src "${{ env.ARTIFACT_FILE }}"; then
+              echo "Deploy succeeded."
+              exit 0
+            fi
+            echo "Deploy failed. Retrying after 30s..."
+            sleep 30
+          done
+          echo "Deploy failed after 3 attempts."
+          exit 1
