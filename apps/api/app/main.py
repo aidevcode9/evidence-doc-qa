@@ -186,11 +186,13 @@ def ask(payload: AskRequest) -> AskResponse:
     verification_rejected = False
     if verification.is_enabled():
         verification_rejected = True
+        verified_span = None
         for chunk in candidates[:3]:
-            status, _raw = verification.verify_relevance(question, chunk["chunk_text"])
+            status, span = verification.verify_relevance(question, chunk["chunk_text"])
             if status == "verified":
                 verified_chunk = chunk
                 verification_status = "VERIFIED"
+                verified_span = span
                 verification_rejected = False
                 break
             if status == "unverified":
@@ -244,6 +246,8 @@ def ask(payload: AskRequest) -> AskResponse:
     supporting_span = evidence.best_supporting_span(question, verified_chunk["chunk_text"])
     if not supporting_span:
         supporting_span = _snippet_for(verified_chunk["chunk_text"])
+    if verification_status == "VERIFIED" and verified_span:
+        supporting_span = verified_span
     overlap = evidence.overlap_score(question_tokens, supporting_span)
     top_score = results[0]["rrf_score"]
     second_score = results[1]["rrf_score"] if len(results) > 1 else 0.0
@@ -260,21 +264,6 @@ def ask(payload: AskRequest) -> AskResponse:
         rrf_margin,
         overlap,
     )
-    if STRICT_EVIDENCE and grade != "A" and not (
-        ALLOW_UNVERIFIED and verification_status == "UNVERIFIED"
-    ):
-        logger.warning(f"Evidence Fail [{request_id}]: Grade {grade} below Strong threshold.")
-        return _emit_refusal(
-            request_id=request_id,
-            docs_snapshot_id=docs_snapshot_id,
-            version_snapshot=version_snapshot,
-            refusal_code="LOW_RETRIEVAL_CONFIDENCE",
-            reason="Evidence strength below Strong threshold.",
-            failure_label="EVIDENCE_WEAK",
-            start_time=start_time,
-            question_text=question,
-        )
-
     citation = Citation(
         doc_id=verified_chunk["doc_id"],
         doc_name=verified_chunk.get("doc_name") or _doc_name_for(verified_chunk["doc_id"]),
@@ -283,8 +272,6 @@ def ask(payload: AskRequest) -> AskResponse:
         snippet=supporting_span,
         score=round(verified_chunk["rrf_score"], 4),
     )
-    answer_text = f"Based on the document, {supporting_span}"
-
     evidence_support = EvidenceSupport(
         verdict=verification_status,
         verifier_model=verification.verifier_model(),
@@ -300,6 +287,23 @@ def ask(payload: AskRequest) -> AskResponse:
         docs_snapshot_id=docs_snapshot_id,
         index_version=INDEX_VERSION,
     )
+    if STRICT_EVIDENCE and grade != "A" and not (
+        ALLOW_UNVERIFIED and verification_status == "UNVERIFIED"
+    ):
+        logger.warning(f"Evidence Fail [{request_id}]: Grade {grade} below Strong threshold.")
+        return _emit_refusal(
+            request_id=request_id,
+            docs_snapshot_id=docs_snapshot_id,
+            version_snapshot=version_snapshot,
+            refusal_code="LOW_RETRIEVAL_CONFIDENCE",
+            reason="Evidence strength below Strong threshold.",
+            failure_label="EVIDENCE_WEAK",
+            start_time=start_time,
+            question_text=question,
+            evidence=evidence_support,
+            citations=[citation],
+        )
+    answer_text = f"Based on the document, {supporting_span}"
 
     response = AskResponse(
         request_id=request_id,
@@ -382,13 +386,16 @@ def _emit_refusal(
     failure_label: str,
     start_time: float,
     question_text: str = "",
+    evidence: EvidenceSupport | None = None,
+    citations: list[Citation] | None = None,
 ) -> AskResponse:
     response = AskResponse(
         request_id=request_id,
         answer_text=None,
-        citations=None,
+        citations=citations,
         refusal_code=refusal_code,
         reason=reason,
+        evidence=evidence,
         version_snapshot=version_snapshot,
     )
     _record_request(

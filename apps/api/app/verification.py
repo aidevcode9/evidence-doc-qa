@@ -21,12 +21,11 @@ def verify_relevance(question: str, chunk_text: str) -> Tuple[str, Optional[str]
         return "unverified", None
 
     system_prompt = (
-        "You are a strict relevance evaluator. "
-        "Your only job is to determine if the provided document chunk contains "
-        "the specific information needed to answer the user's question. "
-        "If the chunk contains the answer, output 'YES'. "
-        "If the chunk is irrelevant or does not contain the answer, output 'NO'. "
-        "Do not answer the question itself."
+        "You are a strict evidence verifier. "
+        "Decide if the document chunk contains the exact answer to the question. "
+        "If it does, respond with 'YES: <exact answer span from the chunk>'. "
+        "If it does not, respond with 'NO'. "
+        "Do not explain. Do not answer the question outside the span."
     )
 
     user_prompt = f"Question: {question}\n\nDocument Chunk:\n{chunk_text}\n\nContains Answer?"
@@ -48,14 +47,17 @@ def verify_relevance(question: str, chunk_text: str) -> Tuple[str, Optional[str]
         
         choice = response["choices"][0]
         content = choice["message"].get("content", "") or ""
-        content = content.strip().upper()
-        
-        logger.info(f"Verification Result: '{content}' for Q: '{question[:20]}...'")
-        if "YES" in content:
-            return "verified", content
-        if "NO" in content:
-            return "rejected", content
-        return "rejected", content
+        raw = content.strip()
+        upper = raw.upper()
+        logger.info(f"Verification Result: '{raw}' for Q: '{question[:20]}...'")
+        if upper.startswith("YES"):
+            span = raw[3:].lstrip(":").strip()
+            if not span:
+                return "rejected", raw
+            return "verified", span
+        if upper.startswith("NO"):
+            return "rejected", raw
+        return "rejected", raw
     except Exception as e:
         logger.error(f"Verification Failed: {e}")
         return "unverified", None  # Fail closed handled by caller
