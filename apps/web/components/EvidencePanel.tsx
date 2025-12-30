@@ -62,6 +62,86 @@ export function EvidencePanel({ message }: { message: Message | null }) {
 
   const { evidence, citations, refusal_code } = message;
 
+  if (refusal_code) {
+    return (
+      <div className="h-full overflow-y-auto border-l border-white/5 bg-white/[0.02] flex flex-col font-sans">
+        <div className="p-6 border-b border-white/5">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-red-400 mb-2">
+            Refusal Is The Correct Answer
+          </div>
+          <h2 className="text-sm font-display font-semibold text-gray-200 mb-2">
+            Evidence-bound policy prevented an unsafe answer.
+          </h2>
+          <p className="text-xs text-gray-500">
+            The system found related text but could not verify strong, direct support for your question.
+          </p>
+          <div className="mt-4 flex items-center justify-between">
+            <div className="text-[10px] text-gray-500 uppercase tracking-wider">Decision Code</div>
+            <div className="text-[10px] font-mono text-red-400">{refusal_code}</div>
+          </div>
+          {message.reason && (
+            <div className="mt-2 text-xs text-gray-400 italic">{message.reason}</div>
+          )}
+        </div>
+
+        <div className="p-6 border-b border-white/5">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-3">Decision Trace</h3>
+          <div className="space-y-2 text-xs text-gray-400">
+            <div className="flex items-center justify-between">
+              <span>Gate</span>
+              <span className="text-red-400">Evidence Strength</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>Requirement</span>
+              <span>Grade A (Strong)</span>
+            </div>
+            {evidence && (
+              <div className="flex items-center justify-between">
+                <span>Best Grade</span>
+                <span>Grade {evidence.evidence_grade}</span>
+              </div>
+            )}
+            {evidence?.verifier_model && (
+              <div className="flex items-center justify-between">
+                <span>LLM Verification</span>
+                <span>{evidence.verdict} ({evidence.verifier_model})</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="p-6 flex-1">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-4">What We Found</h3>
+          <div className="space-y-4">
+            {citations?.map((citation, idx) => (
+              <div key={idx} className="group relative pl-4 border-l-2 border-white/10">
+                <div className="absolute -left-[5px] top-0 w-2 h-2 rounded-full bg-black border border-white/10"></div>
+                <div className="text-[10px] text-blue-400 mb-1 font-mono">
+                  {citation.doc_name} › Pg {citation.page_num}
+                </div>
+                <p className="text-xs text-gray-300 leading-relaxed italic opacity-80">
+                  "{citation.snippet}"
+                </p>
+              </div>
+            ))}
+            {!citations?.length && (
+              <div className="text-xs text-gray-600 italic">
+                No citation-ready evidence met the threshold.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="p-4 border-t border-white/5 bg-black/20 text-[10px] text-gray-600">
+          <div className="font-mono">Policy: Evidence-bound, refusal on weak support</div>
+          <div className="mt-1 text-gray-500">
+            Tip: ask a narrower question or upload a more specific document.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full overflow-y-auto border-l border-white/5 bg-white/[0.02] flex flex-col font-sans">
       <div className="p-6 border-b border-white/5">
