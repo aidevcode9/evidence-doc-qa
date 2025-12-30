@@ -69,7 +69,7 @@ export function ChatInterface({
             key={m.id} 
             message={m} 
             isSelected={m.id === selectedMessageId}
-            onClick={() => onMessageSelect?.(m)}
+            onClick={m.role === "assistant" ? () => onMessageSelect?.(m) : undefined}
           />
         ))}
         {isAsking && (

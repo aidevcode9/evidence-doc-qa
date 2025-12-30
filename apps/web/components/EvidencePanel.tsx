@@ -2,7 +2,7 @@ import React from "react";
 import { Message } from "@/types";
 
 export function EvidencePanel({ message }: { message: Message | null }) {
-  if (!message || message.role === "user" || (!message.evidence && !message.citations)) {
+  if (!message) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-gray-600 p-8 text-center border-l border-white/5 bg-white/[0.02]">
         <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-4">
@@ -14,6 +14,48 @@ export function EvidencePanel({ message }: { message: Message | null }) {
         <p className="text-xs text-gray-600 mt-2 max-w-[200px]">
           Select a response to view its verified evidence chain and confidence score.
         </p>
+      </div>
+    );
+  }
+
+  if (message.role === "user") {
+    return (
+      <div className="h-full flex flex-col items-center justify-center text-gray-600 p-8 text-center border-l border-white/5 bg-white/[0.02]">
+        <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-4">
+          <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        </div>
+        <h3 className="text-sm font-display font-medium text-gray-400">Evidence Monitor</h3>
+        <p className="text-xs text-gray-600 mt-2 max-w-[200px]">
+          Select an assistant response to review its evidence and citations.
+        </p>
+      </div>
+    );
+  }
+
+  if (!message.evidence && !message.citations) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center text-gray-600 p-8 text-center border-l border-white/5 bg-white/[0.02]">
+        <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-4">
+          <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <h3 className="text-sm font-display font-medium text-gray-400">No Evidence Available</h3>
+        <p className="text-xs text-gray-600 mt-2 max-w-[240px]">
+          This response did not return citations or a verified evidence chain.
+        </p>
+        {message.refusal_code && (
+          <div className="mt-4 text-[10px] font-mono uppercase tracking-wide text-red-400">
+            {message.refusal_code}
+          </div>
+        )}
+        {message.reason && (
+          <div className="mt-2 text-xs text-gray-500 italic max-w-[240px]">
+            {message.reason}
+          </div>
+        )}
       </div>
     );
   }

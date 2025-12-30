@@ -20,6 +20,7 @@ export function MessageBubble({ message, onClick, isSelected }: { message: Messa
   const isUser = message.role === "user";
   const isRefusal = !!message.refusal_code;
   const evidence = message.evidence;
+  const isSelectable = !isUser && !!onClick;
 
   return (
     <div 
@@ -33,7 +34,7 @@ export function MessageBubble({ message, onClick, isSelected }: { message: Messa
             : isRefusal
             ? "bg-red-950/30 border border-red-500/30 text-red-200"
             : `bg-zinc-900 border ${isSelected ? "border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.1)]" : "border-white/10 hover:border-white/20"} text-gray-300`
-        } ${!isUser && onClick ? "cursor-pointer" : ""}`}
+        } ${isSelectable ? "cursor-pointer hover:bg-zinc-800/80 active:border-blue-400/60" : ""}`}
       >
         {/* User / Assistant Label */}
         <div className={`text-[10px] font-bold uppercase tracking-widest mb-2 ${

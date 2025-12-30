@@ -39,6 +39,14 @@
 - `DOCQA_ENABLE_INDEXING`: Set to `1` to enable indexing jobs.
 - `DOCQA_METRICS_ADMIN_TOKEN`: Admin token for `/v1/metrics`.
 - `EMBEDDINGS_MODE` / `EMBEDDINGS_LOCAL`: Set based on local vs remote embeddings.
+- `AZURE_OPENAI_ENDPOINT`: Azure OpenAI endpoint for embeddings/generation.
+- `AZURE_OPENAI_API_KEY`: Azure OpenAI API key.
+- `AZURE_OPENAI_API_VERSION`: Azure OpenAI API version.
+- `AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT`: Embeddings deployment name.
+- `AZURE_OPENAI_CHAT_ENDPOINT`: Chat endpoint for LLM verification (optional override).
+- `AZURE_OPENAI_CHAT_API_KEY`: Chat API key (optional override).
+- `AZURE_OPENAI_CHAT_API_VERSION`: Chat API version (optional override).
+- `DOCQA_MODEL_ID`: Chat deployment name for verification.
 
 ## Files likely touched
 - `docs/ARCHITECTURE.md`
