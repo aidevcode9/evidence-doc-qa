@@ -4,6 +4,7 @@
 - Task 013 - Improve Refusal Correctness (LLM Verification)
 - Task 009 - CI/CD Integration (Evaluation Gate)
 - Task 014 - Index Inventory Endpoint + UI (Searchable Docs)
+- Task 015 - UI Refresh (Voltra Template)
 
 ## Done
 - Task 012 - Logging, Observability, and Diagnostics
