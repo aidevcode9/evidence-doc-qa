@@ -1,6 +1,8 @@
 import hashlib
 import json
+import logging
 import urllib.request
+import urllib.error
 from typing import List
 
 from .config import (
@@ -11,6 +13,8 @@ from .config import (
     EMBEDDINGS_DIM,
     EMBEDDINGS_MODE,
 )
+
+logger = logging.getLogger("docqa")
 
 
 def embed_texts(texts: List[str]) -> List[List[float]]:
@@ -46,8 +50,13 @@ def _azure_openai_embeddings(texts: List[str]) -> List[List[float]]:
         headers={"api-key": AZURE_OPENAI_API_KEY, "Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=30) as response:
-        data = json.load(response)
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            data = json.load(response)
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        logger.error("Azure OpenAI embeddings HTTP %s: %s", exc.code, body)
+        raise
     if "data" not in data:
         raise RuntimeError("Azure OpenAI embeddings response missing data.")
     return [item["embedding"] for item in data["data"]]
