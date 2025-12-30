@@ -3,114 +3,84 @@ import { Message } from "@/types";
 import { CitationCard } from "./CitationCard";
 
 const REFUSAL_DESCRIPTIONS: Record<string, string> = {
-  INJECTION_DETECTED: "This query was flagged as a potential security risk.",
-  LOW_RETRIEVAL_CONFIDENCE: "I found some information, but it's not strong enough to answer reliably.",
-  NO_SUPPORTING_EVIDENCE: "I couldn't find any relevant information in the document to answer this.",
-  PARSE_FAILED: "The document content could not be processed correctly.",
-  POLICY_REFUSAL: "This request was declined according to established safety policies.",
+  INJECTION_DETECTED: "Query flagged as security risk.",
+  LOW_RETRIEVAL_CONFIDENCE: "Information insufficient for reliable answer.",
+  NO_SUPPORTING_EVIDENCE: "No relevant information found in documents.",
+  PARSE_FAILED: "Document processing error.",
+  POLICY_REFUSAL: "Safety policy restriction.",
 };
 
-const GRADE_STYLES: Record<string, string> = {
-  A: "bg-green-50 text-green-800 border-green-200",
-  B: "bg-amber-50 text-amber-800 border-amber-200",
-  C: "bg-red-50 text-red-800 border-red-200",
+const GRADE_COLORS: Record<string, string> = {
+  A: "text-green-400 border-green-400/30 bg-green-400/10",
+  B: "text-amber-400 border-amber-400/30 bg-amber-400/10",
+  C: "text-red-400 border-red-400/30 bg-red-400/10",
 };
 
-export function MessageBubble({ message }: { message: Message }) {
+export function MessageBubble({ message, onClick, isSelected }: { message: Message; onClick?: () => void; isSelected?: boolean }) {
   const isUser = message.role === "user";
   const isRefusal = !!message.refusal_code;
   const evidence = message.evidence;
 
   return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+    <div 
+      className={`flex ${isUser ? "justify-end" : "justify-start"} mb-6 group`}
+      onClick={onClick}
+    >
       <div
-        className={`max-w-[85%] rounded-2xl px-4 py-3 shadow-sm transition-all ${
+        className={`relative max-w-[90%] sm:max-w-[80%] rounded-2xl px-5 py-4 transition-all cursor-default ${
           isUser
-            ? "bg-blue-600 text-white"
+            ? "bg-white text-black"
             : isRefusal
-            ? "bg-red-50 text-red-900 border border-red-200"
-            : "bg-gray-100 text-gray-800 border border-gray-200"
-        }`}
+            ? "bg-red-950/30 border border-red-500/30 text-red-200"
+            : `bg-zinc-900 border ${isSelected ? "border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.1)]" : "border-white/10 hover:border-white/20"} text-gray-300`
+        } ${!isUser && onClick ? "cursor-pointer" : ""}`}
       >
-        <div className={`text-sm sm:text-base whitespace-pre-wrap ${isRefusal ? "font-medium italic opacity-70" : ""}`}>
+        {/* User / Assistant Label */}
+        <div className={`text-[10px] font-bold uppercase tracking-widest mb-2 ${
+            isUser ? "text-gray-400" : "text-blue-500"
+        }`}>
+            {isUser ? "You" : "Assistant"}
+        </div>
+
+        <div className={`text-sm sm:text-base leading-relaxed whitespace-pre-wrap font-sans ${isRefusal ? "italic opacity-80" : ""}`}>
           {isRefusal ? message.reason || message.text : message.text}
         </div>
 
+        {/* Refusal details */}
         {message.refusal_code && (
-          <div className="mt-3 p-3 bg-white border border-red-100 rounded-xl flex items-start gap-3 shadow-sm">
-            <div className="mt-0.5 text-red-500 flex-shrink-0">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-[10px] font-extrabold text-red-800 uppercase tracking-wider mb-0.5">
-                {message.refusal_code.replace(/_/g, " ")}
-              </p>
-              <p className="text-[12px] text-red-700 leading-snug">
-                {REFUSAL_DESCRIPTIONS[message.refusal_code] || "The system refused to answer based on safety or confidence policies."}
-              </p>
-            </div>
+          <div className="mt-3 pt-3 border-t border-red-500/20 flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></div>
+            <span className="text-[10px] font-mono text-red-400 uppercase">
+                {message.refusal_code}
+            </span>
           </div>
         )}
 
+        {/* Minimal Evidence Badge */}
         {evidence && !isRefusal && (
-          <div className="mt-4 p-3 bg-white border border-gray-200 rounded-xl shadow-sm space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <span
-                  className={`px-2 py-0.5 text-[10px] font-extrabold rounded border ${
-                    GRADE_STYLES[evidence.evidence_grade]
-                  }`}
-                >
-                  {evidence.evidence_grade}
-                </span>
-                <span className="text-xs font-semibold text-gray-700">
-                  {evidence.evidence_label} Evidence
-                </span>
-              </div>
-              <span
-                className={`text-[10px] font-bold uppercase tracking-wider ${
-                  evidence.verdict === "VERIFIED" ? "text-green-700" : "text-amber-700"
-                }`}
-              >
-                {evidence.verdict === "VERIFIED"
-                  ? `Verified by ${evidence.verifier_model || "LLM"}`
-                  : "Unverified (human review)"}
-              </span>
-            </div>
-            <div className="text-[11px] text-gray-600 flex flex-wrap gap-x-4 gap-y-1">
-              <span>
-                Support: {evidence.support_count} snippet{evidence.support_count === 1 ? "" : "s"}
-              </span>
-              <span>Index: {evidence.index_version}</span>
-            </div>
-            <div className="text-xs text-gray-700">
-              <span className="font-semibold">Evidence mapping:</span>{" "}
-              {evidence.supporting_doc_name} - Page {evidence.supporting_page_num} - "
-              {evidence.supporting_span}"
-            </div>
-            <div className="text-[10px] text-gray-500 font-mono">
-              SNAPSHOT: {evidence.docs_snapshot_id}
-            </div>
+          <div className="mt-4 flex items-center gap-3">
+             <span className={`px-2 py-0.5 text-[10px] font-mono font-bold rounded border ${GRADE_COLORS[evidence.evidence_grade] || "text-gray-400 border-gray-700"}`}>
+                GRADE {evidence.evidence_grade}
+             </span>
+             {evidence.verdict === "VERIFIED" && (
+                 <span className="text-[10px] text-green-500 flex items-center gap-1 opacity-80">
+                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
+                     Verified
+                 </span>
+             )}
           </div>
         )}
 
+        {/* Citations */}
         {message.citations && message.citations.length > 0 && (
-          <div className="mt-4 pt-4 border-t border-gray-200 space-y-3">
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Sources</p>
+          <div className="mt-4 pt-3 border-t border-white/5 space-y-2">
             {message.citations.map((c, idx) => (
               <CitationCard key={idx} citation={c} />
             ))}
-          </div>
-        )}
-
-        {message.request_id && (
-          <div className="mt-2 text-[10px] text-gray-400 font-mono">
-            REQ-ID: {message.request_id}
           </div>
         )}
       </div>
     </div>
   );
 }
+

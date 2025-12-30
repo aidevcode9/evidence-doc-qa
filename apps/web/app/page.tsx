@@ -1,14 +1,16 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Message } from "@/types";
 import { IngestionZone } from "@/components/IngestionZone";
 import { ChatInterface } from "@/components/ChatInterface";
+import { EvidencePanel } from "@/components/EvidencePanel";
 
 export default function DocQAPage() {
   const [docsSnapshotId, setDocsSnapshotId] = useState<string>("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isAsking, setIsAsking] = useState(false);
+  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -19,7 +21,7 @@ export default function DocQAPage() {
       {
         id: crypto.randomUUID(),
         role: "assistant",
-        text: `Document "${fileName}" uploaded and indexed. Snapshot: ${snapshotId}. You can now ask questions about it.`,
+        text: `Document "${fileName}" uploaded and indexed. Snapshot: ${snapshotId}.`,
       },
     ]);
   };
@@ -54,6 +56,7 @@ export default function DocQAPage() {
       };
 
       setMessages((prev) => [...prev, assistantMsg]);
+      setSelectedMessageId(assistantMsg.id); // Auto-select latest
     } catch (err) {
       console.error(err);
       setMessages((prev) => [
@@ -69,43 +72,47 @@ export default function DocQAPage() {
     }
   };
 
+  const selectedMessage = messages.find((m) => m.id === selectedMessageId) || null;
+
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center p-4 sm:p-8 font-sans text-gray-900">
-      <header className="w-full max-w-4xl flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-tight">
-            DocQ&A <span className="text-blue-600">v3.1</span>
-          </h1>
-          <p className="text-gray-500 text-sm font-medium">Evidence-Bound Document Assistant</p>
+    <div className="h-screen flex flex-col overflow-hidden bg-black text-white selection:bg-blue-500/30 font-sans">
+      {/* Header */}
+      <header className="flex-none h-16 border-b border-white/10 flex items-center justify-between px-6 bg-black/50 backdrop-blur-md z-10">
+        <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
+                <span className="font-display font-bold text-black text-xl">D</span>
+            </div>
+            <div>
+                <h1 className="text-lg font-display font-bold tracking-tight leading-none">
+                    DocQ&A <span className="opacity-40 font-normal text-sm ml-1">v3.1</span>
+                </h1>
+            </div>
         </div>
         <IngestionZone onUploadSuccess={handleUploadSuccess} apiUrl={API_URL} />
       </header>
 
-      <main className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden h-[75vh] border border-gray-100">
-        <ChatInterface
-          messages={messages}
-          onAsk={handleAsk}
-          isAsking={isAsking}
-          isReady={!!docsSnapshotId}
-        />
-      </main>
+      {/* Main Grid */}
+      <main className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+        {/* Background Grid Pattern */}
+        <div className="absolute inset-0 bg-grid-pattern opacity-20 pointer-events-none" />
 
-      <footer className="mt-8 text-center space-y-3">
-        <div className="flex justify-center gap-6">
-          <div className="text-center">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Invariants</p>
-            <div className="flex gap-2">
-              <span className="px-2 py-0.5 bg-green-50 text-green-700 rounded text-[9px] font-bold border border-green-100">EVIDENCE-BOUND</span>
-              <span className="px-2 py-0.5 bg-red-50 text-red-700 rounded text-[9px] font-bold border border-red-100">HARD-REFUSAL</span>
-            </div>
-          </div>
+        {/* Chat Column */}
+        <div className="flex-1 flex flex-col relative z-0 min-w-0">
+          <ChatInterface
+            messages={messages}
+            onAsk={handleAsk}
+            isAsking={isAsking}
+            isReady={!!docsSnapshotId}
+            selectedMessageId={selectedMessageId}
+            onMessageSelect={(m) => setSelectedMessageId(m.id)}
+          />
         </div>
-        {docsSnapshotId && (
-          <div className="inline-block bg-blue-50 text-blue-700 px-4 py-1.5 rounded-full text-[10px] font-mono border border-blue-100 shadow-sm">
-            <span className="opacity-50 mr-2">ACTIVE SNAPSHOT:</span> {docsSnapshotId}
-          </div>
-        )}
-      </footer>
+
+        {/* Evidence Column */}
+        <div className="flex-none w-full md:w-[400px] lg:w-[450px] bg-black/40 backdrop-blur-xl border-t md:border-t-0 border-white/10 md:border-l z-10 h-[40vh] md:h-full">
+            <EvidencePanel message={selectedMessage} />
+        </div>
+      </main>
     </div>
   );
 }

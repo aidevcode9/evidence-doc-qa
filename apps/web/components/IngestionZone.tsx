@@ -48,12 +48,14 @@ export function IngestionZone({ onUploadSuccess, apiUrl }: IngestionZoneProps) {
       <button
         onClick={() => fileInputRef.current?.click()}
         disabled={isUploading}
-        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-all shadow-md disabled:opacity-50 flex items-center gap-2"
+        className="bg-white text-black hover:bg-gray-200 px-5 py-2.5 rounded-xl text-sm font-bold tracking-wide transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)] disabled:opacity-50 flex items-center gap-2"
       >
         {isUploading ? (
-          <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
-        ) : null}
-        {isUploading ? "Processing..." : "Upload PDF"}
+          <span className="animate-spin rounded-full h-3 w-3 border-b-2 border-black"></span>
+        ) : (
+           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+        )}
+        {isUploading ? "Indexing..." : "Upload PDF"}
       </button>
     </div>
   );
