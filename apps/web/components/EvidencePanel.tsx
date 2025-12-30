@@ -34,35 +34,8 @@ export function EvidencePanel({ message }: { message: Message | null }) {
     );
   }
 
-  if (!message.evidence && !message.citations) {
-    return (
-      <div className="h-full flex flex-col items-center justify-center text-gray-600 p-8 text-center border-l border-white/5 bg-white/[0.02]">
-        <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-4">
-          <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        </div>
-        <h3 className="text-sm font-display font-medium text-gray-400">No Evidence Available</h3>
-        <p className="text-xs text-gray-600 mt-2 max-w-[240px]">
-          This response did not return citations or a verified evidence chain.
-        </p>
-        {message.refusal_code && (
-          <div className="mt-4 text-[10px] font-mono uppercase tracking-wide text-red-400">
-            {message.refusal_code}
-          </div>
-        )}
-        {message.reason && (
-          <div className="mt-2 text-xs text-gray-500 italic max-w-[240px]">
-            {message.reason}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  const { evidence, citations, refusal_code } = message;
-
-  if (refusal_code) {
+  if (message.refusal_code) {
+    const { evidence, citations, refusal_code } = message;
     return (
       <div className="h-full overflow-y-auto border-l border-white/5 bg-white/[0.02] flex flex-col font-sans">
         <div className="p-6 border-b border-white/5">
@@ -141,6 +114,34 @@ export function EvidencePanel({ message }: { message: Message | null }) {
       </div>
     );
   }
+
+  if (!message.evidence && !message.citations) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center text-gray-600 p-8 text-center border-l border-white/5 bg-white/[0.02]">
+        <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-4">
+          <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <h3 className="text-sm font-display font-medium text-gray-400">No Evidence Available</h3>
+        <p className="text-xs text-gray-600 mt-2 max-w-[240px]">
+          This response did not return citations or a verified evidence chain.
+        </p>
+        {message.refusal_code && (
+          <div className="mt-4 text-[10px] font-mono uppercase tracking-wide text-red-400">
+            {message.refusal_code}
+          </div>
+        )}
+        {message.reason && (
+          <div className="mt-2 text-xs text-gray-500 italic max-w-[240px]">
+            {message.reason}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const { evidence, citations, refusal_code } = message;
 
   return (
     <div className="h-full overflow-y-auto border-l border-white/5 bg-white/[0.02] flex flex-col font-sans">
