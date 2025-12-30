@@ -15,6 +15,7 @@ environments.
 
 ## Required variables
 Use `.env.example` as the source of truth for required keys and defaults.
+`DATABASE_URL` is the primary Postgres connection string; `DB_DATABASE_URL` is a legacy alias.
 All project-specific variables are prefixed (for example, `DOCQA_`, `DB_`,
 `EMBEDDINGS_`, `AZURE_`) to avoid collisions.
 

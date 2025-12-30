@@ -93,7 +93,7 @@ def init_db():
 
 def _engine():
     if not DATABASE_URL:
-        raise RuntimeError("DB_DATABASE_URL is required.")
+        raise RuntimeError("DATABASE_URL or DB_DATABASE_URL is required.")
     return create_engine(DATABASE_URL, poolclass=NullPool)
 
 

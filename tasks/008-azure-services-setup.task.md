@@ -28,7 +28,7 @@
 - If Azure OpenAI is available, create a resource and record endpoint/key.
 
 ## Environment variable mapping (capture values)
-- `DB_DATABASE_URL`: Postgres connection string.
+- `DATABASE_URL`: Postgres connection string.
 - `AZURE_STORAGE_ACCOUNT`: Storage account name.
 - `AZURE_STORAGE_CONTAINER`: Blob container name for raw PDFs/snapshots.
 - `AZURE_STORAGE_CONNECTION_STRING`: Storage connection string.

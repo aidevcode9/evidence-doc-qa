@@ -25,7 +25,8 @@ This document serves as a human-readable reference for all configuration variabl
 ## 3. Database & Search
 | Variable | Description | Value |
 | :--- | :--- | :--- |
-| `DB_DATABASE_URL` | Postgres connection string. | (Secret) |
+| `DATABASE_URL` | Postgres connection string. | (Secret) |
+| `DB_DATABASE_URL` | Legacy alias for `DATABASE_URL`. | (Optional) |
 | `AZURE_SEARCH_ENDPOINT` | Azure AI Search Service URL. | (Secret) |
 | `AZURE_SEARCH_API_KEY` | Azure AI Search Admin Key. | (Secret) |
 | `AZURE_SEARCH_CREATE_INDEX` | Create index on startup if `1`. | `1` |

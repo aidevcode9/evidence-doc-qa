@@ -21,9 +21,9 @@ target_metadata = Base.metadata
 
 
 def _get_url() -> str:
-    url = os.getenv("DB_DATABASE_URL")
+    url = os.getenv("DATABASE_URL") or os.getenv("DB_DATABASE_URL")
     if not url:
-        raise RuntimeError("DB_DATABASE_URL is required for migrations.")
+        raise RuntimeError("DATABASE_URL or DB_DATABASE_URL is required for migrations.")
     return url
 
 
