@@ -4,6 +4,7 @@ export type Citation = {
   page_num: number;
   chunk_id: string;
   snippet: string;
+  highlighted_text?: string;
   score: number;
 };
 
@@ -14,6 +15,7 @@ export type EvidenceSupport = {
   evidence_label: "Strong" | "Moderate" | "Weak";
   support_count: number;
   top_rrf_score: number;
+  reranker_score: number;
   rrf_margin: number;
   overlap_score: number;
   supporting_span: string;

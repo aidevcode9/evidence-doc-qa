@@ -92,10 +92,22 @@ export function EvidencePanel({ message }: { message: Message | null }) {
               <>
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-2">
+                    Semantic Rank
+                    <span
+                      className="text-[10px] text-gray-500 border border-white/10 rounded-full w-4 h-4 flex items-center justify-center cursor-help"
+                      title="Azure Semantic Reranker (L2) Score [0-4]. This is a deep-learning model that understands intent and synonyms. >2.5 indicates high semantic relevance."
+                    >
+                      i
+                    </span>
+                  </span>
+                  <span>{evidence.reranker_score ?? "N/A"}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-2">
                     Top RRF Score
                     <span
-                      className="text-[10px] text-gray-500 border border-white/10 rounded-full w-4 h-4 flex items-center justify-center"
-                      title="Rank-fusion score for the best chunk across vector + keyword search."
+                      className="text-[10px] text-gray-500 border border-white/10 rounded-full w-4 h-4 flex items-center justify-center cursor-help"
+                      title="Reciprocal Rank Fusion (L1). Combines Vector and Keyword results. Higher means the chunk appeared at the top of both search modes."
                     >
                       i
                     </span>
@@ -104,22 +116,10 @@ export function EvidencePanel({ message }: { message: Message | null }) {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-2">
-                    RRF Margin
-                    <span
-                      className="text-[10px] text-gray-500 border border-white/10 rounded-full w-4 h-4 flex items-center justify-center"
-                      title="Gap between the best and second-best chunks. Larger margin means higher confidence."
-                    >
-                      i
-                    </span>
-                  </span>
-                  <span>{evidence.rrf_margin}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-2">
                     Overlap Score
                     <span
-                      className="text-[10px] text-gray-500 border border-white/10 rounded-full w-4 h-4 flex items-center justify-center"
-                      title="Token overlap between the question and the verified answer span. Short numeric answers can look low, so verification boosts this signal."
+                      className="text-[10px] text-gray-500 border border-white/10 rounded-full w-4 h-4 flex items-center justify-center cursor-help"
+                      title="Lexical overlap (exact keywords) between the question and the verified answer span. This is the 'raw' grounding signal."
                     >
                       i
                     </span>
@@ -179,7 +179,11 @@ export function EvidencePanel({ message }: { message: Message | null }) {
                   {citation.doc_name} › Pg {citation.page_num}
                 </div>
                 <p className="text-xs text-gray-300 leading-relaxed italic opacity-80">
-                  "{citation.snippet}"
+                   {citation.highlighted_text ? (
+                      <span dangerouslySetInnerHTML={{ __html: `"${citation.highlighted_text}"` }} />
+                   ) : (
+                      <span>"{citation.snippet}"</span>
+                   )}
                 </p>
               </div>
             ))}
@@ -283,8 +287,8 @@ export function EvidencePanel({ message }: { message: Message | null }) {
                     <span>{evidence.support_count} Supporting Snippet(s)</span>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] text-gray-500">
+                    <div>Semantic: {evidence.reranker_score ?? 0}</div>
                     <div>Top RRF: {evidence.top_rrf_score}</div>
-                    <div>RRF Margin: {evidence.rrf_margin}</div>
                     <div>Overlap: {evidence.overlap_score}</div>
                     <div>Support: {evidence.support_count}</div>
                 </div>
@@ -303,7 +307,11 @@ export function EvidencePanel({ message }: { message: Message | null }) {
                         {citation.doc_name} • Pg {citation.page_num}
                     </div>
                     <p className="text-xs text-gray-300 leading-relaxed italic opacity-80">
-                        "{citation.snippet}"
+                        {citation.highlighted_text ? (
+                            <span dangerouslySetInnerHTML={{ __html: `"${citation.highlighted_text}"` }} />
+                        ) : (
+                            <span>"{citation.snippet}"</span>
+                        )}
                     </p>
                 </div>
             ))}

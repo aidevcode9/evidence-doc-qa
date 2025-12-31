@@ -14,6 +14,7 @@ class Citation(BaseModel):
     page_num: int
     chunk_id: str
     snippet: str
+    highlighted_text: Optional[str] = None
     score: float
 
 
@@ -24,6 +25,7 @@ class EvidenceSupport(BaseModel):
     evidence_label: str
     support_count: int
     top_rrf_score: float
+    reranker_score: float = 0.0
     rrf_margin: float
     overlap_score: float
     supporting_span: str

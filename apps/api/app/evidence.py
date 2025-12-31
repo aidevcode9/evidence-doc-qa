@@ -44,9 +44,21 @@ def evidence_grade(
     rrf_score: float,
     rrf_margin: float,
     overlap: float,
+    reranker_score: float = 0.0,
 ) -> Tuple[str, str]:
-    if verified and rrf_score >= 0.6 and overlap >= 0.3 and rrf_margin >= 0.05:
+    # 1. Semantic Ranker Override (High Confidence)
+    # Azure Semantic Ranker scores are 0-4. A score > 2.5 is typically very strong.
+    if reranker_score >= 2.5:
+        return "A", "Strong (Semantic)"
+    
+    # 2. Strong Match (Verified + High Signal)
+    # We allow a lower overlap (0.15 vs 0.3) if the LLM has explicitly verified the match,
+    # to account for synonyms or short numeric answers.
+    if verified and rrf_score >= 0.5 and (overlap >= 0.3 or (overlap >= 0.15 and rrf_margin >= 0.02)):
         return "A", "Strong"
-    if verified and rrf_score >= 0.45 and overlap >= 0.2:
+        
+    # 3. Moderate Match
+    if verified and (rrf_score >= 0.4 or reranker_score >= 1.5) and overlap >= 0.1:
         return "B", "Moderate"
+        
     return "C", "Weak"

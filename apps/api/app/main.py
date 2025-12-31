@@ -279,6 +279,7 @@ def ask(payload: AskRequest) -> AskResponse:
         verified_chunk["rrf_score"],
         rrf_margin,
         overlap,
+        reranker_score=verified_chunk.get("reranker_score", 0.0),
     )
     citation = Citation(
         doc_id=verified_chunk["doc_id"],
@@ -286,6 +287,7 @@ def ask(payload: AskRequest) -> AskResponse:
         page_num=verified_chunk["page_num"],
         chunk_id=verified_chunk["chunk_id"],
         snippet=supporting_span,
+        highlighted_text=verified_chunk.get("highlighted_text"),
         score=round(verified_chunk["rrf_score"], 4),
     )
     evidence_support = EvidenceSupport(
@@ -295,6 +297,7 @@ def ask(payload: AskRequest) -> AskResponse:
         evidence_label=label,
         support_count=support_count,
         top_rrf_score=round(top_score, 4),
+        reranker_score=round(verified_chunk.get("reranker_score", 0.0), 4),
         rrf_margin=round(rrf_margin, 4),
         overlap_score=round(overlap, 4),
         supporting_span=supporting_span,

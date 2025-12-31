@@ -79,6 +79,10 @@ def _azure_search(question: str, docs_snapshot_id: Optional[str]) -> List[Dict]:
             }
         ],
         "top": TOP_K,
+        "queryType": "semantic",
+        "semanticConfiguration": "default",
+        "captions": "extractive|highlight-true",
+        "answers": "extractive|count-3",
     }
     if docs_snapshot_id and docs_snapshot_id != "none":
         payload["filter"] = f"docs_snapshot_id eq '{docs_snapshot_id}'"
@@ -99,16 +103,25 @@ def _azure_search(question: str, docs_snapshot_id: Optional[str]) -> List[Dict]:
     hits = data.get("value", [])
     logger.info(f"Azure Search: Found {len(hits)} hits for snapshot {docs_snapshot_id}")
     for idx, doc in enumerate(hits[:3]):
-        logger.info(f"  Hit {idx+1}: Score={doc.get('@search.score')} ID={doc['chunk_id']}")
+        logger.info(
+            f"  Hit {idx+1}: RRF={doc.get('@search.score')} Reranker={doc.get('@search.rerankerScore')} ID={doc['chunk_id']}"
+        )
 
     results = []
-    max_rrf = 2 / (RRF_K + 1) # Same scaling factor as local logic
+    max_rrf = 2 / (RRF_K + 1)  # Same scaling factor as local logic
     for doc in hits:
         raw_score = doc.get("@search.score", 0.0)
+        reranker_score = doc.get("@search.rerankerScore", 0.0)
         # Normalize: raw_score / max_rrf
         normalized_score = raw_score / max_rrf if max_rrf > 0 else 0.0
+
+        # Extract captions if available (semantic highlight)
+        captions = doc.get("@search.captions", [])
+        highlighted_text = captions[0].get("highlights") if captions else None
         
-        logger.info(f"  Hit: ID={doc['chunk_id']} Raw={raw_score:.4f} Normalized={normalized_score:.4f}")
+        # If no highlight, fallback to chunk_text or text from caption
+        if not highlighted_text and captions:
+            highlighted_text = captions[0].get("text")
 
         results.append(
             {
@@ -119,7 +132,9 @@ def _azure_search(question: str, docs_snapshot_id: Optional[str]) -> List[Dict]:
                 "page_num": doc["page_num"],
                 "chunk_index": doc["chunk_index"],
                 "chunk_text": doc["chunk_text"],
+                "highlighted_text": highlighted_text,
                 "rrf_score": normalized_score,
+                "reranker_score": reranker_score,
             }
         )
     return results
@@ -182,8 +197,21 @@ def _fallback_overlap(
     return scored[:TOP_K]
 
 
+STOP_WORDS = {
+    "a", "an", "the", "and", "or", "but", "if", "then", "else", "when", "at", "from",
+    "by", "for", "with", "about", "against", "between", "into", "through", "during",
+    "before", "after", "above", "below", "to", "up", "down", "in", "out", "on", "off",
+    "over", "under", "again", "further", "then", "once", "here", "there", "where",
+    "why", "how", "all", "any", "both", "each", "few", "more", "most", "other", "some",
+    "such", "no", "nor", "not", "only", "own", "same", "so", "than", "too", "very",
+    "can", "will", "just", "should", "now", "of", "is", "am", "are", "was", "were",
+    "be", "been", "being", "have", "has", "had", "do", "does", "did"
+}
+
+
 def _tokenize(text: str) -> List[str]:
-    return re.findall(r"[a-z0-9]+", text.lower())
+    tokens = re.findall(r"[a-z0-9]+", text.lower())
+    return [t for t in tokens if t not in STOP_WORDS]
 
 
 def _overlap_score(query_tokens: List[str], text: str) -> float:
