@@ -2,6 +2,7 @@ import json
 import math
 import re
 import urllib.request
+import urllib.error
 from typing import Dict, List, Optional
 
 from .config import (
@@ -68,6 +69,7 @@ def _azure_enabled() -> bool:
 
 def _azure_search(question: str, docs_snapshot_id: Optional[str]) -> List[Dict]:
     query_embedding = embed_texts([question])[0]
+    vector_len = len(query_embedding)
     payload = {
         "search": question,
         "vectorQueries": [
@@ -84,10 +86,23 @@ def _azure_search(question: str, docs_snapshot_id: Optional[str]) -> List[Dict]:
         "captions": "extractive|highlight-true",
         "answers": "extractive|count-3",
     }
+    filter_state = "none"
     if docs_snapshot_id and docs_snapshot_id != "none":
         payload["filter"] = f"docs_snapshot_id eq '{docs_snapshot_id}'"
+        filter_state = docs_snapshot_id
 
     url = f"{AZURE_SEARCH_ENDPOINT.rstrip('/')}/indexes/{AZURE_SEARCH_INDEX}/docs/search?api-version={AZURE_SEARCH_API_VERSION}"
+    logger.info(
+        "Azure Search request: index=%s api=%s top=%s vector_k=%s vector_len=%s queryType=%s semanticConfig=%s filter=%s",
+        AZURE_SEARCH_INDEX,
+        AZURE_SEARCH_API_VERSION,
+        TOP_K,
+        TOP_K_VECTOR,
+        vector_len,
+        payload.get("queryType"),
+        payload.get("semanticConfiguration"),
+        filter_state,
+    )
     req = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
@@ -97,8 +112,22 @@ def _azure_search(question: str, docs_snapshot_id: Optional[str]) -> List[Dict]:
             "api-key": AZURE_SEARCH_API_KEY,
         },
     )
-    with urllib.request.urlopen(req) as resp:
-        data = json.load(resp)
+    try:
+        with urllib.request.urlopen(req) as resp:
+            data = json.load(resp)
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        logger.error(
+            "Azure Search HTTP %s: %s | url=%s index=%s api=%s vector_len=%s filter=%s",
+            exc.code,
+            body,
+            url,
+            AZURE_SEARCH_INDEX,
+            AZURE_SEARCH_API_VERSION,
+            vector_len,
+            filter_state,
+        )
+        raise
 
     hits = data.get("value", [])
     logger.info(f"Azure Search: Found {len(hits)} hits for snapshot {docs_snapshot_id}")
