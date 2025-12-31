@@ -308,8 +308,11 @@ def ask(payload: AskRequest) -> AskResponse:
         candidates,
         verification_results=verification_results,
     )
-    if STRICT_EVIDENCE and grade != "A" and not (
-        ALLOW_UNVERIFIED and verification_status == "UNVERIFIED"
+    if (
+        STRICT_EVIDENCE
+        and verification_status != "VERIFIED"
+        and grade != "A"
+        and not (ALLOW_UNVERIFIED and verification_status == "UNVERIFIED")
     ):
         logger.warning(f"Evidence Fail [{request_id}]: Grade {grade} below Strong threshold.")
         return _emit_refusal(
