@@ -1,5 +1,6 @@
 param searchServiceEndpoint string
 param searchServiceApiKey string
+param searchServiceIndex string
 param webAppName string = 'docqa'
 param vercelUrl string = ''
 param databaseUrl string
@@ -25,6 +26,7 @@ resource appSettings 'Microsoft.Web/sites/config@2022-09-01' = {
     WEBSITES_PORT: '8000'
     AZURE_SEARCH_ENDPOINT: searchServiceEndpoint
     AZURE_SEARCH_API_KEY: searchServiceApiKey
+    AZURE_SEARCH_INDEX: searchServiceIndex
     AZURE_OPENAI_ENDPOINT: azureOpenAiEndpoint
     AZURE_OPENAI_API_KEY: azureOpenAiApiKey
     AZURE_OPENAI_API_VERSION: azureOpenAiApiVersion

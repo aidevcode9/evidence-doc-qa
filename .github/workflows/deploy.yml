@@ -53,6 +53,7 @@ jobs:
             vercelUrl=${{ secrets.VERCEL_URL }}
             searchServiceEndpoint=${{ secrets.AZURE_SEARCH_ENDPOINT }}
             searchServiceApiKey=${{ secrets.AZURE_SEARCH_API_KEY }}
+            searchServiceIndex=${{ secrets.AZURE_SEARCH_INDEX }}
             databaseUrl=${{ secrets.DATABASE_URL }}
             metricsAdminToken=${{ secrets.METRICS_ADMIN_TOKEN }}
             azureOpenAiEndpoint=${{ secrets.AZURE_OPENAI_ENDPOINT }}
