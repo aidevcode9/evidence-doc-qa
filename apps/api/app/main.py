@@ -155,6 +155,11 @@ def ask(payload: AskRequest) -> AskResponse:
     results = retrieval.hybrid_search(question, docs_snapshot_id)
     if not results or results[0]["rrf_score"] == 0.0:
         logger.warning(f"Retrieval Fail [{request_id}]: No evidence found")
+        debug_candidates = (
+            _build_debug_candidates(question, results, reason_override="NO_SUPPORTING_EVIDENCE")
+            if results
+            else None
+        )
         return _emit_refusal(
             request_id=request_id,
             docs_snapshot_id=docs_snapshot_id,
@@ -164,12 +169,18 @@ def ask(payload: AskRequest) -> AskResponse:
             failure_label="NO_EVIDENCE",
             start_time=start_time,
             question_text=question,
+            debug_candidates=debug_candidates,
         )
 
     # Filter results by confidence first
     candidates = [r for r in results if r["rrf_score"] >= CONF_MIN]
     if not candidates:
         logger.warning(f"Confidence Fail [{request_id}]: No results met threshold {CONF_MIN}")
+        debug_candidates = _build_debug_candidates(
+            question,
+            results,
+            reason_override="BELOW_CONFIDENCE_THRESHOLD",
+        )
         return _emit_refusal(
             request_id=request_id,
             docs_snapshot_id=docs_snapshot_id,
@@ -179,6 +190,7 @@ def ask(payload: AskRequest) -> AskResponse:
             failure_label="LOW_CONFIDENCE",
             start_time=start_time,
             question_text=question,
+            debug_candidates=debug_candidates,
         )
 
     verified_chunk = None
@@ -291,34 +303,11 @@ def ask(payload: AskRequest) -> AskResponse:
         docs_snapshot_id=docs_snapshot_id,
         index_version=INDEX_VERSION,
     )
-    debug_candidates: list[DebugCandidate] = []
-    for chunk in candidates[:3]:
-        span = evidence.best_supporting_span(question, chunk["chunk_text"])
-        if not span:
-            span = _snippet_for(chunk["chunk_text"])
-        status, verified_span = verification_results.get(chunk["chunk_id"], ("skipped", None))
-        if verified_span:
-            span = verified_span
-        overlap_score = evidence.overlap_score(question_tokens, span)
-        reason = {
-            "verified": "LLM_VERIFIED",
-            "rejected": "LLM_REJECTED",
-            "unverified": "LLM_UNAVAILABLE",
-            "skipped": "NOT_EVALUATED",
-        }.get(status, "UNKNOWN")
-        debug_candidates.append(
-            DebugCandidate(
-                doc_id=chunk["doc_id"],
-                doc_name=chunk.get("doc_name") or _doc_name_for(chunk["doc_id"]),
-                page_num=chunk["page_num"],
-                chunk_id=chunk["chunk_id"],
-                rrf_score=round(chunk["rrf_score"], 4),
-                overlap_score=round(overlap_score, 4),
-                verifier_verdict=status.upper(),
-                reason=reason,
-                snippet=span,
-            )
-        )
+    debug_candidates = _build_debug_candidates(
+        question,
+        candidates,
+        verification_results=verification_results,
+    )
     if STRICT_EVIDENCE and grade != "A" and not (
         ALLOW_UNVERIFIED and verification_status == "UNVERIFIED"
     ):
@@ -376,6 +365,51 @@ def _snippet_for(chunk_text: str, limit: int = 200) -> str:
 
 def _doc_name_for(doc_id: str) -> str:
     return get_doc_name(doc_id) or "unknown"
+
+
+def _build_debug_candidates(
+    question: str,
+    chunks: list[dict],
+    *,
+    verification_results: dict[str, tuple[str, str | None]] | None = None,
+    reason_override: str | None = None,
+) -> list[DebugCandidate]:
+    question_tokens = evidence.tokenize(question)
+    debug_candidates: list[DebugCandidate] = []
+    for chunk in chunks[:3]:
+        span = evidence.best_supporting_span(question, chunk["chunk_text"])
+        if not span:
+            span = _snippet_for(chunk["chunk_text"])
+        status = "skipped"
+        verified_span = None
+        if verification_results:
+            status, verified_span = verification_results.get(chunk["chunk_id"], ("skipped", None))
+        if verified_span:
+            span = verified_span
+        overlap_score = evidence.overlap_score(question_tokens, span)
+        if reason_override:
+            reason = reason_override
+        else:
+            reason = {
+                "verified": "LLM_VERIFIED",
+                "rejected": "LLM_REJECTED",
+                "unverified": "LLM_UNAVAILABLE",
+                "skipped": "NOT_EVALUATED",
+            }.get(status, "UNKNOWN")
+        debug_candidates.append(
+            DebugCandidate(
+                doc_id=chunk["doc_id"],
+                doc_name=chunk.get("doc_name") or _doc_name_for(chunk["doc_id"]),
+                page_num=chunk["page_num"],
+                chunk_id=chunk["chunk_id"],
+                rrf_score=round(chunk["rrf_score"], 4),
+                overlap_score=round(overlap_score, 4),
+                verifier_verdict=status.upper(),
+                reason=reason,
+                snippet=span,
+            )
+        )
+    return debug_candidates
 
 
 def _record_request(
