@@ -41,7 +41,7 @@ Planes:
 ## 2) Core Request Path (Ask)
 
 1. Assign `request_id`; load version snapshot
-2. Retrieve evidence (vector + BM25 → RRF → optional rerank)
+2. Retrieve evidence (vector + BM25 → RRF → semantic reranker when enabled)
 3. Pre‑LLM policy gates:
    - retrieval confidence
    - injection heuristics
@@ -87,7 +87,7 @@ Indexing reference: `packages/shared/schemas/indexing.md` defines embeddings and
 - **API:** Azure App Service (Web App for Containers) - Region: `centralus`
 - **Jobs:** Ingestion and indexing run as async background tasks within the App Service.
 - **Storage:** Azure Blob Storage (LRS)
-- **Search:** Azure AI Search (Basic SKU, Hybrid: Vector + BM25 + Semantic Ranker)
+- **Search:** Azure AI Search (Hybrid: Vector + BM25; Semantic Ranker requires Standard S1+)
 - **LLM:** Azure OpenAI (gpt5 mini + text-embedding-3-large)
 - **DB:** Azure PostgreSQL Flexible Server (Existing shared resource)
 - **Observability:** Log Analytics Workspace

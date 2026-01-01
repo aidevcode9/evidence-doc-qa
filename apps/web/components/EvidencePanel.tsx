@@ -1,6 +1,18 @@
 import React from "react";
 import { Message } from "@/types";
 
+const MetricTooltip = ({ label, description }: { label: string; description: string }) => (
+  <span className="flex items-center gap-2">
+    <span>{label}</span>
+    <span
+      className="text-[10px] text-gray-500 border border-white/10 rounded-full w-4 h-4 flex items-center justify-center cursor-help"
+      title={description}
+    >
+      i
+    </span>
+  </span>
+);
+
 export function EvidencePanel({ message }: { message: Message | null }) {
   if (!message) {
     return (
@@ -65,77 +77,58 @@ export function EvidencePanel({ message }: { message: Message | null }) {
               <span className="text-red-400">Evidence Strength</span>
             </div>
             <div className="flex items-center justify-between">
-              <span>Requirement</span>
+              <MetricTooltip
+                label="Requirement"
+                description="Strict mode requires Grade A unless an exact answer span is verified."
+              />
               <span>Grade A (Strong)</span>
             </div>
             {evidence && (
               <div className="flex items-center justify-between">
-                <span>Best Grade</span>
+                <MetricTooltip
+                  label="Best Grade"
+                  description="Final evidence grade computed from verification, retrieval score, margin, and overlap."
+                />
                 <span>Grade {evidence.evidence_grade}</span>
               </div>
             )}
             {evidence?.verifier_model && (
               <div className="flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  LLM Verification
-                  <span
-                    className="text-[10px] text-gray-500 border border-white/10 rounded-full w-4 h-4 flex items-center justify-center"
-                    title="Checks if the exact answer span exists in the document. If verified, we treat this as stronger evidence."
-                  >
-                    i
-                  </span>
-                </span>
+                <MetricTooltip
+                  label="LLM Verification"
+                  description="Checks for an exact answer span in the retrieved text. VERIFIED means explicit support."
+                />
                 <span>{evidence.verdict} ({evidence.verifier_model})</span>
               </div>
             )}
             {evidence && (
               <>
                 <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    Semantic Rank
-                    <span
-                      className="text-[10px] text-gray-500 border border-white/10 rounded-full w-4 h-4 flex items-center justify-center cursor-help"
-                      title="Azure Semantic Reranker (L2) Score [0-4]. This is a deep-learning model that understands intent and synonyms. >2.5 indicates high semantic relevance."
-                    >
-                      i
-                    </span>
-                  </span>
+                  <MetricTooltip
+                    label="Semantic Rank"
+                    description="Azure semantic reranker score (0-4). Higher means stronger semantic relevance."
+                  />
                   <span>{evidence.reranker_score ?? "N/A"}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    Top RRF Score
-                    <span
-                      className="text-[10px] text-gray-500 border border-white/10 rounded-full w-4 h-4 flex items-center justify-center cursor-help"
-                      title="Reciprocal Rank Fusion (L1). Combines Vector and Keyword results. Higher means the chunk appeared at the top of both search modes."
-                    >
-                      i
-                    </span>
-                  </span>
+                  <MetricTooltip
+                    label="Top RRF Score"
+                    description="Reciprocal Rank Fusion across vector and keyword retrieval. Higher means stronger agreement."
+                  />
                   <span>{evidence.top_rrf_score}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    Overlap Score
-                    <span
-                      className="text-[10px] text-gray-500 border border-white/10 rounded-full w-4 h-4 flex items-center justify-center cursor-help"
-                      title="Lexical overlap (exact keywords) between the question and the verified answer span. This is the 'raw' grounding signal."
-                    >
-                      i
-                    </span>
-                  </span>
+                  <MetricTooltip
+                    label="Overlap Score"
+                    description="Lexical overlap between the question and the evidence span. Exact tokens only."
+                  />
                   <span>{evidence.overlap_score}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    Support Count
-                    <span
-                      className="text-[10px] text-gray-500 border border-white/10 rounded-full w-4 h-4 flex items-center justify-center"
-                      title="How many retrieved chunks provide supporting context above the overlap threshold."
-                    >
-                      i
-                    </span>
-                  </span>
+                  <MetricTooltip
+                    label="Support Count"
+                    description="Count of chunks above the overlap threshold that reinforce the same answer."
+                  />
                   <span>{evidence.support_count}</span>
                 </div>
               </>
@@ -156,9 +149,15 @@ export function EvidencePanel({ message }: { message: Message | null }) {
                     <span>{candidate.verifier_verdict}</span>
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-gray-500">
-                    <div>RRF: {candidate.rrf_score}</div>
-                    <div>Overlap: {candidate.overlap_score}</div>
-                    <div>Reason: {candidate.reason}</div>
+                    <div title="Rank-fusion score for this candidate in hybrid retrieval.">
+                      RRF: {candidate.rrf_score}
+                    </div>
+                    <div title="Token overlap between question and candidate snippet.">
+                      Overlap: {candidate.overlap_score}
+                    </div>
+                    <div title="Why this candidate was accepted, rejected, or skipped by verification.">
+                      Reason: {candidate.reason}
+                    </div>
                   </div>
                   <div className="mt-2 text-xs text-gray-300 italic">
                     "{candidate.snippet}"
@@ -265,7 +264,10 @@ export function EvidencePanel({ message }: { message: Message | null }) {
         {evidence && (
             <div className="bg-white/5 rounded-lg p-4 mb-6 border border-white/5">
                 <div className="flex justify-between items-end mb-2">
-                    <span className="text-xs text-gray-400">Confidence</span>
+                    <MetricTooltip
+                      label="Confidence"
+                      description="Evidence strength grade derived from verification, retrieval scores, and overlap."
+                    />
                     <span className={`text-xl font-display font-bold ${
                         evidence.evidence_grade === 'A' ? 'text-green-400' :
                         evidence.evidence_grade === 'B' ? 'text-amber-400' : 'text-red-400'
@@ -283,14 +285,26 @@ export function EvidencePanel({ message }: { message: Message | null }) {
                     ></div>
                 </div>
                 <div className="mt-3 flex justify-between text-[10px] text-gray-500">
-                    <span>{evidence.verdict}</span>
-                    <span>{evidence.support_count} Supporting Snippet(s)</span>
+                    <span title="VERIFIED means the model found an explicit answer span in the evidence.">
+                      {evidence.verdict}
+                    </span>
+                    <span title="Number of supporting chunks above the overlap threshold.">
+                      {evidence.support_count} Supporting Snippet(s)
+                    </span>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] text-gray-500">
-                    <div>Semantic: {evidence.reranker_score ?? 0}</div>
-                    <div>Top RRF: {evidence.top_rrf_score}</div>
-                    <div>Overlap: {evidence.overlap_score}</div>
-                    <div>Support: {evidence.support_count}</div>
+                    <div title="Azure semantic reranker score (0-4). Higher means stronger semantic relevance.">
+                      Semantic: {evidence.reranker_score ?? 0}
+                    </div>
+                    <div title="Reciprocal Rank Fusion across vector and keyword retrieval.">
+                      Top RRF: {evidence.top_rrf_score}
+                    </div>
+                    <div title="Lexical overlap between the question and evidence span.">
+                      Overlap: {evidence.overlap_score}
+                    </div>
+                    <div title="Count of chunks above the overlap threshold that reinforce the answer.">
+                      Support: {evidence.support_count}
+                    </div>
                 </div>
             </div>
         )}
@@ -336,9 +350,15 @@ export function EvidencePanel({ message }: { message: Message | null }) {
                     <span>{candidate.verifier_verdict}</span>
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-gray-500">
-                    <div>RRF: {candidate.rrf_score}</div>
-                    <div>Overlap: {candidate.overlap_score}</div>
-                    <div>Reason: {candidate.reason}</div>
+                    <div title="Rank-fusion score for this candidate in hybrid retrieval.">
+                      RRF: {candidate.rrf_score}
+                    </div>
+                    <div title="Token overlap between question and candidate snippet.">
+                      Overlap: {candidate.overlap_score}
+                    </div>
+                    <div title="Why this candidate was accepted, rejected, or skipped by verification.">
+                      Reason: {candidate.reason}
+                    </div>
                   </div>
                   <div className="mt-2 text-xs text-gray-300 italic">
                     "{candidate.snippet}"

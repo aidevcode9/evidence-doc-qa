@@ -66,6 +66,7 @@ Pass if expected doc/page appears in:
 
 Log contributions when available:
 - vector score, BM25 score, fused rank, rerank score
+- semantic reranker score and config when enabled
 
 ### D) Performance budgets (must‑have)
 - **Latency:** p50/p95 end‑to‑end; fail if p95 exceeds threshold

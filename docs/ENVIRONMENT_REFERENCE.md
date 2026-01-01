@@ -33,6 +33,8 @@ This document serves as a human-readable reference for all configuration variabl
 | `AZURE_SEARCH_CREATE_INDEX` | Create index on startup if `1`. | `1` |
 | `DOCQA_ENABLE_INDEXING` | Enable indexing pipeline if `1`. | `1` |
 
+Note: Azure Semantic Ranker requires Azure AI Search Standard S1+; if the service tier does not support semantic search, retrieval falls back to hybrid without semantic reranking.
+
 ## 4. Embeddings & OpenAI
 | Variable | Description | Value |
 | :--- | :--- | :--- |

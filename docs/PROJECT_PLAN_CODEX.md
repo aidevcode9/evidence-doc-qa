@@ -22,7 +22,7 @@ This plan is written to be executed step-by-step using Codex CLI. It emphasizes 
 - **Async ingestion/indexing:** Azure Container Apps Jobs (or run locally for early dev)
 - **Docs storage:** Azure Blob Storage (raw PDFs + snapshots)
 - **Hybrid retrieval:** Azure AI Search (vector + BM25)
-- **DB (near-free):** Supabase Free Postgres (preferred) OR Azure Postgres smallest tier
+- **DB (near-free):** Azure Postgres smallest tier
 - **Redis:** optional; default OFF for MVP unless needed for caching
 - **Observability:** Application Insights (minimal sampling); PII-safe logs only
 

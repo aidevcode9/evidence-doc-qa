@@ -80,6 +80,7 @@ Most document‑Q&A demos fail in production because they:
 ### In scope
 - PDF upload + ingestion
 - Hybrid retrieval (vector + BM25 + RRF)
+- Semantic reranker when Azure tier supports it
 - Mandatory citations per answer
 - Refusal on insufficient evidence
 - Eval harness + CI gate
@@ -100,7 +101,7 @@ Most document‑Q&A demos fail in production because they:
 ### 5.1 Retrieval & ranking (hybrid)
 - Vector + BM25 retrieval
 - Reciprocal Rank Fusion (RRF)
-- Optional reranker
+- Optional semantic reranker (Azure Semantic Ranker; requires Standard S1+)
 - Retrieval logs expose component scores for evals
 
 ### 5.2 Parsing & normalization (tiered)
@@ -151,8 +152,8 @@ Most document‑Q&A demos fail in production because they:
 - **API:** Azure Container Apps (public ingress)
 - **Ingestion:** Container Apps Jobs (or local for dev)
 - **Storage:** Azure Blob Storage
-- **Search:** Azure AI Search (basic tier)
-- **DB:** Supabase Free Postgres OR smallest Azure Postgres
+- **Search:** Azure AI Search (basic tier; Semantic Ranker requires Standard S1+)
+- **DB:** Azure PostgreSQL (smallest tier)
 
 Enterprise edge services explicitly **not required** for demo.
 
