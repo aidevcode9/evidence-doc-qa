@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 type LoginPayload = {
   name: string;
@@ -11,14 +11,17 @@ type LoginPayload = {
 
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [betaCode, setBetaCode] = useState("");
+  const [nextPath, setNextPath] = useState("/");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setNextPath(params.get("next") || "/");
+
     const storedUser = localStorage.getItem("docqa_user");
     if (storedUser) {
       try {
@@ -73,7 +76,6 @@ export default function LoginPage() {
         JSON.stringify({ name: trimmedName, email: trimmedEmail })
       );
 
-      const nextPath = searchParams.get("next") || "/";
       router.replace(nextPath);
     } catch (err) {
       setError("Unable to authenticate. Try again.");
