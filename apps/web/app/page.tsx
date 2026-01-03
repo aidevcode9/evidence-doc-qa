@@ -11,8 +11,28 @@ export default function DocQAPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isAsking, setIsAsking] = useState(false);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [userProfile, setUserProfile] = useState<{ name: string; email: string } | null>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+  useEffect(() => {
+    const storedSession = localStorage.getItem("docqa_session");
+    if (storedSession) {
+      setSessionId(storedSession);
+    }
+    const storedUser = localStorage.getItem("docqa_user");
+    if (storedUser) {
+      try {
+        const parsed = JSON.parse(storedUser) as { name?: string; email?: string };
+        if (parsed.name && parsed.email) {
+          setUserProfile({ name: parsed.name, email: parsed.email });
+        }
+      } catch {
+        // Ignore invalid storage.
+      }
+    }
+  }, []);
 
   const handleUploadSuccess = (snapshotId: string, fileName: string) => {
     setDocsSnapshotId(snapshotId);
@@ -32,9 +52,14 @@ export default function DocQAPage() {
     setIsAsking(true);
 
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (sessionId) headers["X-DocQA-Session"] = sessionId;
+      if (userProfile?.email) headers["X-DocQA-User-Email"] = userProfile.email;
+      if (userProfile?.name) headers["X-DocQA-User-Name"] = userProfile.name;
+
       const res = await fetch(`${API_URL}/v1/ask`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           question,
           docs_snapshot_id: docsSnapshotId || undefined,
@@ -82,11 +107,11 @@ export default function DocQAPage() {
       <header className="flex-none h-16 border-b border-white/10 flex items-center justify-between px-6 bg-black/50 backdrop-blur-md z-10">
         <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
-                <span className="font-display font-bold text-black text-xl">D</span>
+                <span className="font-display font-bold text-black text-xl">E</span>
             </div>
             <div>
                 <h1 className="text-lg font-display font-bold tracking-tight leading-none">
-                    DocQ&A <span className="opacity-40 font-normal text-sm ml-1">v3.1</span>
+                    Evidence Bound <span className="opacity-40 font-normal text-sm ml-1">v3.1</span>
                 </h1>
             </div>
         </div>

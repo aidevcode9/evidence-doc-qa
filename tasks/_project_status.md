@@ -5,6 +5,7 @@
 - Task 009 - CI/CD Integration (Evaluation Gate)
 - Task 014 - Index Inventory Endpoint + UI (Searchable Docs)
 - Task 015 - UI Refresh (Voltra Template)
+- Task 017 - Beta Access Gate (Evidence Bound)
 
 ## Done
 - Task 012 - Logging, Observability, and Diagnostics

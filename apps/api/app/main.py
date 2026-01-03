@@ -119,7 +119,12 @@ async def upload_doc(file: UploadFile = File(...)) -> dict:
 
 
 @app.post("/v1/ask", response_model=AskResponse)
-def ask(payload: AskRequest) -> AskResponse:
+def ask(
+    payload: AskRequest,
+    x_docqa_session: str | None = Header(default=None),
+    x_docqa_user_name: str | None = Header(default=None),
+    x_docqa_user_email: str | None = Header(default=None),
+) -> AskResponse:
     start_time = time.perf_counter()
     question = payload.question.strip()
     if not question:
@@ -139,6 +144,15 @@ def ask(payload: AskRequest) -> AskResponse:
         "parser_mode": PARSER_MODE,
     }
 
+    trace_metadata = {
+        "session_id": x_docqa_session,
+        "user_name": x_docqa_user_name,
+        "user_email": x_docqa_user_email,
+    }
+    trace_metadata = {k: v for k, v in trace_metadata.items() if v}
+    if not trace_metadata:
+        trace_metadata = None
+
     if policy.is_injection_attempt(question):
         logger.warning(f"Policy Trigger [{request_id}]: Injection Attempt Detected")
         return _emit_refusal(
@@ -150,6 +164,7 @@ def ask(payload: AskRequest) -> AskResponse:
             failure_label="INJECTION_DETECTED",
             start_time=start_time,
             question_text=question,
+            trace_metadata=trace_metadata,
         )
 
     results = retrieval.hybrid_search(question, docs_snapshot_id)
@@ -170,6 +185,7 @@ def ask(payload: AskRequest) -> AskResponse:
             start_time=start_time,
             question_text=question,
             debug_candidates=debug_candidates,
+            trace_metadata=trace_metadata,
         )
 
     # Filter results by confidence first
@@ -191,6 +207,7 @@ def ask(payload: AskRequest) -> AskResponse:
             start_time=start_time,
             question_text=question,
             debug_candidates=debug_candidates,
+            trace_metadata=trace_metadata,
         )
 
     verified_chunk = None
@@ -226,6 +243,7 @@ def ask(payload: AskRequest) -> AskResponse:
                     failure_label="LLM_VERIFICATION_FAILED",
                     start_time=start_time,
                     question_text=question,
+                    trace_metadata=trace_metadata,
                 )
 
             if STRICT_EVIDENCE and not ALLOW_UNVERIFIED:
@@ -239,6 +257,7 @@ def ask(payload: AskRequest) -> AskResponse:
                     failure_label="LLM_VERIFICATION_UNAVAILABLE",
                     start_time=start_time,
                     question_text=question,
+                    trace_metadata=trace_metadata,
                 )
             verified_chunk = candidates[0]
     else:
@@ -253,6 +272,7 @@ def ask(payload: AskRequest) -> AskResponse:
                 failure_label="LLM_VERIFICATION_DISABLED",
                 start_time=start_time,
                 question_text=question,
+                trace_metadata=trace_metadata,
             )
         verified_chunk = candidates[0]
 
@@ -330,6 +350,7 @@ def ask(payload: AskRequest) -> AskResponse:
             evidence=evidence_support,
             citations=[citation],
             debug_candidates=debug_candidates,
+            trace_metadata=trace_metadata,
         )
     answer_text = f"Based on the document, {supporting_span}"
 
@@ -352,6 +373,7 @@ def ask(payload: AskRequest) -> AskResponse:
         start_time=start_time,
         question_text=question,
         answer_text=answer_text,
+        trace_metadata=trace_metadata,
     )
     logger.info(f"Success [{request_id}]: Response returned with citation from {citation.doc_name}")
     return response
@@ -428,6 +450,7 @@ def _record_request(
     start_time: float,
     question_text: str = "",
     answer_text: str = "",
+    trace_metadata: dict | None = None,
 ) -> None:
     latency_ms = int((time.perf_counter() - start_time) * 1000)
     record_telemetry(
@@ -447,6 +470,7 @@ def _record_request(
         failure_label=failure_label,
         question_text=question_text,
         answer_text=answer_text or "",
+        trace_metadata=trace_metadata,
     )
 
 
@@ -463,6 +487,7 @@ def _emit_refusal(
     evidence: EvidenceSupport | None = None,
     citations: list[Citation] | None = None,
     debug_candidates: list[DebugCandidate] | None = None,
+    trace_metadata: dict | None = None,
 ) -> AskResponse:
     response = AskResponse(
         request_id=request_id,
@@ -483,5 +508,6 @@ def _emit_refusal(
         start_time=start_time,
         question_text=question_text,
         answer_text="",
+        trace_metadata=trace_metadata,
     )
     return response

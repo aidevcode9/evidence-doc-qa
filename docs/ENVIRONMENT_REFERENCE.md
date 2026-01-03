@@ -70,3 +70,4 @@ Note: Azure Semantic Ranker requires Azure AI Search Standard S1+; if the servic
 | :--- | :--- | :--- |
 | `DOCQA_ALLOWED_ORIGINS` | Comma-separated list for CORS. | `http://localhost:3000` |
 | `DOCQA_METRICS_ADMIN_TOKEN` | Auth token for metrics endpoint. | (Optional) |
+| `DOCQA_BETA_CODE` | Shared beta access code for the demo login gate. | (Secret) |

@@ -6,7 +6,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space-grotesk" });
 
 export const metadata = {
-  title: "DocQ&A Demo",
+  title: "Evidence Bound",
   description: "Evidence-bound document Q&A demo"
 };
 
