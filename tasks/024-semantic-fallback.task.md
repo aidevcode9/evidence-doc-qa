@@ -20,11 +20,12 @@ If the service tier/index configuration does not support semantic search, Azure 
 ## Scope
 1. Wrap `_call_azure_search(payload)` with:
    - try semantic payload first
-   - on HTTP 400/403 with “semantic”/“configuration”/“not supported” in body:
+   - on HTTP 400/403 and JSON body `error.code` or `details[].code` that indicates semantic not supported (ex: `SemanticQueriesNotAvailable`, `FeatureNotSupportedInService`):
      - log a warning (no PII)
-     - retry with semantic fields removed
+     - retry once with semantic fields removed
+   - ensure there is at most one fallback retry per request
 2. Add config flag:
-   - `AZURE_SEMANTIC_ENABLED` default true
+   - `DOCQA_AZURE_SEMANTIC_ENABLED` default true
    - If false, never request semantic features
 3. Ensure results parsing handles missing `@search.rerankerScore` and captions.
 
@@ -34,12 +35,12 @@ If the service tier/index configuration does not support semantic search, Azure 
 
 ## Acceptance criteria
 - When semantic ranker is unsupported, ask requests still succeed using non-semantic hybrid.
-- Telemetry records `semantic_used: false` on fallback path.
+- Telemetry records `semantic_requested`, `semantic_used`, and `semantic_fallback_reason`.
 - UI handles absent highlights/reranker scores gracefully.
 
 ## Tests
-- Unit test: simulate HTTPError body containing “Semantic ranker is not enabled” → triggers retry.
-- Integration (manual): toggle `AZURE_SEMANTIC_ENABLED=0` and ensure normal responses.
+- Unit test: simulate HTTPError with JSON `error.code` or `details[].code` indicating semantic unsupported → triggers retry.
+- Integration (manual): toggle `DOCQA_AZURE_SEMANTIC_ENABLED=0` and ensure normal responses.
 
 ## Telemetry additions
 - `trace_metadata.semantic_requested`

@@ -30,6 +30,7 @@ This document serves as a human-readable reference for all configuration variabl
 | `AZURE_SEARCH_ENDPOINT` | Azure AI Search Service URL. | (Secret) |
 | `AZURE_SEARCH_API_KEY` | Azure AI Search Admin Key. | (Secret) |
 | `AZURE_SEARCH_INDEX` | Azure AI Search Index name. | (Secret) |
+| `DOCQA_AZURE_SEMANTIC_ENABLED` | Enable Azure semantic reranker features when supported (0/1). | `1` |
 | `AZURE_SEARCH_CREATE_INDEX` | Create index on startup if `1`. | `1` |
 | `DOCQA_ENABLE_INDEXING` | Enable indexing pipeline if `1`. | `1` |
 

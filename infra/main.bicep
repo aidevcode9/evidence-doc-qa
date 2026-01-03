@@ -16,6 +16,7 @@ param docqaModelId string
 param docqaAzureSearchScoreMin string = '0.02'
 param docqaAzureRerankMin string = '1.5'
 param docqaConfidenceVersion string = 'v1'
+param docqaAzureSemanticEnabled string = '1'
 
 resource webApp 'Microsoft.Web/sites@2022-09-01' existing = {
   name: webAppName
@@ -41,6 +42,7 @@ resource appSettings 'Microsoft.Web/sites/config@2022-09-01' = {
     DOCQA_AZURE_SEARCH_SCORE_MIN: docqaAzureSearchScoreMin
     DOCQA_AZURE_RERANK_MIN: docqaAzureRerankMin
     DOCQA_CONFIDENCE_VERSION: docqaConfidenceVersion
+    DOCQA_AZURE_SEMANTIC_ENABLED: docqaAzureSemanticEnabled
     EMBEDDINGS_MODE: 'remote'
     EMBEDDINGS_LOCAL: 'false'
     METRICS_ADMIN_TOKEN: metricsAdminToken

@@ -568,6 +568,12 @@ def _build_retrieval_trace(results: list[dict]) -> dict | None:
                 max(r.get("vector_score", 0.0) for r in results),
                 4,
             )
+    if "semantic_requested" in results[0]:
+        trace["semantic_requested"] = bool(results[0].get("semantic_requested"))
+    if "semantic_used" in results[0]:
+        trace["semantic_used"] = bool(results[0].get("semantic_used"))
+    if results[0].get("semantic_fallback_reason"):
+        trace["semantic_fallback_reason"] = results[0].get("semantic_fallback_reason")
     return {k: v for k, v in trace.items() if v is not None}
 
 

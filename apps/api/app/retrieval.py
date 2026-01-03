@@ -11,6 +11,7 @@ from .config import (
     AZURE_SEARCH_API_VERSION,
     AZURE_SEARCH_ENDPOINT,
     AZURE_SEARCH_INDEX,
+    AZURE_SEMANTIC_ENABLED,
     RRF_K,
     TOP_K,
     TOP_K_BM25,
@@ -85,7 +86,7 @@ def _azure_enabled() -> bool:
 def _azure_search(question: str, docs_snapshot_id: Optional[str]) -> List[Dict]:
     query_embedding = embed_texts([question])[0]
     vector_len = len(query_embedding)
-    payload = {
+    base_payload = {
         "search": question,
         "vectorQueries": [
             {
@@ -96,6 +97,9 @@ def _azure_search(question: str, docs_snapshot_id: Optional[str]) -> List[Dict]:
             }
         ],
         "top": TOP_K,
+    }
+    semantic_payload = {
+        **base_payload,
         "queryType": "semantic",
         "semanticConfiguration": "default",
         "captions": "extractive|highlight-true",
@@ -103,46 +107,53 @@ def _azure_search(question: str, docs_snapshot_id: Optional[str]) -> List[Dict]:
     }
     filter_state = "none"
     if docs_snapshot_id and docs_snapshot_id != "none":
-        payload["filter"] = f"docs_snapshot_id eq '{docs_snapshot_id}'"
+        base_payload["filter"] = f"docs_snapshot_id eq '{docs_snapshot_id}'"
+        semantic_payload["filter"] = base_payload["filter"]
         filter_state = docs_snapshot_id
 
     url = f"{AZURE_SEARCH_ENDPOINT.rstrip('/')}/indexes/{AZURE_SEARCH_INDEX}/docs/search?api-version={AZURE_SEARCH_API_VERSION}"
-    logger.info(
-        "Azure Search request: index=%s api=%s top=%s vector_k=%s vector_len=%s queryType=%s semanticConfig=%s filter=%s",
-        AZURE_SEARCH_INDEX,
-        AZURE_SEARCH_API_VERSION,
-        TOP_K,
-        TOP_K_VECTOR,
-        vector_len,
-        payload.get("queryType"),
-        payload.get("semanticConfiguration"),
-        filter_state,
-    )
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        method="POST",
-        headers={
-            "Content-Type": "application/json",
-            "api-key": AZURE_SEARCH_API_KEY,
-        },
-    )
-    try:
-        with urllib.request.urlopen(req) as resp:
-            data = json.load(resp)
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        logger.error(
-            "Azure Search HTTP %s: %s | url=%s index=%s api=%s vector_len=%s filter=%s",
-            exc.code,
-            body,
-            url,
-            AZURE_SEARCH_INDEX,
-            AZURE_SEARCH_API_VERSION,
-            vector_len,
-            filter_state,
-        )
-        raise
+    semantic_requested = bool(AZURE_SEMANTIC_ENABLED)
+    semantic_used = False
+    fallback_reason = None
+
+    if semantic_requested:
+        _log_azure_search_request(semantic_payload, vector_len, filter_state)
+        try:
+            data = _request_azure_search(url, semantic_payload)
+            semantic_used = True
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            reason = _semantic_fallback_reason(body)
+            if exc.code in (400, 403) and reason:
+                fallback_reason = reason
+                logger.warning(
+                    "Azure Search semantic unavailable (%s). Retrying without semantic features.",
+                    reason,
+                )
+                _log_azure_search_request(base_payload, vector_len, filter_state)
+                try:
+                    data = _request_azure_search(url, base_payload)
+                except urllib.error.HTTPError as fallback_exc:
+                    fallback_body = fallback_exc.read().decode("utf-8", errors="replace")
+                    _log_azure_error(
+                        fallback_exc,
+                        fallback_body,
+                        url,
+                        vector_len,
+                        filter_state,
+                    )
+                    raise
+            else:
+                _log_azure_error(exc, body, url, vector_len, filter_state)
+                raise
+    else:
+        _log_azure_search_request(base_payload, vector_len, filter_state)
+        try:
+            data = _request_azure_search(url, base_payload)
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            _log_azure_error(exc, body, url, vector_len, filter_state)
+            raise
 
     hits = data.get("value", [])
     logger.info(f"Azure Search: Found {len(hits)} hits for snapshot {docs_snapshot_id}")
@@ -177,9 +188,93 @@ def _azure_search(question: str, docs_snapshot_id: Optional[str]) -> List[Dict]:
                 "azure_search_score": azure_search_score,
                 "azure_reranker_score": azure_reranker_score,
                 "reranker_score": azure_reranker_score or 0.0,
+                "semantic_requested": semantic_requested,
+                "semantic_used": semantic_used,
+                "semantic_fallback_reason": fallback_reason,
             }
         )
     return results
+
+
+def _request_azure_search(url: str, payload: dict) -> dict:
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "api-key": AZURE_SEARCH_API_KEY,
+        },
+    )
+    with urllib.request.urlopen(req) as resp:
+        return json.load(resp)
+
+
+def _log_azure_search_request(payload: dict, vector_len: int, filter_state: str) -> None:
+    logger.info(
+        "Azure Search request: index=%s api=%s top=%s vector_k=%s vector_len=%s queryType=%s semanticConfig=%s filter=%s",
+        AZURE_SEARCH_INDEX,
+        AZURE_SEARCH_API_VERSION,
+        TOP_K,
+        TOP_K_VECTOR,
+        vector_len,
+        payload.get("queryType"),
+        payload.get("semanticConfiguration"),
+        filter_state,
+    )
+
+
+def _log_azure_error(
+    exc: urllib.error.HTTPError,
+    body: str,
+    url: str,
+    vector_len: int,
+    filter_state: str,
+) -> None:
+    logger.error(
+        "Azure Search HTTP %s: %s | url=%s index=%s api=%s vector_len=%s filter=%s",
+        exc.code,
+        body,
+        url,
+        AZURE_SEARCH_INDEX,
+        AZURE_SEARCH_API_VERSION,
+        vector_len,
+        filter_state,
+    )
+
+
+_SEMANTIC_UNSUPPORTED_CODES = {
+    "SemanticQueriesNotAvailable",
+    "FeatureNotSupportedInService",
+}
+
+
+def _semantic_fallback_reason(body: str) -> Optional[str]:
+    if not body:
+        return None
+    try:
+        data = json.loads(body)
+        error = data.get("error", {}) if isinstance(data, dict) else {}
+        codes = []
+        code = error.get("code")
+        if code:
+            codes.append(code)
+        for detail in error.get("details") or []:
+            detail_code = detail.get("code")
+            if detail_code:
+                codes.append(detail_code)
+        for candidate in codes:
+            if candidate in _SEMANTIC_UNSUPPORTED_CODES:
+                return candidate
+        message = (error.get("message") or "").lower()
+        if "semantic" in message and ("not enabled" in message or "not supported" in message):
+            return "semantic_not_supported"
+    except json.JSONDecodeError:
+        pass
+    lower = body.lower()
+    if "semantic" in lower and ("not enabled" in lower or "not supported" in lower):
+        return "semantic_not_supported"
+    return None
 
 
 def _apply_rank_scores(
