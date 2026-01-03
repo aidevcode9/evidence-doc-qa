@@ -31,13 +31,13 @@ def record_telemetry(
     cache_hit: bool = False,
     refusal_code: str | None = None,
     failure_label: str | None = None,
-    question_text: str = "",
-    answer_text: str = "",
+    question_len: int = 0,
+    answer_len: int = 0,
     trace_metadata: Dict[str, Any] | None = None,
 ) -> None:
     # Estimate tokens if not provided (approx 4 chars per token)
-    est_in = tokens_in or (len(question_text) // 4)
-    est_out = tokens_out or (len(answer_text) // 4)
+    est_in = tokens_in or (question_len // 4 if question_len else 0)
+    est_out = tokens_out or (answer_len // 4 if answer_len else 0)
 
     insert_telemetry(
         Telemetry(

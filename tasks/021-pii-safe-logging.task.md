@@ -26,16 +26,19 @@ PII and sensitive content may leak via:
      - `verdict` (verified/rejected/unverified) and `verifier_latency_ms`
    - Remove full raw response logging.
    - If needed, log a truncated, redacted response behind `DOCQA_DEBUG_VERIFIER=1`.
+   - Thread `request_id` and `chunk_id` through `main.py` into the verifier call signature.
 
 2. **Telemetry token estimation**
    - Change `record_telemetry()` signature to accept:
      - `question_len`, `answer_len` (ints) OR `question_hash` + lengths
    - Do not pass raw texts into telemetry layer.
    - Prefer provider usage tokens when available (wire through from Azure OpenAI response).
+   - Decide whether lengths are stored in columns or `trace_metadata` and document any schema changes.
 
 3. **Trace metadata hygiene**
    - Ensure `trace_metadata` never includes raw question/chunk/answer.
    - Add a lightweight redaction helper for any operator-supplied debug fields.
+   - Do not log request headers containing user identifiers (e.g., `X-DocQA-User-*`).
 
 ## Files to change
 - `apps/api/app/verification.py`
@@ -44,6 +47,7 @@ PII and sensitive content may leak via:
 - (optional) `apps/api/app/policy.py` (shared redaction/hash helpers)
 
 ## Acceptance criteria
+- Access logs exclude user-identifying headers.
 - Default logs contain no raw question/answer/chunk content.
 - Telemetry DB rows contain no raw question/answer content.
 - Verifier still functions; refusal paths unchanged.

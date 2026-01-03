@@ -1,4 +1,8 @@
 import json
+import os
+import time
+import hashlib
+import re
 import urllib.request
 from typing import Optional, Tuple
 
@@ -11,7 +15,13 @@ from .config import (
 from .telemetry import logger
 
 
-def verify_relevance(question: str, chunk_text: str) -> Tuple[str, Optional[str]]:
+def verify_relevance(
+    question: str,
+    chunk_text: str,
+    *,
+    request_id: Optional[str] = None,
+    chunk_id: Optional[str] = None,
+) -> Tuple[str, Optional[str]]:
     """
     Uses the LLM to verify if the chunk actually contains the answer.
     Returns True if relevant, False if not.
@@ -38,18 +48,33 @@ def verify_relevance(question: str, chunk_text: str) -> Tuple[str, Optional[str]
         "max_completion_tokens": 1000,
     }
 
-    logger.info(f"Verifying Relevance: Q='{question}' Chunk='{chunk_text[:50]}...'")
+    start_time = time.perf_counter()
+    question_hash = _hash_text(question)
+    logger.info(
+        "Verifier start: request_id=%s chunk_id=%s question_hash=%s question_len=%s chunk_len=%s",
+        request_id or "unknown",
+        chunk_id or "unknown",
+        question_hash[:12],
+        len(question),
+        len(chunk_text),
+    )
 
     try:
         response = _call_openai(payload)
-        # DEBUG: Log full response
-        logger.info(f"LLM Raw Response: {json.dumps(response)}")
-        
         choice = response["choices"][0]
         content = choice["message"].get("content", "") or ""
         raw = content.strip()
         upper = raw.upper()
-        logger.info(f"Verification Result: '{raw}' for Q: '{question[:20]}...'")
+        latency_ms = int((time.perf_counter() - start_time) * 1000)
+        logger.info(
+            "Verifier result: request_id=%s chunk_id=%s verdict=%s latency_ms=%s",
+            request_id or "unknown",
+            chunk_id or "unknown",
+            "VERIFIED" if upper.startswith("YES") else "REJECTED",
+            latency_ms,
+        )
+        if _debug_verifier():
+            logger.info("Verifier debug (redacted): %s", _redact_text(raw)[:200])
         if upper.startswith("YES"):
             span = raw[3:].lstrip(":").strip()
             if not span:
@@ -89,3 +114,17 @@ def _call_openai(payload: dict) -> dict:
     )
     with urllib.request.urlopen(req) as resp:
         return json.load(resp)
+
+
+def _hash_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _debug_verifier() -> bool:
+    return os.getenv("DOCQA_DEBUG_VERIFIER", "").lower() in ("1", "true", "yes")
+
+
+def _redact_text(text: str) -> str:
+    redacted = re.sub(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}", "[REDACTED_EMAIL]", text)
+    redacted = re.sub(r"\\b\\d{3}[-.\\s]?\\d{3}[-.\\s]?\\d{4}\\b", "[REDACTED_PHONE]", redacted)
+    return redacted

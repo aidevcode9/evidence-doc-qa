@@ -20,14 +20,16 @@ Implement **true BM25** for local mode **OR** relabel local lexical as `overlap_
    - `N` = #chunks
    - `avgdl` = average chunk length in tokens
    - `df[term]` = document frequency across chunks
+   - Cache keyed by `docs_snapshot_id`, evict or recompute on snapshot change.
 3. Compute per-chunk BM25 score at query-time:
    - Tokenize chunk text once for scoring (consider caching tokenized chunks in memory for small snapshots).
+   - Use the same tokenizer/stop-word list as local overlap to avoid score skew.
 4. Keep `overlap_score` available but do not call it “BM25”.
 
 ### B) Rename/label if you choose not to implement BM25
 1. Rename `bm25_score` → `overlap_score` in:
    - `retrieval.py` result objects
-   - any downstream code/telemetry/UI that refers to BM25
+   - any downstream code/telemetry/UI/debug labels that refer to BM25
 2. Ensure UI labels reflect “Lexical overlap” not “BM25”.
 
 ## Files to change

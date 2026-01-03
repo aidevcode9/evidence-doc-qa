@@ -3,6 +3,7 @@ import math
 import re
 import urllib.request
 import urllib.error
+from collections import Counter
 from typing import Dict, List, Optional
 
 from .config import (
@@ -18,6 +19,8 @@ from .config import (
 from .db import load_chunks, load_index_records
 from .embeddings import embed_texts
 from .telemetry import logger
+
+_BM25_CACHE: dict[str, dict] = {}
 
 
 def hybrid_search(question: str, docs_snapshot_id: Optional[str]) -> List[Dict]:
@@ -35,9 +38,21 @@ def hybrid_search(question: str, docs_snapshot_id: Optional[str]) -> List[Dict]:
 
     query_tokens = _tokenize(question)
     query_embedding = embed_texts([question])[0]
+    snapshot_key = docs_snapshot_id or "none"
+    bm25_stats = _get_bm25_stats(records, snapshot_key)
 
     for rec in records:
-        rec["bm25_score"] = _overlap_score(query_tokens, rec["chunk_text"])
+        doc_stats = bm25_stats["doc_stats"].get(rec["chunk_id"])
+        if not doc_stats:
+            doc_stats = _build_doc_stats(rec["chunk_text"])
+        rec["bm25_score"] = _bm25_score(
+            query_tokens,
+            doc_stats["tf"],
+            bm25_stats["df"],
+            bm25_stats["num_docs"],
+            doc_stats["dl"],
+            bm25_stats["avgdl"],
+        )
         rec["vector_score"] = _cosine(query_embedding, rec["embedding_vector"])
 
     bm25_ranked = sorted(records, key=lambda r: r["bm25_score"], reverse=True)[
@@ -224,6 +239,63 @@ def _fallback_overlap(
         scored.append(entry)
     scored.sort(key=lambda x: x["rrf_score"], reverse=True)
     return scored[:TOP_K]
+
+
+def _build_doc_stats(text: str) -> dict:
+    tokens = _tokenize(text)
+    return {"tf": Counter(tokens), "dl": len(tokens)}
+
+
+def _build_bm25_stats(records: List[Dict]) -> dict:
+    df = Counter()
+    doc_stats: dict[str, dict] = {}
+    total_len = 0
+    for rec in records:
+        stats = _build_doc_stats(rec["chunk_text"])
+        doc_stats[rec["chunk_id"]] = stats
+        total_len += stats["dl"]
+        df.update(set(stats["tf"].keys()))
+    num_docs = len(records)
+    avgdl = (total_len / num_docs) if num_docs else 0.0
+    return {
+        "df": df,
+        "avgdl": avgdl,
+        "doc_stats": doc_stats,
+        "num_docs": num_docs,
+    }
+
+
+def _get_bm25_stats(records: List[Dict], snapshot_key: str) -> dict:
+    cached = _BM25_CACHE.get(snapshot_key)
+    if cached and cached.get("num_docs") == len(records):
+        return cached
+    stats = _build_bm25_stats(records)
+    _BM25_CACHE[snapshot_key] = stats
+    return stats
+
+
+def _bm25_score(
+    query_tokens: List[str],
+    tf: Counter,
+    df: Counter,
+    num_docs: int,
+    dl: int,
+    avgdl: float,
+    k1: float = 1.2,
+    b: float = 0.75,
+) -> float:
+    if not query_tokens or num_docs == 0 or dl == 0:
+        return 0.0
+    score = 0.0
+    for term in set(query_tokens):
+        df_t = df.get(term, 0)
+        idf = math.log((num_docs - df_t + 0.5) / (df_t + 0.5) + 1)
+        tf_t = tf.get(term, 0)
+        if tf_t == 0:
+            continue
+        denom = tf_t + k1 * (1 - b + b * (dl / avgdl)) if avgdl else 1.0
+        score += idf * ((tf_t * (k1 + 1)) / denom)
+    return score
 
 
 STOP_WORDS = {

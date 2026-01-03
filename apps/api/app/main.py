@@ -1,3 +1,4 @@
+import hashlib
 import os
 import time
 import uuid
@@ -132,6 +133,8 @@ def ask(
 
     request_id = str(uuid.uuid4())
     docs_snapshot_id = payload.docs_snapshot_id or get_latest_docs_snapshot_id() or "none"
+    question_len = len(question)
+    question_hash = _hash_text(question) if question else None
     
     logger.info(f"Incoming Request [{request_id}] - Snapshot: {docs_snapshot_id}")
 
@@ -148,6 +151,8 @@ def ask(
         "session_id": x_docqa_session,
         "user_name": x_docqa_user_name,
         "user_email": x_docqa_user_email,
+        "question_hash": question_hash,
+        "question_len": question_len,
     }
     trace_metadata = {k: v for k, v in trace_metadata.items() if v}
     if not trace_metadata:
@@ -163,11 +168,14 @@ def ask(
             reason="Injection heuristics triggered.",
             failure_label="INJECTION_DETECTED",
             start_time=start_time,
-            question_text=question,
+            question_len=question_len,
             trace_metadata=trace_metadata,
         )
 
     results = retrieval.hybrid_search(question, docs_snapshot_id)
+    retrieval_trace = _build_retrieval_trace(results)
+    if retrieval_trace:
+        trace_metadata = {**(trace_metadata or {}), **retrieval_trace}
     if not results or results[0]["rrf_score"] == 0.0:
         logger.warning(f"Retrieval Fail [{request_id}]: No evidence found")
         debug_candidates = (
@@ -183,7 +191,7 @@ def ask(
             reason="No supporting evidence found.",
             failure_label="NO_EVIDENCE",
             start_time=start_time,
-            question_text=question,
+            question_len=question_len,
             debug_candidates=debug_candidates,
             trace_metadata=trace_metadata,
         )
@@ -205,7 +213,7 @@ def ask(
             reason="Insufficient retrieval confidence.",
             failure_label="LOW_CONFIDENCE",
             start_time=start_time,
-            question_text=question,
+            question_len=question_len,
             debug_candidates=debug_candidates,
             trace_metadata=trace_metadata,
         )
@@ -218,7 +226,12 @@ def ask(
         verification_rejected = True
         verified_span = None
         for chunk in candidates[:3]:
-            status, span = verification.verify_relevance(question, chunk["chunk_text"])
+            status, span = verification.verify_relevance(
+                question,
+                chunk["chunk_text"],
+                request_id=request_id,
+                chunk_id=chunk["chunk_id"],
+            )
             verification_results[chunk["chunk_id"]] = (status, span)
             if status == "verified":
                 verified_chunk = chunk
@@ -242,7 +255,7 @@ def ask(
                     reason="Retrieval found matches, but they were judged irrelevant by the model.",
                     failure_label="LLM_VERIFICATION_FAILED",
                     start_time=start_time,
-                    question_text=question,
+                    question_len=question_len,
                     trace_metadata=trace_metadata,
                 )
 
@@ -256,7 +269,7 @@ def ask(
                     reason="LLM verification required but unavailable.",
                     failure_label="LLM_VERIFICATION_UNAVAILABLE",
                     start_time=start_time,
-                    question_text=question,
+                    question_len=question_len,
                     trace_metadata=trace_metadata,
                 )
             verified_chunk = candidates[0]
@@ -271,7 +284,7 @@ def ask(
                 reason="LLM verification required but not configured.",
                 failure_label="LLM_VERIFICATION_DISABLED",
                 start_time=start_time,
-                question_text=question,
+                question_len=question_len,
                 trace_metadata=trace_metadata,
             )
         verified_chunk = candidates[0]
@@ -346,7 +359,7 @@ def ask(
             reason="Evidence strength below Strong threshold.",
             failure_label="EVIDENCE_WEAK",
             start_time=start_time,
-            question_text=question,
+            question_len=question_len,
             evidence=evidence_support,
             citations=[citation],
             debug_candidates=debug_candidates,
@@ -371,8 +384,8 @@ def ask(
         refusal_code=None,
         failure_label=None,
         start_time=start_time,
-        question_text=question,
-        answer_text=answer_text,
+        question_len=question_len,
+        answer_len=len(answer_text),
         trace_metadata=trace_metadata,
     )
     logger.info(f"Success [{request_id}]: Response returned with citation from {citation.doc_name}")
@@ -440,6 +453,35 @@ def _build_debug_candidates(
     return debug_candidates
 
 
+def _build_retrieval_trace(results: list[dict]) -> dict | None:
+    if not results:
+        return None
+    top_rrf = results[0].get("rrf_score")
+    second_rrf = results[1].get("rrf_score") if len(results) > 1 else 0.0
+    trace = {
+        "top_rrf_score": round(top_rrf, 4) if top_rrf is not None else None,
+        "rrf_margin": round(top_rrf - second_rrf, 4) if top_rrf is not None else None,
+    }
+    if "reranker_score" in results[0]:
+        trace["semantic_reranker_enabled"] = True
+        trace["top_reranker_score"] = round(results[0].get("reranker_score", 0.0), 4)
+        trace["lexical_mode"] = "azure_hybrid"
+    else:
+        trace["semantic_reranker_enabled"] = False
+        trace["lexical_mode"] = "local_bm25"
+        if "bm25_score" in results[0]:
+            trace["top_lexical_score"] = round(
+                max(r.get("bm25_score", 0.0) for r in results),
+                4,
+            )
+        if "vector_score" in results[0]:
+            trace["top_vector_score"] = round(
+                max(r.get("vector_score", 0.0) for r in results),
+                4,
+            )
+    return {k: v for k, v in trace.items() if v is not None}
+
+
 def _record_request(
     *,
     request_id: str,
@@ -448,11 +490,15 @@ def _record_request(
     refusal_code: str | None,
     failure_label: str | None,
     start_time: float,
-    question_text: str = "",
-    answer_text: str = "",
+    question_len: int = 0,
+    answer_len: int = 0,
     trace_metadata: dict | None = None,
 ) -> None:
     latency_ms = int((time.perf_counter() - start_time) * 1000)
+    if trace_metadata is None:
+        trace_metadata = {"question_len": question_len, "answer_len": answer_len}
+    else:
+        trace_metadata = {**trace_metadata, "question_len": question_len, "answer_len": answer_len}
     record_telemetry(
         request_id=request_id,
         docs_snapshot_id=docs_snapshot_id,
@@ -468,8 +514,8 @@ def _record_request(
         cache_hit=False,
         refusal_code=refusal_code,
         failure_label=failure_label,
-        question_text=question_text,
-        answer_text=answer_text or "",
+        question_len=question_len,
+        answer_len=answer_len,
         trace_metadata=trace_metadata,
     )
 
@@ -483,7 +529,7 @@ def _emit_refusal(
     reason: str,
     failure_label: str,
     start_time: float,
-    question_text: str = "",
+    question_len: int = 0,
     evidence: EvidenceSupport | None = None,
     citations: list[Citation] | None = None,
     debug_candidates: list[DebugCandidate] | None = None,
@@ -506,8 +552,12 @@ def _emit_refusal(
         refusal_code=refusal_code,
         failure_label=failure_label,
         start_time=start_time,
-        question_text=question_text,
-        answer_text="",
+        question_len=question_len,
+        answer_len=0,
         trace_metadata=trace_metadata,
     )
     return response
+
+
+def _hash_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
