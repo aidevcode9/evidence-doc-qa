@@ -1,54 +1,53 @@
-# Task 022 — Calibrate Azure score handling (stop treating @search.score as RRF)
+# Task 022 - Calibrate Azure score handling (stop treating @search.score as RRF)
 
 ## Summary
-In Azure mode, `@search.score` is currently normalized using a local RRF scaling constant (`max_rrf = 2/(RRF_K+1)`), and stored as `rrf_score`. This is conceptually incorrect and can distort confidence gating.
-
-**Current code**
-- `apps/api/app/retrieval.py`: 
-  - `max_rrf = 2/(RRF_K+1)` then `normalized_score = raw_score / max_rrf`
-  - `reranker_score = doc.get("@search.rerankerScore", 0.0)` (good)
+In Azure mode, `@search.score` is currently normalized with a local RRF scaling constant. This is conceptually wrong because Azure scores are not guaranteed to be RRF-equivalent. We need to preserve raw Azure scores and gate on calibrated thresholds per mode.
 
 ## Goals
 - Preserve raw Azure scores:
   - `azure_search_score` = `@search.score`
   - `azure_reranker_score` = `@search.rerankerScore`
-- Make gating operate on the correct signals:
-  - confidence gate should use a calibrated confidence function per mode
-- Avoid naming Azure merged score as `rrf_score`
+- Use mode-specific confidence gating:
+  - Azure mode gates on calibrated Azure thresholds.
+  - Local mode continues to gate on local `rrf_score`.
+- Stop labeling Azure merged scores as `rrf_score`.
 
 ## Scope
-1. Change result schema (backend internal) to store:
-   - `retrieval_score` (generic)
-   - `azure_search_score` (raw)
-   - `azure_reranker_score` (raw)
-   - `rrf_score` only for local fused mode
-2. Update confidence gate in `main.py`:
-   - If Azure mode:
-     - gate on `azure_search_score` and/or `azure_reranker_score` using calibrated thresholds
-   - If local mode:
-     - gate on `rrf_score` as today
-3. Update UI/debug:
-   - Display both scores distinctly in Evidence panel if present.
-4. Add calibration notes:
-   - store `confidence_version` and threshold values in config
+1. Retrieval results (backend internal)
+   - Azure mode includes:
+     - `azure_search_score` (raw)
+     - `azure_reranker_score` (raw, if available)
+   - Local mode includes:
+     - `rrf_score` only for local fused results.
+   - Optional: keep a generic `retrieval_score` for UI display, but it must reflect the active mode.
+2. Confidence gate
+   - If Azure mode and `azure_reranker_score` is present, gate on `azure_reranker_score` first.
+   - If reranker score is missing, gate on `azure_search_score`.
+   - Add explicit env-configured thresholds:
+     - `DOCQA_AZURE_SEARCH_SCORE_MIN`
+     - `DOCQA_AZURE_RERANK_MIN`
+   - Store a `confidence_version` string with threshold values (for telemetry and audit).
+3. UI/debug display
+   - Label Azure scores clearly (e.g., "Azure Hybrid Score" and "Semantic Reranker").
+   - Keep these in the debug section only if we do not want them in the default UI.
+4. Telemetry
+   - Add `trace_metadata.lexical_mode: "azure_hybrid" | "local_bm25"` (or equivalent).
+   - Add `trace_metadata.azure_search_score_top` and `trace_metadata.azure_reranker_score_top`.
+   - Log `trace_metadata.confidence_version`.
 
 ## Files to change
 - `apps/api/app/retrieval.py`
 - `apps/api/app/main.py`
-- `apps/api/app/schemas.py` (if API response includes these fields)
-- UI: `EvidencePanel.tsx` (labeling)
+- `apps/api/app/schemas.py` (only if API response shape changes)
+- UI: `apps/web/components/EvidencePanel.tsx` (score labels)
 
 ## Acceptance criteria
-- Azure mode does not compute “RRF-normalized score” from `@search.score`.
+- Azure mode does not compute any RRF-normalized score from `@search.score`.
+- Azure gating uses the calibrated thresholds in env vars.
+- Local gating still uses `rrf_score` and behaves unchanged.
+- API responses remain backward-compatible unless explicitly updated in docs.
 - Telemetry can distinguish local vs Azure score distributions.
-- Confidence gate behaves consistently across modes for a small eval set.
 
 ## Tests
-- Unit test: ensure Azure results include raw scores and local results include rrf_score.
-- Smoke test: Azure search returns non-zero `azure_search_score`, and gating doesn’t crash.
-
-## Telemetry additions
-- `trace_metadata.mode: "azure" | "local"`
-- `trace_metadata.azure_search_score_top`
-- `trace_metadata.azure_reranker_score_top`
-- `trace_metadata.confidence_version`
+- Unit: Azure results expose raw scores; local results include `rrf_score`.
+- Smoke: Azure search returns non-zero `azure_search_score` and gating does not crash.

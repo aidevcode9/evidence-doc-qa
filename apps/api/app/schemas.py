@@ -24,7 +24,9 @@ class EvidenceSupport(BaseModel):
     evidence_grade: str
     evidence_label: str
     support_count: int
-    top_rrf_score: float
+    top_rrf_score: Optional[float] = None
+    azure_search_score: Optional[float] = None
+    azure_reranker_score: Optional[float] = None
     reranker_score: float = 0.0
     rrf_margin: float
     overlap_score: float
@@ -40,7 +42,9 @@ class DebugCandidate(BaseModel):
     doc_name: str
     page_num: int
     chunk_id: str
-    rrf_score: float
+    rrf_score: Optional[float] = None
+    azure_search_score: Optional[float] = None
+    azure_reranker_score: Optional[float] = None
     overlap_score: float
     verifier_verdict: str
     reason: str

@@ -60,10 +60,15 @@ Note: Azure Semantic Ranker requires Azure AI Search Standard S1+; if the servic
 | Variable | Description | Value |
 | :--- | :--- | :--- |
 | `DOCQA_CONF_MIN` | Minimum confidence for answering. | `0.35` |
+| `DOCQA_AZURE_SEARCH_SCORE_MIN` | Minimum Azure hybrid search score for confidence gating. | `0.02` |
+| `DOCQA_AZURE_RERANK_MIN` | Minimum Azure semantic reranker score for confidence gating. | `1.5` |
+| `DOCQA_CONFIDENCE_VERSION` | Confidence calibration version label. | `v1` |
 | `DOCQA_TOP_K` | Total results after RRF fusion. | `5` |
 | `DOCQA_TOP_K_VECTOR` | Vector results before fusion. | `5` |
 | `DOCQA_TOP_K_BM25` | Lexical results before fusion. | `5` |
 | `DOCQA_RRF_K` | RRF constant for scoring. | `60` |
+
+Note: Azure defaults are calibrated to allow strong semantic reranker scores (~1.5+ on a 0-4 scale) while keeping hybrid scores low enough to avoid false negatives when @search.score is small in early evals.
 
 ## 6. Security & Telemetry
 | Variable | Description | Value |

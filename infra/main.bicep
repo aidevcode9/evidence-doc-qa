@@ -13,6 +13,9 @@ param azureOpenAiChatEndpoint string
 param azureOpenAiChatApiKey string
 param azureOpenAiChatApiVersion string
 param docqaModelId string
+param docqaAzureSearchScoreMin string = '0.02'
+param docqaAzureRerankMin string = '1.5'
+param docqaConfidenceVersion string = 'v1'
 
 resource webApp 'Microsoft.Web/sites@2022-09-01' existing = {
   name: webAppName
@@ -35,6 +38,9 @@ resource appSettings 'Microsoft.Web/sites/config@2022-09-01' = {
     AZURE_OPENAI_CHAT_API_KEY: azureOpenAiChatApiKey
     AZURE_OPENAI_CHAT_API_VERSION: azureOpenAiChatApiVersion
     DOCQA_MODEL_ID: docqaModelId
+    DOCQA_AZURE_SEARCH_SCORE_MIN: docqaAzureSearchScoreMin
+    DOCQA_AZURE_RERANK_MIN: docqaAzureRerankMin
+    DOCQA_CONFIDENCE_VERSION: docqaConfidenceVersion
     EMBEDDINGS_MODE: 'remote'
     EMBEDDINGS_LOCAL: 'false'
     METRICS_ADMIN_TOKEN: metricsAdminToken

@@ -14,7 +14,9 @@ export type EvidenceSupport = {
   evidence_grade: "A" | "B" | "C";
   evidence_label: "Strong" | "Moderate" | "Weak";
   support_count: number;
-  top_rrf_score: number;
+  top_rrf_score?: number | null;
+  azure_search_score?: number | null;
+  azure_reranker_score?: number | null;
   reranker_score: number;
   rrf_margin: number;
   overlap_score: number;
@@ -30,7 +32,9 @@ export type DebugCandidate = {
   doc_name: string;
   page_num: number;
   chunk_id: string;
-  rrf_score: number;
+  rrf_score?: number | null;
+  azure_search_score?: number | null;
+  azure_reranker_score?: number | null;
   overlap_score: number;
   verifier_verdict: string;
   reason: string;

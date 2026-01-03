@@ -20,6 +20,9 @@ from .config import (
     ALLOWED_ORIGINS,
     STRICT_EVIDENCE,
     ALLOW_UNVERIFIED,
+    AZURE_RERANK_MIN,
+    AZURE_SEARCH_SCORE_MIN,
+    CONFIDENCE_VERSION,
 )
 from .db import Chunk, Document, get_doc_name, get_latest_docs_snapshot_id, insert_chunks, insert_document, init_db
 from .indexing import ensure_index
@@ -176,7 +179,21 @@ def ask(
     retrieval_trace = _build_retrieval_trace(results)
     if retrieval_trace:
         trace_metadata = {**(trace_metadata or {}), **retrieval_trace}
-    if not results or results[0]["rrf_score"] == 0.0:
+
+    retrieval_score_key = _retrieval_score_key(results)
+    confidence_score_key = _confidence_score_key(results)
+    confidence_min = _confidence_threshold(confidence_score_key)
+    confidence_version = (
+        f"{CONFIDENCE_VERSION}|local={CONF_MIN}|azure_search={AZURE_SEARCH_SCORE_MIN}|azure_rerank={AZURE_RERANK_MIN}"
+    )
+    confidence_meta = {
+        "confidence_version": confidence_version,
+        "confidence_score_key": confidence_score_key,
+        "confidence_threshold": confidence_min,
+    }
+    trace_metadata = {**(trace_metadata or {}), **confidence_meta}
+
+    if not results or _score_value(results[0], retrieval_score_key) == 0.0:
         logger.warning(f"Retrieval Fail [{request_id}]: No evidence found")
         debug_candidates = (
             _build_debug_candidates(question, results, reason_override="NO_SUPPORTING_EVIDENCE")
@@ -197,9 +214,13 @@ def ask(
         )
 
     # Filter results by confidence first
-    candidates = [r for r in results if r["rrf_score"] >= CONF_MIN]
+    candidates = [
+        r for r in results if _score_value(r, confidence_score_key) >= confidence_min
+    ]
     if not candidates:
-        logger.warning(f"Confidence Fail [{request_id}]: No results met threshold {CONF_MIN}")
+        logger.warning(
+            f"Confidence Fail [{request_id}]: No results met threshold {confidence_min} ({confidence_score_key})"
+        )
         debug_candidates = _build_debug_candidates(
             question,
             results,
@@ -298,9 +319,11 @@ def ask(
     overlap = evidence.overlap_score(question_tokens, supporting_span)
     if verification_status == "VERIFIED":
         overlap = max(overlap, 0.6)
-    top_score = results[0]["rrf_score"]
-    second_score = results[1]["rrf_score"] if len(results) > 1 else 0.0
+    top_score = _score_value(results[0], retrieval_score_key)
+    second_score = _score_value(results[1], retrieval_score_key) if len(results) > 1 else 0.0
     rrf_margin = top_score - second_score
+    retrieval_score = _score_value(verified_chunk, retrieval_score_key)
+    reranker_score = _score_value(verified_chunk, "azure_reranker_score")
     support_count = sum(
         1
         for r in candidates
@@ -309,10 +332,10 @@ def ask(
     support_count = max(1, support_count)
     grade, label = evidence.evidence_grade(
         verification_status == "VERIFIED",
-        verified_chunk["rrf_score"],
+        retrieval_score,
         rrf_margin,
         overlap,
-        reranker_score=verified_chunk.get("reranker_score", 0.0),
+        reranker_score=reranker_score,
     )
     citation = Citation(
         doc_id=verified_chunk["doc_id"],
@@ -321,7 +344,7 @@ def ask(
         chunk_id=verified_chunk["chunk_id"],
         snippet=supporting_span,
         highlighted_text=verified_chunk.get("highlighted_text"),
-        score=round(verified_chunk["rrf_score"], 4),
+        score=round(retrieval_score, 4),
     )
     evidence_support = EvidenceSupport(
         verdict=verification_status,
@@ -329,7 +352,17 @@ def ask(
         evidence_grade=grade,
         evidence_label=label,
         support_count=support_count,
-        top_rrf_score=round(top_score, 4),
+        top_rrf_score=round(top_score, 4) if retrieval_score_key == "rrf_score" else None,
+        azure_search_score=(
+            round(results[0].get("azure_search_score", 0.0), 4)
+            if "azure_search_score" in results[0]
+            else None
+        ),
+        azure_reranker_score=(
+            round(verified_chunk.get("azure_reranker_score", 0.0), 4)
+            if "azure_reranker_score" in verified_chunk
+            else None
+        ),
         reranker_score=round(verified_chunk.get("reranker_score", 0.0), 4),
         rrf_margin=round(rrf_margin, 4),
         overlap_score=round(overlap, 4),
@@ -408,6 +441,41 @@ def _doc_name_for(doc_id: str) -> str:
     return get_doc_name(doc_id) or "unknown"
 
 
+def _retrieval_score_key(results: list[dict]) -> str:
+    if not results:
+        return "rrf_score"
+    if "rrf_score" in results[0]:
+        return "rrf_score"
+    if "azure_search_score" in results[0]:
+        return "azure_search_score"
+    return "rrf_score"
+
+
+def _confidence_score_key(results: list[dict]) -> str:
+    if not results:
+        return "rrf_score"
+    if "azure_search_score" in results[0]:
+        if results[0].get("azure_reranker_score") is not None:
+            return "azure_reranker_score"
+        return "azure_search_score"
+    return "rrf_score"
+
+
+def _confidence_threshold(score_key: str) -> float:
+    if score_key == "azure_reranker_score":
+        return AZURE_RERANK_MIN
+    if score_key == "azure_search_score":
+        return AZURE_SEARCH_SCORE_MIN
+    return CONF_MIN
+
+
+def _score_value(chunk: dict, key: str) -> float:
+    value = chunk.get(key)
+    if value is None:
+        return 0.0
+    return float(value)
+
+
 def _build_debug_candidates(
     question: str,
     chunks: list[dict],
@@ -443,7 +511,17 @@ def _build_debug_candidates(
                 doc_name=chunk.get("doc_name") or _doc_name_for(chunk["doc_id"]),
                 page_num=chunk["page_num"],
                 chunk_id=chunk["chunk_id"],
-                rrf_score=round(chunk["rrf_score"], 4),
+                rrf_score=round(chunk["rrf_score"], 4) if "rrf_score" in chunk else None,
+                azure_search_score=(
+                    round(chunk.get("azure_search_score", 0.0), 4)
+                    if "azure_search_score" in chunk
+                    else None
+                ),
+                azure_reranker_score=(
+                    round(chunk.get("azure_reranker_score", 0.0), 4)
+                    if "azure_reranker_score" in chunk
+                    else None
+                ),
                 overlap_score=round(overlap_score, 4),
                 verifier_verdict=status.upper(),
                 reason=reason,
@@ -456,19 +534,30 @@ def _build_debug_candidates(
 def _build_retrieval_trace(results: list[dict]) -> dict | None:
     if not results:
         return None
-    top_rrf = results[0].get("rrf_score")
-    second_rrf = results[1].get("rrf_score") if len(results) > 1 else 0.0
-    trace = {
-        "top_rrf_score": round(top_rrf, 4) if top_rrf is not None else None,
-        "rrf_margin": round(top_rrf - second_rrf, 4) if top_rrf is not None else None,
-    }
-    if "reranker_score" in results[0]:
-        trace["semantic_reranker_enabled"] = True
-        trace["top_reranker_score"] = round(results[0].get("reranker_score", 0.0), 4)
+    trace: dict[str, float | str | bool | None] = {}
+    if "azure_search_score" in results[0]:
         trace["lexical_mode"] = "azure_hybrid"
+        trace["azure_search_score_top"] = round(
+            results[0].get("azure_search_score", 0.0),
+            4,
+        )
+        if results[0].get("azure_reranker_score") is not None:
+            trace["semantic_reranker_enabled"] = True
+            trace["azure_reranker_score_top"] = round(
+                results[0].get("azure_reranker_score", 0.0),
+                4,
+            )
+        else:
+            trace["semantic_reranker_enabled"] = False
     else:
-        trace["semantic_reranker_enabled"] = False
-        trace["lexical_mode"] = "local_bm25"
+        top_rrf = results[0].get("rrf_score")
+        second_rrf = results[1].get("rrf_score") if len(results) > 1 else 0.0
+        trace = {
+            "top_rrf_score": round(top_rrf, 4) if top_rrf is not None else None,
+            "rrf_margin": round(top_rrf - second_rrf, 4) if top_rrf is not None else None,
+            "semantic_reranker_enabled": False,
+            "lexical_mode": "local_bm25",
+        }
         if "bm25_score" in results[0]:
             trace["top_lexical_score"] = round(
                 max(r.get("bm25_score", 0.0) for r in results),

@@ -13,6 +13,45 @@ const MetricTooltip = ({ label, description }: { label: string; description: str
   </span>
 );
 
+const MAX_HIGHLIGHT_LEN = 2000;
+
+const sanitizeHighlight = (text: string) => {
+  const safe = text.replace(/<(?!\/?em\b)[^>]*>/gi, "");
+  if (safe.length <= MAX_HIGHLIGHT_LEN) {
+    return safe;
+  }
+  return `${safe.slice(0, MAX_HIGHLIGHT_LEN)}...`;
+};
+
+const renderHighlightedText = (text: string): React.ReactNode[] => {
+  const sanitized = sanitizeHighlight(text);
+  const parts: React.ReactNode[] = [];
+  const regex = /<em>(.*?)<\/em>/gi;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let partIndex = 0;
+
+  while ((match = regex.exec(sanitized)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(
+        <span key={`t-${partIndex++}`}>{sanitized.slice(lastIndex, match.index)}</span>
+      );
+    }
+    parts.push(
+      <em key={`e-${partIndex++}`} className="text-amber-200 not-italic">
+        {match[1]}
+      </em>
+    );
+    lastIndex = regex.lastIndex;
+  }
+
+  if (lastIndex < sanitized.length) {
+    parts.push(<span key={`t-${partIndex++}`}>{sanitized.slice(lastIndex)}</span>);
+  }
+
+  return parts.length ? parts : [sanitized];
+};
+
 export function EvidencePanel({ message }: { message: Message | null }) {
   if (!message) {
     return (
@@ -48,6 +87,10 @@ export function EvidencePanel({ message }: { message: Message | null }) {
 
   if (message.refusal_code) {
     const { evidence, citations, refusal_code, version_snapshot, debug_candidates } = message;
+    const azureSearchScore = evidence?.azure_search_score ?? null;
+    const semanticScore =
+      evidence?.azure_reranker_score ?? (evidence?.reranker_score ? evidence.reranker_score : null);
+    const hasAzureScore = azureSearchScore !== null && azureSearchScore !== undefined;
     return (
       <div className="h-full overflow-y-auto border-l border-white/5 bg-white/[0.02] flex flex-col font-sans">
         <div className="p-6 border-b border-white/5">
@@ -108,14 +151,18 @@ export function EvidencePanel({ message }: { message: Message | null }) {
                     label="Semantic Rank"
                     description="Azure semantic reranker score (0-4). Higher means stronger semantic relevance."
                   />
-                  <span>{evidence.reranker_score ?? "N/A"}</span>
+                  <span>{semanticScore ?? "N/A"}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <MetricTooltip
-                    label="Top RRF Score"
-                    description="Reciprocal Rank Fusion across vector and keyword retrieval. Higher means stronger agreement."
+                    label={hasAzureScore ? "Azure Hybrid Score" : "Top RRF Score"}
+                    description={
+                      hasAzureScore
+                        ? "Azure @search.score from hybrid retrieval (vector + keyword)."
+                        : "Reciprocal Rank Fusion across vector and keyword retrieval. Higher means stronger agreement."
+                    }
                   />
-                  <span>{evidence.top_rrf_score}</span>
+                  <span>{hasAzureScore ? azureSearchScore : evidence.top_rrf_score}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <MetricTooltip
@@ -149,9 +196,20 @@ export function EvidencePanel({ message }: { message: Message | null }) {
                     <span>{candidate.verifier_verdict}</span>
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-gray-500">
-                    <div title="Rank-fusion score for this candidate in hybrid retrieval.">
-                      RRF: {candidate.rrf_score}
-                    </div>
+                    {candidate.azure_search_score !== null && candidate.azure_search_score !== undefined ? (
+                      <div title="Azure @search.score for this candidate from hybrid retrieval.">
+                        Azure Hybrid: {candidate.azure_search_score}
+                      </div>
+                    ) : (
+                      <div title="Rank-fusion score for this candidate in hybrid retrieval.">
+                        RRF: {candidate.rrf_score}
+                      </div>
+                    )}
+                    {candidate.azure_reranker_score !== null && candidate.azure_reranker_score !== undefined && (
+                      <div title="Azure semantic reranker score (0-4). Higher means stronger semantic relevance.">
+                        Reranker: {candidate.azure_reranker_score}
+                      </div>
+                    )}
                     <div title="Token overlap between question and candidate snippet.">
                       Overlap: {candidate.overlap_score}
                     </div>
@@ -179,7 +237,7 @@ export function EvidencePanel({ message }: { message: Message | null }) {
                 </div>
                 <p className="text-xs text-gray-300 leading-relaxed italic opacity-80">
                    {citation.highlighted_text ? (
-                      <span dangerouslySetInnerHTML={{ __html: `"${citation.highlighted_text}"` }} />
+                      <span>"{renderHighlightedText(citation.highlighted_text)}"</span>
                    ) : (
                       <span>"{citation.snippet}"</span>
                    )}
@@ -240,6 +298,10 @@ export function EvidencePanel({ message }: { message: Message | null }) {
   }
 
   const { evidence, citations, refusal_code, version_snapshot, debug_candidates } = message;
+  const azureSearchScore = evidence?.azure_search_score ?? null;
+  const semanticScore =
+    evidence?.azure_reranker_score ?? (evidence?.reranker_score ? evidence.reranker_score : null);
+  const hasAzureScore = azureSearchScore !== null && azureSearchScore !== undefined;
 
   return (
     <div className="h-full overflow-y-auto border-l border-white/5 bg-white/[0.02] flex flex-col font-sans">
@@ -294,10 +356,17 @@ export function EvidencePanel({ message }: { message: Message | null }) {
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] text-gray-500">
                     <div title="Azure semantic reranker score (0-4). Higher means stronger semantic relevance.">
-                      Semantic: {evidence.reranker_score ?? 0}
+                      Semantic: {semanticScore ?? "N/A"}
                     </div>
-                    <div title="Reciprocal Rank Fusion across vector and keyword retrieval.">
-                      Top RRF: {evidence.top_rrf_score}
+                    <div
+                      title={
+                        hasAzureScore
+                          ? "Azure @search.score from hybrid retrieval (vector + keyword)."
+                          : "Reciprocal Rank Fusion across vector and keyword retrieval."
+                      }
+                    >
+                      {hasAzureScore ? "Azure Hybrid" : "Top RRF"}:{" "}
+                      {hasAzureScore ? azureSearchScore : evidence.top_rrf_score}
                     </div>
                     <div title="Lexical overlap between the question and evidence span.">
                       Overlap: {evidence.overlap_score}
@@ -322,7 +391,7 @@ export function EvidencePanel({ message }: { message: Message | null }) {
                     </div>
                     <p className="text-xs text-gray-300 leading-relaxed italic opacity-80">
                         {citation.highlighted_text ? (
-                            <span dangerouslySetInnerHTML={{ __html: `"${citation.highlighted_text}"` }} />
+                            <span>"{renderHighlightedText(citation.highlighted_text)}"</span>
                         ) : (
                             <span>"{citation.snippet}"</span>
                         )}
@@ -350,9 +419,20 @@ export function EvidencePanel({ message }: { message: Message | null }) {
                     <span>{candidate.verifier_verdict}</span>
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-gray-500">
-                    <div title="Rank-fusion score for this candidate in hybrid retrieval.">
-                      RRF: {candidate.rrf_score}
-                    </div>
+                    {candidate.azure_search_score !== null && candidate.azure_search_score !== undefined ? (
+                      <div title="Azure @search.score for this candidate from hybrid retrieval.">
+                        Azure Hybrid: {candidate.azure_search_score}
+                      </div>
+                    ) : (
+                      <div title="Rank-fusion score for this candidate in hybrid retrieval.">
+                        RRF: {candidate.rrf_score}
+                      </div>
+                    )}
+                    {candidate.azure_reranker_score !== null && candidate.azure_reranker_score !== undefined && (
+                      <div title="Azure semantic reranker score (0-4). Higher means stronger semantic relevance.">
+                        Reranker: {candidate.azure_reranker_score}
+                      </div>
+                    )}
                     <div title="Token overlap between question and candidate snippet.">
                       Overlap: {candidate.overlap_score}
                     </div>
