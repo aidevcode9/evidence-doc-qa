@@ -18,7 +18,10 @@ def setup_otel(app) -> None:
 
     try:
         from opentelemetry import trace
-        from opentelemetry.exporter.azuremonitor import AzureMonitorTraceExporter
+        try:
+            from azure.monitor.opentelemetry.exporter import AzureMonitorTraceExporter
+        except Exception:
+            from opentelemetry.exporter.azuremonitor import AzureMonitorTraceExporter
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
         from opentelemetry.instrumentation.urllib import URLLibInstrumentor
         from opentelemetry.sdk.resources import Resource, SERVICE_NAME
