@@ -48,8 +48,6 @@ def verify_relevance(
             {"role": "user", "content": user_prompt},
         ],
         "max_completion_tokens": VERIFIER_MAX_OUTPUT_TOKENS,
-        "temperature": VERIFIER_TEMPERATURE,
-        "response_format": VERIFIER_RESPONSE_FORMAT,
     }
 
     start_time = time.perf_counter()
@@ -64,19 +62,7 @@ def verify_relevance(
     )
 
     try:
-        try:
-            response = _call_openai(payload)
-        except urllib.error.HTTPError as exc:
-            body = getattr(exc, "body", "") or ""
-            if exc.code == 400 and _should_fallback_response_format(body):
-                fallback_payload = dict(payload)
-                fallback_payload.pop("response_format", None)
-                logger.warning(
-                    "Verifier response_format unsupported. Retrying without response_format."
-                )
-                response = _call_openai(fallback_payload)
-            else:
-                raise
+        response = _call_openai(payload)
         choice = response["choices"][0]
         content = choice["message"].get("content", "") or ""
         raw = content.strip()
@@ -114,7 +100,7 @@ def verifier_trace_metadata() -> Dict[str, Any]:
             "prompt_hash": _get_verifier_prompt_hash(),
             "schema_version": VERIFIER_SCHEMA_VERSION,
             "model": MODEL_ID,
-            "temperature": VERIFIER_TEMPERATURE,
+            "temperature": "default",
             "max_output_tokens": VERIFIER_MAX_OUTPUT_TOKENS,
         }
     }
@@ -153,7 +139,7 @@ def _hash_text(text: str) -> str:
 VERIFIER_PROMPT_ID = "evidence_verifier"
 VERIFIER_PROMPT_VERSION = "2.0.0"
 VERIFIER_SCHEMA_VERSION = "1"
-VERIFIER_TEMPERATURE = 0
+VERIFIER_TEMPERATURE = None
 VERIFIER_MAX_OUTPUT_TOKENS = 150
 
 _VERIFIER_SCHEMA = {
@@ -178,15 +164,6 @@ _VERIFIER_SCHEMA = {
         },
     },
     "required": ["verdict", "span", "start", "end", "reason"],
-}
-
-VERIFIER_RESPONSE_FORMAT = {
-    "type": "json_schema",
-    "json_schema": {
-        "name": "evidence_verdict",
-        "schema": _VERIFIER_SCHEMA,
-        "strict": True,
-    },
 }
 
 _PROMPT_TEXT: str | None = None
@@ -289,19 +266,6 @@ def _extract_json_payload(raw: str) -> dict | None:
         return None
 
 
-def _should_fallback_response_format(body: str) -> bool:
-    lower = (body or "").lower()
-    return any(
-        token in lower
-        for token in (
-            "response_format",
-            "json_schema",
-            "schema",
-            "unsupported",
-            "not supported",
-            "invalid",
-        )
-    )
 
 
 def _debug_verifier() -> bool:
