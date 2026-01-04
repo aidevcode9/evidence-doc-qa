@@ -43,5 +43,8 @@ Fields:
 - start: 0-based start offset into the raw CHUNK string, else -1
 - end: 0-based exclusive end offset into the raw CHUNK string, else -1
 - reason: "FOUND" | "NOT_FOUND" | "PARTIAL" | "AMBIGUOUS" | "NON_CONTIGUOUS" | "REQUIRES_INFERENCE" | "CONFLICT"
+If you cannot output valid JSON, output only:
+- YES: <exact span from the chunk>
+- NO
 Do not output any other text.
 </output>

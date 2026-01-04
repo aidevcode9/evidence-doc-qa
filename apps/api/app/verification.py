@@ -220,6 +220,18 @@ def _parse_verifier_output(
     raw: str,
     chunk_text: str,
 ) -> Tuple[str, Optional[str], str]:
+    trimmed = raw.strip()
+    upper = trimmed.upper()
+    if upper.startswith("YES"):
+        span = trimmed[3:].lstrip(":").strip()
+        if span.startswith(("\"", "'")) and span.endswith(("\"", "'")) and len(span) >= 2:
+            span = span[1:-1]
+        if span and span in chunk_text:
+            return "verified", span, "FOUND"
+        return "rejected", None, "SPAN_MISMATCH"
+    if upper.startswith("NO"):
+        return "rejected", None, "NOT_FOUND"
+
     payload = _extract_json_payload(raw)
     if payload is None:
         return "rejected", None, "INVALID_OUTPUT"
