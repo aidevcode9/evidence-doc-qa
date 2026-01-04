@@ -17,7 +17,7 @@ param docqaAzureSearchScoreMin string = '0.02'
 param docqaAzureRerankMin string = '1.5'
 param docqaConfidenceVersion string = 'v1'
 param docqaAzureSemanticEnabled string = '1'
-param docqaOtelEnabled string = '0'
+param docqaOtelEnabled string = '1'
 param otelServiceName string = 'docqa-api'
 param appInsightsConnectionString string = ''
 

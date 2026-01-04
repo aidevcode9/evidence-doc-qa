@@ -4,6 +4,7 @@ import time
 import hashlib
 import re
 import urllib.request
+import urllib.error
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any
 
@@ -29,7 +30,7 @@ def verify_relevance(
     """
     if not _llm_enabled():
         logger.warning("LLM Verification skipped: Azure OpenAI not configured.")
-        return "unverified", None
+        return "unverified", None, "UNVERIFIED"
 
     system_prompt = _load_verifier_prompt()
     user_prompt = (
@@ -63,7 +64,19 @@ def verify_relevance(
     )
 
     try:
-        response = _call_openai(payload)
+        try:
+            response = _call_openai(payload)
+        except urllib.error.HTTPError as exc:
+            body = getattr(exc, "body", "") or ""
+            if exc.code == 400 and _should_fallback_response_format(body):
+                fallback_payload = dict(payload)
+                fallback_payload.pop("response_format", None)
+                logger.warning(
+                    "Verifier response_format unsupported. Retrying without response_format."
+                )
+                response = _call_openai(fallback_payload)
+            else:
+                raise
         choice = response["choices"][0]
         content = choice["message"].get("content", "") or ""
         raw = content.strip()
@@ -123,8 +136,14 @@ def _call_openai(payload: dict) -> dict:
         method="POST",
         headers=headers,
     )
-    with urllib.request.urlopen(req) as resp:
-        return json.load(resp)
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return json.load(resp)
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        logger.error("Verifier HTTP %s: %s", exc.code, body[:2000])
+        exc.body = body
+        raise
 
 
 def _hash_text(text: str) -> str:
@@ -224,9 +243,8 @@ def _parse_verifier_output(
     raw: str,
     chunk_text: str,
 ) -> Tuple[str, Optional[str], str]:
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError:
+    payload = _extract_json_payload(raw)
+    if payload is None:
         return "rejected", None, "INVALID_OUTPUT"
 
     verdict = str(payload.get("verdict", "")).strip().upper()
@@ -250,6 +268,40 @@ def _parse_verifier_output(
     if not span or span != expected:
         return "rejected", None, "SPAN_MISMATCH"
     return "verified", span, reason
+
+
+def _extract_json_payload(raw: str) -> dict | None:
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        pass
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        cleaned = cleaned.replace("json", "", 1).strip()
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        return None
+    try:
+        return json.loads(cleaned[start : end + 1])
+    except json.JSONDecodeError:
+        return None
+
+
+def _should_fallback_response_format(body: str) -> bool:
+    lower = (body or "").lower()
+    return any(
+        token in lower
+        for token in (
+            "response_format",
+            "json_schema",
+            "schema",
+            "unsupported",
+            "not supported",
+            "invalid",
+        )
+    )
 
 
 def _debug_verifier() -> bool:
