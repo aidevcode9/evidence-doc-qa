@@ -243,17 +243,25 @@ def ask(
     verification_status = "UNVERIFIED"
     verification_rejected = False
     verification_results: dict[str, tuple[str, str | None]] = {}
+    verification_reasons: dict[str, str] = {}
+    last_verifier_reason = None
     if verification.is_enabled():
         verification_rejected = True
         verified_span = None
+        trace_metadata = {
+            **(trace_metadata or {}),
+            **verification.verifier_trace_metadata(),
+        }
         for chunk in candidates[:3]:
-            status, span = verification.verify_relevance(
+            status, span, reason = verification.verify_relevance(
                 question,
                 chunk["chunk_text"],
                 request_id=request_id,
                 chunk_id=chunk["chunk_id"],
             )
             verification_results[chunk["chunk_id"]] = (status, span)
+            verification_reasons[chunk["chunk_id"]] = reason
+            last_verifier_reason = reason
             if status == "verified":
                 verified_chunk = chunk
                 verification_status = "VERIFIED"
@@ -309,6 +317,23 @@ def ask(
                 trace_metadata=trace_metadata,
             )
         verified_chunk = candidates[0]
+
+    if verification_status == "VERIFIED" and verified_chunk:
+        verifier_result = {
+            "verdict": "YES",
+            "reason": verification_reasons.get(verified_chunk["chunk_id"], "FOUND"),
+        }
+    elif verification_rejected:
+        verifier_result = {
+            "verdict": "NO",
+            "reason": last_verifier_reason or "NOT_FOUND",
+        }
+    else:
+        verifier_result = {
+            "verdict": "UNVERIFIED",
+            "reason": "UNVERIFIED",
+        }
+    trace_metadata = {**(trace_metadata or {}), "verifier_result": verifier_result}
 
     question_tokens = evidence.tokenize(question)
     supporting_span = evidence.best_supporting_span(question, verified_chunk["chunk_text"])
@@ -376,6 +401,7 @@ def ask(
         question,
         candidates,
         verification_results=verification_results,
+        verification_reasons=verification_reasons,
     )
     if (
         STRICT_EVIDENCE
@@ -481,6 +507,7 @@ def _build_debug_candidates(
     chunks: list[dict],
     *,
     verification_results: dict[str, tuple[str, str | None]] | None = None,
+    verification_reasons: dict[str, str] | None = None,
     reason_override: str | None = None,
 ) -> list[DebugCandidate]:
     question_tokens = evidence.tokenize(question)
@@ -505,6 +532,8 @@ def _build_debug_candidates(
                 "unverified": "LLM_UNAVAILABLE",
                 "skipped": "NOT_EVALUATED",
             }.get(status, "UNKNOWN")
+            if verification_reasons and status in {"verified", "rejected"}:
+                reason = verification_reasons.get(chunk["chunk_id"], reason)
         debug_candidates.append(
             DebugCandidate(
                 doc_id=chunk["doc_id"],
