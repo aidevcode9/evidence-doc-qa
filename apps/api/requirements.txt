@@ -12,4 +12,4 @@ opentelemetry-api==1.27.0
 opentelemetry-sdk==1.27.0
 opentelemetry-instrumentation-fastapi==0.48b0
 opentelemetry-instrumentation-urllib==0.48b0
-opentelemetry-exporter-azuremonitor==1.0.0
+opentelemetry-exporter-azuremonitor==1.0.0b28
