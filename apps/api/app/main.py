@@ -31,6 +31,7 @@ from .schemas import AskRequest, AskResponse, Citation, EvidenceSupport, DebugCa
 from .telemetry import compute_metrics, load_window_telemetry, record_telemetry, logger
 
 app = FastAPI(title="DocQ&A API", version="0.0.0")
+otel.setup_otel(app)
 try:
     from opentelemetry import trace
 
@@ -62,7 +63,6 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup_event():
-    otel.setup_otel(app)
     # Initialize DB
     try:
         init_db()
