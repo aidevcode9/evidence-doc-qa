@@ -17,6 +17,9 @@ param docqaAzureSearchScoreMin string = '0.02'
 param docqaAzureRerankMin string = '1.5'
 param docqaConfidenceVersion string = 'v1'
 param docqaAzureSemanticEnabled string = '1'
+param docqaOtelEnabled string = '0'
+param otelServiceName string = 'docqa-api'
+param appInsightsConnectionString string = ''
 
 resource webApp 'Microsoft.Web/sites@2022-09-01' existing = {
   name: webAppName
@@ -43,6 +46,9 @@ resource appSettings 'Microsoft.Web/sites/config@2022-09-01' = {
     DOCQA_AZURE_RERANK_MIN: docqaAzureRerankMin
     DOCQA_CONFIDENCE_VERSION: docqaConfidenceVersion
     DOCQA_AZURE_SEMANTIC_ENABLED: docqaAzureSemanticEnabled
+    DOCQA_OTEL_ENABLED: docqaOtelEnabled
+    OTEL_SERVICE_NAME: otelServiceName
+    APPLICATIONINSIGHTS_CONNECTION_STRING: appInsightsConnectionString
     EMBEDDINGS_MODE: 'remote'
     EMBEDDINGS_LOCAL: 'false'
     METRICS_ADMIN_TOKEN: metricsAdminToken

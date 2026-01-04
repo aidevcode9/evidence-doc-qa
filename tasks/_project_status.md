@@ -6,6 +6,7 @@
 - Task 014 - Index Inventory Endpoint + UI (Searchable Docs)
 - Task 015 - UI Refresh (Voltra Template)
 - Task 017 - Beta Access Gate (Evidence Bound)
+- Task 026 - OpenTelemetry tracing for FastAPI (Application Insights)
 
 ## Done
 - Task 012 - Logging, Observability, and Diagnostics

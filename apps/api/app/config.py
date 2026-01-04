@@ -75,6 +75,10 @@ METRICS_ADMIN_TOKEN = _getenv(
     "METRICS_ADMIN_TOKEN", _getenv("DOCQA_METRICS_ADMIN_TOKEN", "")
 )
 
+# OpenTelemetry
+OTEL_ENABLED = _is_truthy(_getenv("DOCQA_OTEL_ENABLED", "0"))
+OTEL_SERVICE_NAME = _getenv("OTEL_SERVICE_NAME", "docqa-api")
+
 # CORS
 _allowed_origins = _getenv("DOCQA_ALLOWED_ORIGINS", "http://localhost:3000")
 _origins_raw = [o.strip() for o in _allowed_origins.split(",") if o.strip()]

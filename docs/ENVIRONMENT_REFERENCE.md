@@ -77,3 +77,6 @@ Note: Azure defaults are calibrated to allow strong semantic reranker scores (~1
 | `DOCQA_ALLOWED_ORIGINS` | Comma-separated list for CORS. | `http://localhost:3000` |
 | `DOCQA_METRICS_ADMIN_TOKEN` | Auth token for metrics endpoint. | (Optional) |
 | `DOCQA_BETA_CODE` | Shared beta access code for the demo login gate. | (Secret) |
+| `DOCQA_OTEL_ENABLED` | Enable OpenTelemetry tracing (0/1). | `0` |
+| `OTEL_SERVICE_NAME` | OpenTelemetry service name. | `docqa-api` |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Azure Application Insights connection string. | (Secret) |

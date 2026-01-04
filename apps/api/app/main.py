@@ -2,11 +2,12 @@ import hashlib
 import os
 import time
 import uuid
+from contextlib import contextmanager
 
 from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import evidence, indexing, ingestion, policy, retrieval, verification
+from . import evidence, indexing, ingestion, policy, retrieval, verification, otel
 from .config import (
     CONF_MIN,
     DATA_DIR,
@@ -30,6 +31,24 @@ from .schemas import AskRequest, AskResponse, Citation, EvidenceSupport, DebugCa
 from .telemetry import compute_metrics, load_window_telemetry, record_telemetry, logger
 
 app = FastAPI(title="DocQ&A API", version="0.0.0")
+try:
+    from opentelemetry import trace
+
+    _TRACER = trace.get_tracer("docqa.api")
+except Exception:
+    _TRACER = None
+
+
+@contextmanager
+def _span(name: str, **attrs):
+    if not _TRACER:
+        yield None
+        return
+    with _TRACER.start_as_current_span(name) as span:
+        for key, value in attrs.items():
+            if value is not None:
+                span.set_attribute(key, value)
+        yield span
 
 # CORS Configuration
 app.add_middleware(
@@ -43,6 +62,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup_event():
+    otel.setup_otel(app)
     # Initialize DB
     try:
         init_db()
@@ -175,7 +195,13 @@ def ask(
             trace_metadata=trace_metadata,
         )
 
-    results = retrieval.hybrid_search(question, docs_snapshot_id)
+    with _span("retrieval", docs_snapshot_id=docs_snapshot_id) as retrieval_span:
+        results = retrieval.hybrid_search(question, docs_snapshot_id)
+        if retrieval_span and results:
+            retrieval_span.set_attribute(
+                "retrieval.mode",
+                "azure" if "azure_search_score" in results[0] else "local",
+            )
     retrieval_trace = _build_retrieval_trace(results)
     if retrieval_trace:
         trace_metadata = {**(trace_metadata or {}), **retrieval_trace}
@@ -252,26 +278,35 @@ def ask(
             **(trace_metadata or {}),
             **verification.verifier_trace_metadata(),
         }
-        for chunk in candidates[:3]:
-            status, span, reason = verification.verify_relevance(
-                question,
-                chunk["chunk_text"],
-                request_id=request_id,
-                chunk_id=chunk["chunk_id"],
-            )
-            verification_results[chunk["chunk_id"]] = (status, span)
-            verification_reasons[chunk["chunk_id"]] = reason
-            last_verifier_reason = reason
-            if status == "verified":
-                verified_chunk = chunk
-                verification_status = "VERIFIED"
-                verified_span = span
-                verification_rejected = False
-                break
-            if status == "unverified":
-                verification_status = "UNVERIFIED"
-                verification_rejected = False
-                break
+        with _span("verification", candidate_count=len(candidates)) as verify_span:
+            for chunk in candidates[:3]:
+                status, span, reason = verification.verify_relevance(
+                    question,
+                    chunk["chunk_text"],
+                    request_id=request_id,
+                    chunk_id=chunk["chunk_id"],
+                )
+                verification_results[chunk["chunk_id"]] = (status, span)
+                verification_reasons[chunk["chunk_id"]] = reason
+                last_verifier_reason = reason
+                if status == "verified":
+                    verified_chunk = chunk
+                    verification_status = "VERIFIED"
+                    verified_span = span
+                    verification_rejected = False
+                    if verify_span:
+                        verify_span.set_attribute("verifier.verdict", "YES")
+                        verify_span.set_attribute("verifier.reason", reason)
+                    break
+                if status == "unverified":
+                    verification_status = "UNVERIFIED"
+                    verification_rejected = False
+                    if verify_span:
+                        verify_span.set_attribute("verifier.verdict", "UNVERIFIED")
+                    break
+            if verify_span and verification_rejected and verified_chunk is None:
+                verify_span.set_attribute("verifier.verdict", "NO")
+                verify_span.set_attribute("verifier.reason", last_verifier_reason or "NOT_FOUND")
 
         if verified_chunk is None:
             if verification_rejected:
@@ -355,13 +390,20 @@ def ask(
         if evidence.overlap_score(question_tokens, r["chunk_text"]) >= 0.2
     )
     support_count = max(1, support_count)
-    grade, label = evidence.evidence_grade(
-        verification_status == "VERIFIED",
-        retrieval_score,
-        rrf_margin,
-        overlap,
+    with _span(
+        "evidence.grade",
+        verification_status=verification_status,
+        retrieval_score=retrieval_score,
         reranker_score=reranker_score,
-    )
+        overlap_score=overlap,
+    ):
+        grade, label = evidence.evidence_grade(
+            verification_status == "VERIFIED",
+            retrieval_score,
+            rrf_margin,
+            overlap,
+            reranker_score=reranker_score,
+        )
     citation = Citation(
         doc_id=verified_chunk["doc_id"],
         doc_name=verified_chunk.get("doc_name") or _doc_name_for(verified_chunk["doc_id"]),

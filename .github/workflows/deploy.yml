@@ -64,6 +64,9 @@ jobs:
             azureOpenAiChatApiKey=${{ secrets.AZURE_OPENAI_CHAT_API_KEY }}
             azureOpenAiChatApiVersion=${{ secrets.AZURE_OPENAI_CHAT_API_VERSION }}
             docqaModelId=${{ secrets.DOCQA_MODEL_ID }}
+            docqaOtelEnabled=0
+            otelServiceName=docqa-api
+            appInsightsConnectionString=${{ secrets.APPLICATIONINSIGHTS_CONNECTION_STRING }}
           failOnStdErr: false
 
       - name: Get Infrastructure Outputs
