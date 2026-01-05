@@ -47,7 +47,8 @@ def verify_relevance(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        "max_completion_tokens": VERIFIER_MAX_OUTPUT_TOKENS,
+        # Chat Completions expects max_tokens; max_completion_tokens is for Responses.
+        "max_tokens": VERIFIER_MAX_OUTPUT_TOKENS,
     }
 
     start_time = time.perf_counter()
@@ -155,7 +156,7 @@ VERIFIER_PROMPT_ID = "evidence_verifier"
 VERIFIER_PROMPT_VERSION = "2.0.1"
 VERIFIER_SCHEMA_VERSION = "1"
 VERIFIER_TEMPERATURE = None
-VERIFIER_MAX_OUTPUT_TOKENS = 150
+VERIFIER_MAX_OUTPUT_TOKENS = 256
 
 _VERIFIER_SCHEMA = {
     "type": "object",
