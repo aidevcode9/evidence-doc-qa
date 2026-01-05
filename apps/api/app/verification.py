@@ -42,14 +42,14 @@ def verify_relevance(
         "</chunk>\n"
     )
 
+    token_param = _verifier_token_param()
     payload = {
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        # Chat Completions expects max_tokens; max_completion_tokens is for Responses.
-        "max_tokens": VERIFIER_MAX_OUTPUT_TOKENS,
     }
+    payload[token_param] = VERIFIER_MAX_OUTPUT_TOKENS
 
     start_time = time.perf_counter()
     question_hash = _hash_text(question)
@@ -63,7 +63,21 @@ def verify_relevance(
     )
 
     try:
-        response = _call_openai(payload)
+        try:
+            response = _call_openai(payload)
+        except urllib.error.HTTPError as exc:
+            alt_param = _alt_token_param_from_error(exc)
+            if alt_param and alt_param != token_param:
+                payload.pop(token_param, None)
+                payload[alt_param] = VERIFIER_MAX_OUTPUT_TOKENS
+                logger.warning(
+                    "Verifier retrying with %s after %s unsupported",
+                    alt_param,
+                    token_param,
+                )
+                response = _call_openai(payload)
+            else:
+                raise
         choice = response["choices"][0]
         finish_reason = choice.get("finish_reason")
         message = choice.get("message", {}) or {}
@@ -300,6 +314,24 @@ def _extract_json_payload(raw: str) -> dict | None:
 
 def _debug_verifier() -> bool:
     return os.getenv("DOCQA_DEBUG_VERIFIER", "").lower() in ("1", "true", "yes")
+
+
+def _verifier_token_param() -> str:
+    model_id = (MODEL_ID or "").lower()
+    if model_id.startswith("gpt-5"):
+        return "max_completion_tokens"
+    return "max_tokens"
+
+
+def _alt_token_param_from_error(exc: urllib.error.HTTPError) -> str | None:
+    body = getattr(exc, "body", "") or ""
+    lower = body.lower()
+    if "max_completion_tokens" in lower and "max_tokens" in lower:
+        if "use 'max_completion_tokens' instead" in lower or "'max_tokens'" in lower:
+            return "max_completion_tokens"
+        if "use 'max_tokens' instead" in lower or "'max_completion_tokens'" in lower:
+            return "max_tokens"
+    return None
 
 
 def _redact_text(text: str) -> str:
