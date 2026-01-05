@@ -64,16 +64,19 @@ def verify_relevance(
     try:
         response = _call_openai(payload)
         choice = response["choices"][0]
-        content = choice["message"].get("content", "") or ""
+        finish_reason = choice.get("finish_reason")
+        message = choice.get("message", {}) or {}
+        content = message.get("content", "") or ""
         raw = content.strip()
         status, span, reason = _parse_verifier_output(raw, chunk_text)
         latency_ms = int((time.perf_counter() - start_time) * 1000)
         logger.info(
-            "Verifier result: request_id=%s chunk_id=%s verdict=%s reason=%s latency_ms=%s",
+            "Verifier result: request_id=%s chunk_id=%s verdict=%s reason=%s finish_reason=%s latency_ms=%s",
             request_id or "unknown",
             chunk_id or "unknown",
             "VERIFIED" if status == "verified" else "REJECTED",
             reason,
+            finish_reason,
             latency_ms,
         )
         if _debug_verifier():
@@ -82,6 +85,14 @@ def verify_relevance(
                 len(raw),
                 _redact_text(raw)[:200],
             )
+            if not raw:
+                refusal = message.get("refusal")
+                logger.info(
+                    "Verifier debug: empty content. finish_reason=%s refusal=%s message_keys=%s",
+                    finish_reason,
+                    refusal,
+                    list(message.keys()),
+                )
         return status, span, reason
     except Exception as e:
         logger.error(f"Verification Failed: {e}")
@@ -224,6 +235,8 @@ def _parse_verifier_output(
     raw: str,
     chunk_text: str,
 ) -> Tuple[str, Optional[str], str]:
+    if not raw:
+        return "rejected", None, "EMPTY_OUTPUT"
     payload = _extract_json_payload(raw)
     if payload is None:
         trimmed = raw.strip()

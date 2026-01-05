@@ -20,6 +20,7 @@ param docqaAzureSemanticEnabled string = '1'
 param docqaOtelEnabled string = '1'
 param otelServiceName string = 'docqa-api'
 param appInsightsConnectionString string = ''
+param docqaDebugVerifier string = '1'
 
 resource webApp 'Microsoft.Web/sites@2022-09-01' existing = {
   name: webAppName
@@ -49,6 +50,7 @@ resource appSettings 'Microsoft.Web/sites/config@2022-09-01' = {
     DOCQA_OTEL_ENABLED: docqaOtelEnabled
     OTEL_SERVICE_NAME: otelServiceName
     APPLICATIONINSIGHTS_CONNECTION_STRING: appInsightsConnectionString
+    DOCQA_DEBUG_VERIFIER: docqaDebugVerifier
     EMBEDDINGS_MODE: 'remote'
     EMBEDDINGS_LOCAL: 'false'
     METRICS_ADMIN_TOKEN: metricsAdminToken
