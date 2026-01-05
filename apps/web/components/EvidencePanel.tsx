@@ -257,6 +257,9 @@ export function EvidencePanel({ message }: { message: Message | null }) {
           {version_snapshot && (
             <div className="mt-2 space-y-1 text-gray-500">
               <div>Prompt: {version_snapshot.prompt_version}</div>
+              {version_snapshot.verifier_prompt_version && (
+                <div>Verifier: {version_snapshot.verifier_prompt_version}</div>
+              )}
               <div>Retrieval: {version_snapshot.retrieval_version}</div>
               <div>Model: {version_snapshot.model_id}</div>
               <div>Parser: {version_snapshot.parser_mode}</div>
@@ -461,6 +464,9 @@ export function EvidencePanel({ message }: { message: Message | null }) {
               {version_snapshot && (
                 <div className="mt-2 text-gray-500">
                   <div>PROMPT: {version_snapshot.prompt_version}</div>
+                  {version_snapshot.verifier_prompt_version && (
+                    <div>VERIFIER: {version_snapshot.verifier_prompt_version}</div>
+                  )}
                   <div>RETRIEVAL: {version_snapshot.retrieval_version}</div>
                   <div>MODEL: {version_snapshot.model_id}</div>
                   <div>PARSER: {version_snapshot.parser_mode}</div>

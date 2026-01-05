@@ -58,6 +58,7 @@ export type VersionSnapshot = {
   request_id: string;
   docs_snapshot_id: string;
   prompt_version: string;
+  verifier_prompt_version?: string;
   retrieval_version: string;
   model_id: string;
   parser_mode: string;

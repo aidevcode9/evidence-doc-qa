@@ -165,6 +165,7 @@ def ask(
         "request_id": request_id,
         "docs_snapshot_id": docs_snapshot_id,
         "prompt_version": PROMPT_VERSION,
+        "verifier_prompt_version": verification.VERIFIER_PROMPT_VERSION,
         "retrieval_version": RETRIEVAL_VERSION,
         "model_id": MODEL_ID,
         "parser_mode": PARSER_MODE,
