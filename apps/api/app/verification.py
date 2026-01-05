@@ -5,6 +5,7 @@ import hashlib
 import re
 import urllib.request
 import urllib.error
+import urllib.parse
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any
 
@@ -61,6 +62,14 @@ def verify_relevance(
         len(question),
         len(chunk_text),
     )
+    if _debug_verifier():
+        logger.info(
+            "Verifier config: model=%s endpoint=%s api_version=%s token_param=%s",
+            MODEL_ID,
+            _safe_endpoint_host(AZURE_OPENAI_CHAT_ENDPOINT),
+            AZURE_OPENAI_CHAT_API_VERSION,
+            token_param,
+        )
 
     try:
         try:
@@ -338,3 +347,10 @@ def _redact_text(text: str) -> str:
     redacted = re.sub(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}", "[REDACTED_EMAIL]", text)
     redacted = re.sub(r"\\b\\d{3}[-.\\s]?\\d{3}[-.\\s]?\\d{4}\\b", "[REDACTED_PHONE]", redacted)
     return redacted
+
+
+def _safe_endpoint_host(endpoint: str) -> str:
+    if not endpoint:
+        return ""
+    parsed = urllib.parse.urlparse(endpoint)
+    return parsed.netloc or endpoint
