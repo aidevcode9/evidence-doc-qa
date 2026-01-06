@@ -25,8 +25,8 @@ def record_telemetry(
     parser_mode: str,
     timestamp_utc: str,
     latency_ms: int,
-    tokens_in: int = 0,
-    tokens_out: int = 0,
+    tokens_in: int | None = None,
+    tokens_out: int | None = None,
     cost_est: float = 0.0,
     cache_hit: bool = False,
     refusal_code: str | None = None,
@@ -36,8 +36,8 @@ def record_telemetry(
     trace_metadata: Dict[str, Any] | None = None,
 ) -> None:
     # Estimate tokens if not provided (approx 4 chars per token)
-    est_in = tokens_in or (question_len // 4 if question_len else 0)
-    est_out = tokens_out or (answer_len // 4 if answer_len else 0)
+    est_in = tokens_in if tokens_in is not None else (question_len // 4 if question_len else 0)
+    est_out = tokens_out if tokens_out is not None else (answer_len // 4 if answer_len else 0)
 
     insert_telemetry(
         Telemetry(

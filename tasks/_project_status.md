@@ -7,6 +7,7 @@
 - Task 003 - Hybrid Retrieval, RRF, and Confidence Scoring
 - Task 004 - Ask Endpoint, Policy Gates, and Citation Enforcement
 - Task 005 - Telemetry, Metrics, and PII-Safe Logging
+- Task 029 - Cost Tracking Fixes
 - Task 006 - Evals Harness and Release Gate
 - Task 007 - Indexing to Hybrid Search
 - Task 008 - Azure Services Setup (DocQ&A Demo)

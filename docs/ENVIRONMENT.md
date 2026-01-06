@@ -34,3 +34,7 @@ If using a separate verification (chat) model, set:
 ## Logging and safety
 - Do not log raw user questions or document text.
 - Redact emails, phone numbers, and SSN-like patterns in any logged text.
+
+## Cost tracking (optional)
+Configure token pricing in `docs/ENVIRONMENT_REFERENCE.md` to populate `cost_est`
+in telemetry. Demo defaults are enabled; update to match your Azure pricing.

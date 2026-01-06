@@ -18,27 +18,34 @@ from .config import (
     TOP_K_VECTOR,
 )
 from .db import load_chunks, load_index_records
-from .embeddings import embed_texts
+from .embeddings import embed_texts_with_usage
 from .telemetry import logger
 
 _BM25_CACHE: dict[str, dict] = {}
 
 
-def hybrid_search(question: str, docs_snapshot_id: Optional[str]) -> List[Dict]:
+def hybrid_search(
+    question: str,
+    docs_snapshot_id: Optional[str],
+    *,
+    return_usage: bool = False,
+) -> List[Dict] | tuple[List[Dict], dict]:
+    embeddings, embedding_usage = embed_texts_with_usage([question])
+    query_embedding = embeddings[0]
     if _azure_enabled():
         logger.info(f"Retrieval: Routing to Azure AI Search (Snapshot: {docs_snapshot_id})")
-        results = _azure_search(question, docs_snapshot_id)
+        results = _azure_search(question, docs_snapshot_id, query_embedding)
         if results:
-            return results
+            return (results, embedding_usage) if return_usage else results
         logger.info("Retrieval: Azure returned zero hits. Falling back to local index.")
 
     logger.info(f"Retrieval: Using Local Hybrid Logic (Snapshot: {docs_snapshot_id})")
     records = _load_index_records(docs_snapshot_id)
     if not records:
-        return _fallback_overlap(question, docs_snapshot_id)
+        fallback = _fallback_overlap(question, docs_snapshot_id)
+        return (fallback, embedding_usage) if return_usage else fallback
 
     query_tokens = _tokenize(question)
-    query_embedding = embed_texts([question])[0]
     snapshot_key = docs_snapshot_id or "none"
     bm25_stats = _get_bm25_stats(records, snapshot_key)
 
@@ -76,15 +83,18 @@ def hybrid_search(question: str, docs_snapshot_id: Optional[str]) -> List[Dict]:
         rec["rrf_rank"] = idx
     
     logger.info(f"Local Hybrid Search: Found {len(fused)} fused results")
-    return fused
+    return (fused, embedding_usage) if return_usage else fused
 
 
 def _azure_enabled() -> bool:
     return bool(AZURE_SEARCH_ENDPOINT and AZURE_SEARCH_API_KEY and AZURE_SEARCH_INDEX)
 
 
-def _azure_search(question: str, docs_snapshot_id: Optional[str]) -> List[Dict]:
-    query_embedding = embed_texts([question])[0]
+def _azure_search(
+    question: str,
+    docs_snapshot_id: Optional[str],
+    query_embedding: List[float],
+) -> List[Dict]:
     vector_len = len(query_embedding)
     base_payload = {
         "search": question,

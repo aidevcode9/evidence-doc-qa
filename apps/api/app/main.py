@@ -24,6 +24,9 @@ from .config import (
     AZURE_RERANK_MIN,
     AZURE_SEARCH_SCORE_MIN,
     CONFIDENCE_VERSION,
+    MODEL_COST_INPUT_PER_1K,
+    MODEL_COST_OUTPUT_PER_1K,
+    EMBEDDINGS_COST_PER_1K,
 )
 from .db import Chunk, Document, get_doc_name, get_latest_docs_snapshot_id, insert_chunks, insert_document, init_db
 from .indexing import ensure_index
@@ -158,6 +161,11 @@ def ask(
     docs_snapshot_id = payload.docs_snapshot_id or get_latest_docs_snapshot_id() or "none"
     question_len = len(question)
     question_hash = _hash_text(question) if question else None
+    tokens_in = 0
+    tokens_out = 0
+    cost_est = 0.0
+    cost_breakdown: dict[str, dict] = {}
+    usage_fallback = False
     
     logger.info(f"Incoming Request [{request_id}] - Snapshot: {docs_snapshot_id}")
 
@@ -191,19 +199,50 @@ def ask(
             failure_label="INJECTION_DETECTED",
             start_time=start_time,
             question_len=question_len,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            cost_est=cost_est,
             trace_metadata=trace_metadata,
         )
 
     with _span("retrieval", docs_snapshot_id=docs_snapshot_id) as retrieval_span:
-        results = retrieval.hybrid_search(question, docs_snapshot_id)
+        results, embedding_usage = retrieval.hybrid_search(
+            question,
+            docs_snapshot_id,
+            return_usage=True,
+        )
         if retrieval_span and results:
             retrieval_span.set_attribute(
                 "retrieval.mode",
                 "azure" if "azure_search_score" in results[0] else "local",
             )
+    embedding_usage = embedding_usage or {}
+    embed_prompt_tokens = int(embedding_usage.get("prompt_tokens") or 0)
+    embed_cost = _estimate_cost(
+        embed_prompt_tokens,
+        0,
+        EMBEDDINGS_COST_PER_1K,
+        0.0,
+    )
+    tokens_in += embed_prompt_tokens
+    cost_est += embed_cost
+    embed_estimated = bool(embedding_usage.get("estimated"))
+    if embed_prompt_tokens or embed_cost or embed_estimated:
+        _merge_cost_breakdown(
+            cost_breakdown,
+            "embeddings",
+            embed_prompt_tokens,
+            0,
+            embed_cost,
+            embed_estimated,
+            embedding_usage.get("source"),
+        )
+    if embed_estimated:
+        usage_fallback = True
     retrieval_trace = _build_retrieval_trace(results)
     if retrieval_trace:
         trace_metadata = {**(trace_metadata or {}), **retrieval_trace}
+    trace_metadata = _attach_cost_trace(trace_metadata, cost_breakdown, usage_fallback)
 
     retrieval_score_key = _retrieval_score_key(results)
     confidence_score_key = _confidence_score_key(results)
@@ -234,6 +273,9 @@ def ask(
             failure_label="NO_EVIDENCE",
             start_time=start_time,
             question_len=question_len,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            cost_est=cost_est,
             debug_candidates=debug_candidates,
             trace_metadata=trace_metadata,
         )
@@ -260,6 +302,9 @@ def ask(
             failure_label="LOW_CONFIDENCE",
             start_time=start_time,
             question_len=question_len,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            cost_est=cost_est,
             debug_candidates=debug_candidates,
             trace_metadata=trace_metadata,
         )
@@ -279,12 +324,42 @@ def ask(
         }
         with _span("verification", candidate_count=len(candidates)) as verify_span:
             for chunk in candidates[:3]:
-                status, span, reason = verification.verify_relevance(
+                status, span, reason, usage = verification.verify_relevance(
                     question,
                     chunk["chunk_text"],
                     request_id=request_id,
                     chunk_id=chunk["chunk_id"],
                 )
+                usage = usage or {}
+                verifier_prompt_tokens = int(usage.get("prompt_tokens") or 0)
+                verifier_completion_tokens = int(usage.get("completion_tokens") or 0)
+                verifier_cost = _estimate_cost(
+                    verifier_prompt_tokens,
+                    verifier_completion_tokens,
+                    MODEL_COST_INPUT_PER_1K,
+                    MODEL_COST_OUTPUT_PER_1K,
+                )
+                tokens_in += verifier_prompt_tokens
+                tokens_out += verifier_completion_tokens
+                cost_est += verifier_cost
+                verifier_estimated = bool(usage.get("estimated"))
+                if (
+                    verifier_prompt_tokens
+                    or verifier_completion_tokens
+                    or verifier_cost
+                    or verifier_estimated
+                ):
+                    _merge_cost_breakdown(
+                        cost_breakdown,
+                        "verifier",
+                        verifier_prompt_tokens,
+                        verifier_completion_tokens,
+                        verifier_cost,
+                        verifier_estimated,
+                        usage.get("source"),
+                    )
+                if verifier_estimated:
+                    usage_fallback = True
                 verification_results[chunk["chunk_id"]] = (status, span)
                 verification_reasons[chunk["chunk_id"]] = reason
                 last_verifier_reason = reason
@@ -307,6 +382,8 @@ def ask(
                 verify_span.set_attribute("verifier.verdict", "NO")
                 verify_span.set_attribute("verifier.reason", last_verifier_reason or "NOT_FOUND")
 
+        trace_metadata = _attach_cost_trace(trace_metadata, cost_breakdown, usage_fallback)
+
         if verified_chunk is None:
             if verification_rejected:
                 logger.warning(f"Verification Fail [{request_id}]: All top candidates rejected by LLM.")
@@ -319,6 +396,9 @@ def ask(
                     failure_label="LLM_VERIFICATION_FAILED",
                     start_time=start_time,
                     question_len=question_len,
+                    tokens_in=tokens_in,
+                    tokens_out=tokens_out,
+                    cost_est=cost_est,
                     trace_metadata=trace_metadata,
                 )
 
@@ -333,6 +413,9 @@ def ask(
                     failure_label="LLM_VERIFICATION_UNAVAILABLE",
                     start_time=start_time,
                     question_len=question_len,
+                    tokens_in=tokens_in,
+                    tokens_out=tokens_out,
+                    cost_est=cost_est,
                     trace_metadata=trace_metadata,
                 )
             verified_chunk = candidates[0]
@@ -348,6 +431,9 @@ def ask(
                 failure_label="LLM_VERIFICATION_DISABLED",
                 start_time=start_time,
                 question_len=question_len,
+                tokens_in=tokens_in,
+                tokens_out=tokens_out,
+                cost_est=cost_est,
                 trace_metadata=trace_metadata,
             )
         verified_chunk = candidates[0]
@@ -460,6 +546,9 @@ def ask(
             failure_label="EVIDENCE_WEAK",
             start_time=start_time,
             question_len=question_len,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            cost_est=cost_est,
             evidence=evidence_support,
             citations=[citation],
             debug_candidates=debug_candidates,
@@ -486,6 +575,9 @@ def ask(
         start_time=start_time,
         question_len=question_len,
         answer_len=len(answer_text),
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        cost_est=cost_est,
         trace_metadata=trace_metadata,
     )
     logger.info(f"Success [{request_id}]: Response returned with citation from {citation.doc_name}")
@@ -498,6 +590,69 @@ def metrics(x_admin_token: str | None = Header(default=None)) -> dict:
         raise HTTPException(status_code=401, detail="Unauthorized.")
     rows = load_window_telemetry()
     return compute_metrics(rows)
+
+
+def _estimate_cost(
+    prompt_tokens: int,
+    completion_tokens: int,
+    input_per_1k: float,
+    output_per_1k: float,
+) -> float:
+    return (prompt_tokens / 1000.0) * input_per_1k + (completion_tokens / 1000.0) * output_per_1k
+
+
+def _merge_cost_breakdown(
+    breakdown: dict[str, dict],
+    key: str,
+    prompt_tokens: int,
+    completion_tokens: int,
+    cost_est: float,
+    estimated: bool,
+    source: str | None,
+) -> None:
+    entry = breakdown.get(
+        key,
+        {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "cost_est": 0.0,
+            "estimated": False,
+        },
+    )
+    entry["prompt_tokens"] += prompt_tokens
+    entry["completion_tokens"] += completion_tokens
+    entry["cost_est"] = round(entry["cost_est"] + cost_est, 6)
+    if estimated:
+        entry["estimated"] = True
+    if source:
+        entry["source"] = source
+    breakdown[key] = entry
+
+
+def _attach_cost_trace(
+    trace_metadata: dict | None,
+    breakdown: dict[str, dict],
+    usage_fallback: bool,
+) -> dict | None:
+    if not breakdown and not usage_fallback:
+        return trace_metadata
+    filtered: dict[str, dict] = {}
+    for key, entry in breakdown.items():
+        if (
+            entry.get("prompt_tokens")
+            or entry.get("completion_tokens")
+            or entry.get("cost_est")
+            or entry.get("estimated")
+        ):
+            filtered[key] = entry
+    if not filtered and not usage_fallback:
+        return trace_metadata
+    merged = dict(trace_metadata or {})
+    if filtered:
+        merged["cost_breakdown"] = filtered
+    if usage_fallback:
+        merged["usage_fallback"] = True
+    return merged
 
 
 def _snippet_for(chunk_text: str, limit: int = 200) -> str:
@@ -657,6 +812,9 @@ def _record_request(
     start_time: float,
     question_len: int = 0,
     answer_len: int = 0,
+    tokens_in: int = 0,
+    tokens_out: int = 0,
+    cost_est: float = 0.0,
     trace_metadata: dict | None = None,
 ) -> None:
     latency_ms = int((time.perf_counter() - start_time) * 1000)
@@ -673,9 +831,9 @@ def _record_request(
         parser_mode=version_snapshot["parser_mode"],
         timestamp_utc=ingestion.utc_now(),
         latency_ms=latency_ms,
-        tokens_in=0,
-        tokens_out=0,
-        cost_est=0.0,
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        cost_est=cost_est,
         cache_hit=False,
         refusal_code=refusal_code,
         failure_label=failure_label,
@@ -695,6 +853,9 @@ def _emit_refusal(
     failure_label: str,
     start_time: float,
     question_len: int = 0,
+    tokens_in: int = 0,
+    tokens_out: int = 0,
+    cost_est: float = 0.0,
     evidence: EvidenceSupport | None = None,
     citations: list[Citation] | None = None,
     debug_candidates: list[DebugCandidate] | None = None,
@@ -719,6 +880,9 @@ def _emit_refusal(
         start_time=start_time,
         question_len=question_len,
         answer_len=0,
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        cost_est=cost_est,
         trace_metadata=trace_metadata,
     )
     return response

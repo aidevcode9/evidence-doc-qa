@@ -24,14 +24,14 @@ def verify_relevance(
     *,
     request_id: Optional[str] = None,
     chunk_id: Optional[str] = None,
-) -> Tuple[str, Optional[str], str]:
+) -> Tuple[str, Optional[str], str, Dict[str, object]]:
     """
     Uses the LLM to verify if the chunk actually contains the answer.
     Returns ("verified"|"rejected"|"unverified", span_or_none, reason).
     """
     if not _llm_enabled():
         logger.warning("LLM Verification skipped: Azure OpenAI not configured.")
-        return "unverified", None, "UNVERIFIED"
+        return "unverified", None, "UNVERIFIED", _empty_usage()
 
     system_prompt = _load_verifier_prompt()
     user_prompt = (
@@ -92,6 +92,7 @@ def verify_relevance(
         message = choice.get("message", {}) or {}
         content = message.get("content", "") or ""
         raw = content.strip()
+        usage = _extract_usage(response, system_prompt, user_prompt, raw)
         status, span, reason = _parse_verifier_output(raw, chunk_text)
         latency_ms = int((time.perf_counter() - start_time) * 1000)
         logger.info(
@@ -117,10 +118,10 @@ def verify_relevance(
                     refusal,
                     list(message.keys()),
                 )
-        return status, span, reason
+        return status, span, reason, usage
     except Exception as e:
         logger.error(f"Verification Failed: {e}")
-        return "unverified", None, "UNVERIFIED"  # Fail closed handled by caller
+        return "unverified", None, "UNVERIFIED", _empty_usage()  # Fail closed handled by caller
 
 
 def is_enabled() -> bool:
@@ -317,6 +318,51 @@ def _extract_json_payload(raw: str) -> dict | None:
         return json.loads(cleaned[start : end + 1])
     except json.JSONDecodeError:
         return None
+
+
+def _extract_usage(
+    response: dict,
+    system_prompt: str,
+    user_prompt: str,
+    content: str,
+) -> Dict[str, object]:
+    usage = response.get("usage", {}) if isinstance(response, dict) else {}
+    prompt_tokens = usage.get("prompt_tokens")
+    completion_tokens = usage.get("completion_tokens")
+    total_tokens = usage.get("total_tokens")
+    if isinstance(prompt_tokens, int) and isinstance(completion_tokens, int):
+        return {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens if isinstance(total_tokens, int) else prompt_tokens + completion_tokens,
+            "estimated": False,
+            "source": "chat",
+        }
+    prompt_est = _estimate_tokens(system_prompt) + _estimate_tokens(user_prompt)
+    completion_est = _estimate_tokens(content)
+    return {
+        "prompt_tokens": prompt_est,
+        "completion_tokens": completion_est,
+        "total_tokens": prompt_est + completion_est,
+        "estimated": True,
+        "source": "chat",
+    }
+
+
+def _estimate_tokens(text: str) -> int:
+    if not text:
+        return 0
+    return max(1, len(text) // 4)
+
+
+def _empty_usage() -> Dict[str, object]:
+    return {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "estimated": False,
+        "source": "chat",
+    }
 
 
 
