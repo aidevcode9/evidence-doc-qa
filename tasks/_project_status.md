@@ -6,10 +6,18 @@
 - Task 014 - Index Inventory Endpoint + UI (Searchable Docs)
 - Task 015 - UI Refresh (Voltra Template)
 - Task 017 - Beta Access Gate (Evidence Bound)
-- Task 026 - OpenTelemetry tracing for FastAPI (Application Insights)
+- Task 021 - Enforce PII-Safe Logging in Telemetry and Verification
 
 ## Done
 - Task 012 - Logging, Observability, and Diagnostics
+- Task 010 - UI/UX Refinement (Refusal Transparency)
+- Task 016 - Semantic Ranking and Highlights
+- Task 020 - Local BM25 Lexical Scoring
+- Task 022 - Azure Score Calibration
+- Task 023 - Sanitize Highlighted Evidence (XSS Fix)
+- Task 024 - Semantic Ranker Fallback
+- Task 025 - Verifier Prompt v2 (Structured Outputs + Injection Hardening)
+- Task 026 - OpenTelemetry Tracing for FastAPI (Application Insights)
 
 - Task 000 - Repo Bootstrap and Scaffolding
 - Task 001 - Versioning, IDs, and Shared Schemas
