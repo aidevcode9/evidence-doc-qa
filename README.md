@@ -4,7 +4,7 @@ A demo-first, near-free **evidence-bound Document Q&A** system.
 
 ## Demo invariants (non-negotiable)
 1. **No answer** without retrieved evidence + **valid citations**  
-2. If retrieval confidence < threshold → **refuse** (no clarifying questions in MVP)  
+2. If retrieval confidence < threshold -> **refuse** (no clarifying questions in MVP)  
 3. Persist `request_id` + version snapshot for every request  
 4. Evals gate config promotions
 
@@ -22,8 +22,11 @@ A demo-first, near-free **evidence-bound Document Q&A** system.
 ### 1) API
 ```bash
 cd apps/api
-uv sync
-uv run uvicorn app.main:app --reload --port 8000
+python -m venv .venv
+./.venv/Scripts/activate
+# macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
 ```
 
 ### 2) Web
@@ -35,7 +38,7 @@ npm run dev
 
 ### 3) Run evals
 ```bash
-uv run python -m evals.run --suite golden
+python -m evals.run --suite golden
 ```
 
 ## Environment Variables

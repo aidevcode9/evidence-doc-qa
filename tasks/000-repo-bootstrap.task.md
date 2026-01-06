@@ -5,7 +5,7 @@
 - Add minimal scaffolds for API (FastAPI with `/healthz`) and Web (Next.js shell).
 - Add baseline CI placeholders (lint/test/typecheck and evals stub).
 - Ensure docs copied/linked as source of truth.
-- Use `pyproject.toml` + `uv` as the canonical Python dependency source (no `requirements.txt`).
+- Use `requirements.txt` + `pip` as the canonical Python dependency source.
 
 ## Acceptance tests
 - `apps/api` starts locally and serves `/healthz` with 200.
