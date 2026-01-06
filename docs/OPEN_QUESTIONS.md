@@ -1,4 +1,4 @@
-# Open Questions — DocQ&A Demo (v3.1)
+# Open Questions - DocQ&A Demo (v3.1)
 
 **Last updated:** 2025-12-21  
 **Status:** Demo defaults locked; deferred items explicitly marked
@@ -79,8 +79,8 @@ Each citation MUST resolve to a retrieved chunk.
 - `DOCQA_CONF_MIN = 0.35`
 
 **Behavior**
-- No evidence → `NO_SUPPORTING_EVIDENCE`
-- Evidence but `confidence < DOCQA_CONF_MIN` → `LOW_RETRIEVAL_CONFIDENCE`
+- No evidence -> `NO_SUPPORTING_EVIDENCE`
+- Evidence but `confidence < DOCQA_CONF_MIN` -> `LOW_RETRIEVAL_CONFIDENCE`
 
 ---
 
@@ -105,7 +105,7 @@ Block (case-insensitive substring match) if question contains any of:
 **Decision**
 - Never log raw document text.
 - Never log full user question.
-- Log truncated (≤200 chars) or hashed user input.
+- Log truncated (<=200 chars) or hashed user input.
 - Redact patterns in any logged text:
   - emails
   - phone numbers
@@ -128,9 +128,9 @@ Block (case-insensitive substring match) if question contains any of:
 
 ### A9) Eval gate thresholds (initial demo defaults)
 **Decision**
-- Citation coverage (non-refusal): ≥ 95%
-- Valid citation proxy: ≥ 90%
-- Refusal correctness on low-confidence tests: ≥ 90%
+- Citation coverage (non-refusal): >= 95%
+- Valid citation proxy: >= 90%
+- Refusal correctness on low-confidence tests: >= 90%
 - Injection tests: 100% must refuse
 - p95 latency (golden suite): < 4s
 

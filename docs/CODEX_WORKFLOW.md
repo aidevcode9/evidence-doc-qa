@@ -1,4 +1,4 @@
-# Codex Workflow — PRD → MVP (DocQ&A)
+# Codex Workflow - PRD -> MVP (DocQ&A)
 
 **Version:** v3  
 **Last updated:** 2025-12-21  
@@ -6,9 +6,9 @@
 
 ---
 
-# Codex Workflow (PRD → MVP)
+# Codex Workflow (PRD -> MVP)
 
-This repo is designed to work well with Codex/agents: **spec → tasks → implement → verify → harden**.
+This repo is designed to work well with Codex/agents: **spec -> tasks -> implement -> verify -> harden**.
 
 ## Required docs (source of truth)
 - `docs/PRD.md`
@@ -25,12 +25,12 @@ This repo is designed to work well with Codex/agents: **spec → tasks → imple
 ## Operating macros (agent-friendly)
 1) **Spec pass**: propose tasks + contracts, no code changes  
 2) **Contract-first**: schemas + OpenAPI + stubs  
-3) **Vertical slice**: UI → API → DB → metrics → tests  
+3) **Vertical slice**: UI -> API -> DB -> metrics -> tests  
 4) **Verification**: run lint/test/typecheck/evals  
 5) **Hardening**: logging, metrics, rate limits, rollback
 
 ## Definition of Done (MVP)
-- Upload → ingest → ask → citations or refuse works end-to-end
+- Upload -> ingest -> ask -> citations or refuse works end-to-end
 - Evals run in CI and gate merges
 - Cost/query and p95 latency visible
 - PII-safe logs + injection defenses
@@ -38,7 +38,7 @@ This repo is designed to work well with Codex/agents: **spec → tasks → imple
 
 ---
 
-## Addendum (v3) — How to use Codex effectively
+## Addendum (v3) - How to use Codex effectively
 - Start with contract-first (schemas + OpenAPI) to reduce thrash
 - Require lint/tests/evals to pass before marking tasks done
 - Unknowns go to OPEN_QUESTIONS.md; choose safest default

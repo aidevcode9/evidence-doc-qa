@@ -4,7 +4,7 @@
 Integrate the evaluation suite (`evals/run.py`) into the GitHub Actions workflow to ensure that any changes to the RAG engine, prompts, or retrieval logic pass the "Golden Set" before being merged.
 
 ## CI Flow
-1.  **Dependency Setup:** Install all Python requirements using `uv`.
+1.  **Dependency Setup:** Install all Python requirements using `pip`.
 2.  **Mock Environment:** Configure the API to use a local SQLite database (`ci_test.db`) and local hash-based embeddings.
 3.  **Data Seeding:** Run `evals/seed.py` to ingest `ARCHITECTURE.md` into the mock database as a standard snapshot.
 4.  **API Startup:** Spin up the FastAPI server in the background.

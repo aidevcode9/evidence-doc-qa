@@ -1,10 +1,10 @@
-# PROJECT_PLAN_CODEX — DocQ&A (v3.1) Demo Build Plan
+# PROJECT_PLAN_CODEX - DocQ&A (v3.1) Demo Build Plan
 **Last updated:** 2025-12-21
 **Goal:** Build the DocQ&A demo exactly as specified in:
 - PRD 
 - Evidence-Bound DocQ&A Architecture (v3.1) Azure Demo / Near-Free Reference
 
-This plan is written to be executed step-by-step using Codex CLI. It emphasizes doc↔code consistency and near-free infrastructure.
+This plan is written to be executed step-by-step using Codex CLI. It emphasizes doc<->code consistency and near-free infrastructure.
 
 ---
 
@@ -12,7 +12,7 @@ This plan is written to be executed step-by-step using Codex CLI. It emphasizes 
 **INVARIANT 1:** No answer may be returned unless supported by retrieved evidence with **valid citations**.  
 **INVARIANT 2:** If retrieval confidence < threshold, the system MUST **refuse** (no clarifying-question flow in MVP).  
 **INVARIANT 3:** Every request persists: `request_id`, `prompt_version`, `retrieval_version`, `model_id`, `docs_snapshot_id`.  
-**INVARIANT 4:** Any change to prompt/retrieval/model requires passing eval suite before promotion (“release gate”).
+**INVARIANT 4:** Any change to prompt/retrieval/model requires passing eval suite before promotion ("release gate").
 
 ---
 
@@ -72,7 +72,7 @@ Schema is managed by Alembic migrations; no SQLite fallback.
 - Store lineage: doc_id, doc_sha256, page_num, chunk_index, char_start/end
 
 ### Tier 1 (selective)
-Triggered by heuristics or query intent (“table”, “row/column”, etc.).
+Triggered by heuristics or query intent ("table", "row/column", etc.).
 - Produce layout-aware text/markdown
 - Preserve table readability for retrieval/citations
 
@@ -104,7 +104,7 @@ Implement `/ask` (and streaming variant if needed):
 4) Generate answer from evidence only
 5) Post-LLM citation gate:
    - validate citations resolve to retrieved evidence
-   - if missing/invalid → refuse with reason code
+   - if missing/invalid -> refuse with reason code
 6) Persist telemetry (always)
 7) Return answer+citations OR refusal+reason_code
 
@@ -140,7 +140,7 @@ All refusals are first-class outputs (not errors). Always include `request_id`.
 ## 9) Codex CLI Workflow (how to execute)
 Use Codex to implement one vertical slice at a time:
 
-**Slice 1:** Upload → Tier 0 parse → index → Ask with citations/refusal  
+**Slice 1:** Upload -> Tier 0 parse -> index -> Ask with citations/refusal  
 **Slice 2:** Hybrid retrieval + RRF  
 **Slice 3:** Telemetry persistence + metrics endpoint  
 **Slice 4:** Evals + CI gate  
@@ -153,7 +153,7 @@ After each slice:
 
 ---
 
-## 10) “Doc ↔ Code Consistency” Checklist (run before demo)
+## 10) "Doc <-> Code Consistency" Checklist (run before demo)
 - [ ] Invariants enforced in code (no-answer-without-citations; refuse on low confidence)
 - [ ] Refusal codes match docs exactly
 - [ ] Azure services used match demo mapping (no Front Door/APIM)

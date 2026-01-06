@@ -173,8 +173,6 @@ def ask(
 
     trace_metadata = {
         "session_id": x_docqa_session,
-        "user_name": x_docqa_user_name,
-        "user_email": x_docqa_user_email,
         "question_hash": question_hash,
         "question_len": question_len,
     }

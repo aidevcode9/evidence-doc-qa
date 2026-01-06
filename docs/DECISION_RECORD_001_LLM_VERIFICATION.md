@@ -11,7 +11,7 @@ Our current RAG system relies solely on **Vector/Hybrid Retrieval Scores** to de
 - **Eval Metric:** `refusal_correctness` is currently ~42%.
 
 ## The Solution: Logical Entailment (LLM Verification)
-We will implement a **"Corrective RAG" (CRAG)** step. Before generating a final answer, the system will ask an LLM (`gpt-4o-mini`):
+We will implement a **"Corrective RAG" (CRAG)** step. Before generating a final answer, the system will ask a configurable LLM (set via `DOCQA_MODEL_ID`):
 > *"Does the provided context contain the specific information to answer the question? Answer YES or NO."
 
 If the answer is **NO**, the system returns `NO_SUPPORTING_EVIDENCE`, overriding the retrieval score.
@@ -43,9 +43,9 @@ If the answer is **NO**, the system returns `NO_SUPPORTING_EVIDENCE`, overriding
     -   If Candidate 1 is verified: **Stop and Answer.**
     -   If Candidate 1 fails, check Candidate 2.
     -   If all 3 fail: **Refuse (`NO_SUPPORTING_EVIDENCE`).**
-3.  **Prompt Engineering:** Uses a strict system prompt ("Your only job is to determine...") with `max_completion_tokens=1000` to allow for reasoning models.
-4.  **Configuration:** Uses dedicated `AZURE_OPENAI_CHAT_*` environment variables to separate the Verification Model (e.g., `gpt-5-nano`/`o1-mini`) from the Embedding Model.
-5.  **Traceability:** Logs full verification decisions and raw LLM responses for debugging.
+3.  **Prompt Engineering:** Uses a strict system prompt ("Your only job is to determine...") with `max_completion_tokens` controlled by `VERIFIER_MAX_OUTPUT_TOKENS` (currently 1024).
+4.  **Configuration:** Uses `AZURE_OPENAI_CHAT_*` for the verifier endpoint and `DOCQA_MODEL_ID` for the verifier model deployment.
+5.  **Traceability:** Logs verification decisions and redacted LLM outputs when `DOCQA_DEBUG_VERIFIER=1` (no raw responses by default).
 
 ## Results (Dec 28, 2025)
 -   **Citation Coverage:** 100%
