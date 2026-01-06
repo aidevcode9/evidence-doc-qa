@@ -76,8 +76,8 @@ Note: Azure defaults are calibrated to allow strong semantic reranker scores (~1
 | :--- | :--- | :--- |
 | `DOCQA_ALLOWED_ORIGINS` | Comma-separated list for CORS. | `http://localhost:3000` |
 | `DOCQA_METRICS_ADMIN_TOKEN` | Auth token for metrics endpoint. | (Optional) |
-| `DOCQA_MODEL_COST_INPUT_PER_1K` | LLM input cost per 1K tokens (demo default, override with real pricing). | `0.001` |
-| `DOCQA_MODEL_COST_OUTPUT_PER_1K` | LLM output cost per 1K tokens (demo default, override with real pricing). | `0.001` |
+| `DOCQA_MODEL_COST_INPUT_PER_1K` | LLM input cost per 1K tokens (demo default, override with real pricing). | `0.0004` |
+| `DOCQA_MODEL_COST_OUTPUT_PER_1K` | LLM output cost per 1K tokens (demo default, override with real pricing). | `0.0016` |
 | `DOCQA_EMBEDDINGS_COST_PER_1K` | Embeddings cost per 1K tokens (demo default, override with real pricing). | `0.0001` |
 | `DOCQA_BETA_CODE` | Shared beta access code for the demo login gate. | (Secret) |
 | `DOCQA_OTEL_ENABLED` | Enable OpenTelemetry tracing (0/1). | `0` |
