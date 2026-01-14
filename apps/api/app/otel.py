@@ -1,9 +1,27 @@
 import os
-
-from .config import OTEL_ENABLED, OTEL_SERVICE_NAME
-from .telemetry import logger
+from contextlib import contextmanager
+from app.config import OTEL_ENABLED, OTEL_SERVICE_NAME
+from app.telemetry import logger
 
 _OTEL_INITIALIZED = False
+
+try:
+    from opentelemetry import trace
+    _TRACER = trace.get_tracer("docqa.api")
+except Exception:
+    _TRACER = None
+
+
+@contextmanager
+def span(name: str, **attrs):
+    if not _TRACER or not OTEL_ENABLED:
+        yield None
+        return
+    with _TRACER.start_as_current_span(name) as s:
+        for key, value in attrs.items():
+            if value is not None:
+                s.set_attribute(key, value)
+        yield s
 
 
 def setup_otel(app) -> None:

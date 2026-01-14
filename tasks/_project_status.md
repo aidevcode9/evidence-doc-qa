@@ -27,7 +27,10 @@
 - Task 024 - Semantic Ranker Fallback
 - Task 025 - Verifier Prompt v2 (Structured Outputs + Injection Hardening)
 - Task 026 - OpenTelemetry Tracing for FastAPI (Application Insights)
+- Task 030 - Refactor API Modularity
+- Task 031 - Shared Schema Codegen (SSOT)
 
 Notes:
 - Task 008: Search, OpenAI, and Postgres configured; Blob Storage and App Service deployment automated via Bicep/GitHub Actions.
 - Task 011: Next.js frontend live on Vercel with automated push-to-deploy.
+- Task 031: Established Python-First SSOT with automated TypeScript generation via `scripts/gen-types.ps1`.

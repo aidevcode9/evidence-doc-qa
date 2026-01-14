@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Any
 
-from .db import Telemetry, insert_telemetry, load_telemetry
+from app.db import Telemetry, insert_telemetry, load_telemetry
 
 # Configure logging to stdout for Azure App Service logs
 logging.basicConfig(

@@ -127,3 +127,29 @@ Telemetry reference: `packages/shared/schemas/telemetry.md` defines telemetry fi
 - Connection pooling protects DB/cache
 
 ---
+
+## 8) Backend Implementation (Modular)
+
+To ensure maintainability and testability, the API is organized into several distinct layers within `apps/api/app/`:
+
+### 8.1 API Layer (Routers)
+Standard FastAPI routers that handle HTTP requests, headers, and basic validation before delegating to the service layer.
+- `routers/ask.py`: Handles `/v1/ask`.
+- `routers/docs.py`: Handles `/v1/docs/upload`.
+- `routers/metrics.py`: Handles `/v1/metrics`.
+- `routers/health.py`: Handles `/healthz`.
+
+### 8.2 Service Layer (Orchestration)
+Encapsulates business logic and coordinates between various modules (retrieval, verification, policy).
+- `services/ask_service.py`: Orchestrates the full RAG query lifecycle.
+- `services/document_service.py`: Orchestrates document ingestion and indexing.
+- `services/rag.py`: RAG-specific helper utilities (scoring, tracing, debug candidates).
+- `services/cost.py`: Token estimation and cost tracking logic.
+
+### 8.3 Support Modules
+- `telemetry.py`: Low-level telemetry persistence and metrics computation.
+- `otel.py`: OpenTelemetry setup and tracing utilities (spans).
+- `db.py`: Database models and connection management.
+- `config.py`: Environment-driven configuration.
+
+---

@@ -5,7 +5,7 @@ import urllib.request
 import urllib.error
 from typing import List, Tuple, Dict
 
-from .config import (
+from app.config import (
     AZURE_OPENAI_API_KEY,
     AZURE_OPENAI_API_VERSION,
     AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT,

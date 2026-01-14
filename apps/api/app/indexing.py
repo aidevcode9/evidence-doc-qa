@@ -3,7 +3,7 @@ import urllib.request
 import urllib.error
 from typing import List, Tuple
 
-from .config import (
+from app.config import (
     AZURE_SEARCH_API_KEY,
     AZURE_SEARCH_API_VERSION,
     AZURE_SEARCH_CREATE_INDEX,
@@ -14,9 +14,9 @@ from .config import (
     INDEX_VERSION,
     RETRIEVAL_VERSION,
 )
-from .db import IndexRecord, insert_index_records
-from .embeddings import embed_texts
-from .ingestion import utc_now
+from app.db import IndexRecord, insert_index_records
+from app.embeddings import embed_texts
+from app.ingestion import utc_now
 
 
 def index_chunk_rows(

@@ -6,7 +6,7 @@ from typing import List, Tuple
 from pypdf import PdfReader
 from azure.storage.blob import BlobServiceClient
 
-from .config import (
+from app.config import (
     AZURE_STORAGE_CONNECTION_STRING,
     AZURE_STORAGE_CONTAINER,
     CHUNK_OVERLAP,
@@ -14,7 +14,7 @@ from .config import (
     PARSER_MODE,
     RAW_DIR,
 )
-from .telemetry import logger
+from app.telemetry import logger
 
 
 def compute_sha256(data: bytes) -> str:

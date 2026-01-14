@@ -8,13 +8,11 @@ from sqlalchemy import Boolean, Float, Integer, String, Text, create_engine, sel
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 from sqlalchemy.pool import NullPool
 
-from .config import DATABASE_URL
+from app.config import DATABASE_URL
 
 
 class Base(DeclarativeBase):
     pass
-
-
 class Document(Base):
     __tablename__ = "documents"
 

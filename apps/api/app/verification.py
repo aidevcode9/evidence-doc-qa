@@ -9,13 +9,13 @@ import urllib.parse
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any
 
-from .config import (
+from app.config import (
     AZURE_OPENAI_CHAT_API_KEY,
     AZURE_OPENAI_CHAT_API_VERSION,
     AZURE_OPENAI_CHAT_ENDPOINT,
     MODEL_ID,
 )
-from .telemetry import logger
+from app.telemetry import logger
 
 
 def verify_relevance(

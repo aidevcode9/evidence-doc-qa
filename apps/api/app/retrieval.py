@@ -6,7 +6,7 @@ import urllib.error
 from collections import Counter
 from typing import Dict, List, Optional
 
-from .config import (
+from app.config import (
     AZURE_SEARCH_API_KEY,
     AZURE_SEARCH_API_VERSION,
     AZURE_SEARCH_ENDPOINT,
@@ -17,9 +17,9 @@ from .config import (
     TOP_K_BM25,
     TOP_K_VECTOR,
 )
-from .db import load_chunks, load_index_records
-from .embeddings import embed_texts_with_usage
-from .telemetry import logger
+from app.db import load_chunks, load_index_records
+from app.embeddings import embed_texts_with_usage
+from app.telemetry import logger
 
 _BM25_CACHE: dict[str, dict] = {}
 
