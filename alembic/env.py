@@ -10,8 +10,9 @@ from sqlalchemy import engine_from_config, pool
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(REPO_ROOT / "apps" / "api"))
 
-from apps.api.app.db import Base
+from app.db import Base
 
 config = context.config
 if config.config_file_name is not None:
