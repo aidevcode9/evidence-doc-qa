@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ruff check:*)",
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(pip show:*)",
+      "Bash(git checkout:*)",
+      "Bash(.venvScriptspython.exe -m ruff check apps/)",
+      "Bash(gh pr create:*)"
+    ]
+  }
+}
