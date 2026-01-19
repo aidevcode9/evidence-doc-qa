@@ -101,6 +101,8 @@ mypy apps/api/app --strict
 | Every answer requires citation | `evidence.py` validates post-LLM; no citation → refuse | ✅ Implemented |
 | Confidence < 0.70 → refuse | `policy.py` gates response; returns refusal message | ✅ Implemented |
 | No PII in logs | `telemetry.py` redacts; log audit checks in CI | ✅ Implemented |
+| Citation text must match source ≥90% | `evidence.py` `validate_citation()` rejects fabricated text (FR-025) | ✅ Implemented |
+| Negation mismatch detection | Catches "NOT binding" vs "binding" adversarial LLM outputs (FR-025) | ✅ Implemented |
 
 ## Invariants — Planned (Phase 3: Multi-tenancy)
 
@@ -144,6 +146,8 @@ Types: `feat`, `fix`, `test`, `docs`, `refactor`, `chore`
 | 01-15 | PII in debug logs during demo | Redact by default; use `telemetry.py` |
 | 01-16 | Confidence 0.68 returned answer | Gate MUST be < not <= ; 0.70 is refuse |
 | 01-17 | Azure AI Search latency too high | Pivot to pgvector for hybrid search |
+| 01-18 | LLM could fabricate "NOT binding" from "binding" | Added negation mismatch detection in `evidence.py` (FR-025) |
+| 01-18 | ALLOW_UNVERIFIED=1 bypasses LLM verification | Added runtime warning in `config.py`; never use with STRICT_EVIDENCE=1 in prod |
 
 ## Red Flags — Stop and Ask
 
@@ -152,6 +156,8 @@ Types: `feat`, `fix`, `test`, `docs`, `refactor`, `chore`
 - Disabling confidence threshold for "testing"
 - Any change to `policy.py` or `evidence.py` without review
 - Skipping evals "just this once"
+- Setting `ALLOW_UNVERIFIED=1` in production (bypasses LLM verification)
+- Disabling `strict_negation_check` in `validate_citation()` (allows semantic flips)
 
 ## Key Files (Read These First)
 
@@ -198,6 +204,11 @@ AZURE_LLM_DEPLOYMENT=gpt-4o
 
 # App
 CONFIDENCE_THRESHOLD=0.70
+
+# Citation Validation (FR-025)
+DOCQA_CITATION_SIMILARITY_THRESHOLD=0.90  # Min similarity for valid citation
+DOCQA_STRICT_EVIDENCE=1                   # Require LLM verification (default: on)
+DOCQA_ALLOW_UNVERIFIED=0                  # SECURITY: Never enable in production
 ```
 
 > **Planned:** Config-driven provider selection (SEARCH_PROVIDER, LLM_PROVIDER, EMBEDDING_PROVIDER). See ARCHITECTURE.md.

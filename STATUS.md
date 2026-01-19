@@ -1,6 +1,6 @@
 # STATUS.md
 
-Last updated: 2026-01-18 (evening)
+Last updated: 2026-01-19
 
 ---
 
@@ -15,7 +15,7 @@ Last updated: 2026-01-18 (evening)
 
 | Task | FR | Branch | Started | Notes |
 |------|-----|--------|---------|-------|
-| Citation validation | FR-025 | feat/citation-validation | 01-18 | Post-LLM check; ≥90% text match |
+| — | — | — | — | Phase 1 Core complete; ready for OCR next |
 
 ## Next (Priority Order)
 
@@ -40,6 +40,7 @@ Last updated: 2026-01-18 (evening)
 | Hybrid retrieval (BM25 + vector + RRF) | FR-021 | — | 01-18 |
 | Chunking with page/char offsets | FR-013 | — | 01-18 |
 | Evidence-grounded answers + Confidence gating | FR-023, FR-024 | — | 01-18 |
+| Citation validation | FR-025 | — | 01-19 |
 
 > ⚠️ **FR-010/FR-012 Partial:** Digital PDFs only. Image upload and OCR for scanned docs not yet implemented.
 
@@ -55,9 +56,9 @@ Last updated: 2026-01-18 (evening)
 | FR-021 | Hybrid retrieval (BM25 + vector) | ✅ Shipped |
 | FR-023 | Evidence-grounded answers | ✅ Shipped |
 | FR-024 | Confidence refusal | ✅ Shipped |
-| FR-025 | Citation validation | 🔄 In Progress |
+| FR-025 | Citation validation | ✅ Shipped |
 
-**Remaining:** 1 of 7 FRs (+ FR-010/FR-012 need OCR + image support)
+**Remaining:** 0 of 7 core FRs complete. FR-010/FR-012 need OCR + image support for full completion.
 
 ---
 
@@ -65,6 +66,7 @@ Last updated: 2026-01-18 (evening)
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
+| 01-19 | **Citation validation via text similarity** (FR-025) | Post-LLM check with ≥90% similarity threshold; prevents fabricated citations |
 | 01-19 | **Parser options: LlamaParse (cloud), Marker (on-prem fast), Docling (tables)** | LlamaParse best OCR; Marker 25pg/s with --use_llm; Docling 97.9% on complex tables |
 | 01-18 | **FR-010/FR-012 partial for MVP** | Digital PDFs work; OCR + image support deferred; scanned docs return empty text |
 | 01-18 | **Template-based multi-citation** (FR-023) | MVP approach; up to 3 citations with `[N]` markers; LLM synthesis (FR-026) deferred |

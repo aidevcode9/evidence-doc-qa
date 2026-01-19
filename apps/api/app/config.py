@@ -40,6 +40,18 @@ AZURE_RERANK_MIN = float(_getenv("DOCQA_AZURE_RERANK_MIN", "1.5"))
 CONFIDENCE_VERSION = _getenv("DOCQA_CONFIDENCE_VERSION", "v1")
 STRICT_EVIDENCE = _is_truthy(_getenv("DOCQA_STRICT_EVIDENCE", "1"))
 ALLOW_UNVERIFIED = _is_truthy(_getenv("DOCQA_ALLOW_UNVERIFIED", "0"))
+CITATION_SIMILARITY_THRESHOLD = float(_getenv("DOCQA_CITATION_SIMILARITY_THRESHOLD", "0.90"))  # FR-025
+
+# Security: Warn if ALLOW_UNVERIFIED is enabled with STRICT_EVIDENCE
+# This combination allows unverified chunks through, which may bypass LLM verification
+if STRICT_EVIDENCE and ALLOW_UNVERIFIED:
+    import warnings
+    warnings.warn(
+        "SECURITY: ALLOW_UNVERIFIED=1 with STRICT_EVIDENCE=1 allows unverified "
+        "chunks through. Set STRICT_EVIDENCE=0 or ALLOW_UNVERIFIED=0 for production.",
+        UserWarning,
+        stacklevel=1,
+    )
 
 TOP_K = int(_getenv("DOCQA_TOP_K", "5"))
 TOP_K_VECTOR = int(_getenv("DOCQA_TOP_K_VECTOR", "5"))

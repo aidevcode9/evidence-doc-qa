@@ -15,6 +15,7 @@ Steps:
    - What's the implementation approach?
    - What tests are needed?
    - Any risks or concerns?
+   - ensure logging is implemented for key functionality.
 7. Show me the plan and wait for approval before implementing
 
 Don't start coding until I approve the plan.

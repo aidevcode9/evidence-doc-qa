@@ -19,6 +19,7 @@ from app.config import (
     AZURE_SEARCH_SCORE_MIN,
     AZURE_RERANK_MIN,
     INDEX_VERSION,
+    CITATION_SIMILARITY_THRESHOLD,
 )
 from app.db import get_latest_docs_snapshot_id
 from app.schemas import AskRequest, AskResponse, Citation, DebugCandidate, EvidenceSupport, RefusalCode
@@ -421,7 +422,63 @@ def execute_ask(
             answer_parts.append(f"According to {doc_name} (page {page}) [{idx}], {chunk_span}")
         else:
             answer_parts.append(f"Additionally, {doc_name} (page {page}) [{idx}] states: {chunk_span}")
-    
+
+    # FR-025: Validate citations - verify snippet text matches source chunk
+    validated_citations = []
+    validated_answer_parts = []
+    chunks_by_id = {c["chunk_id"]: c for c in verified_chunks}
+
+    for i, citation in enumerate(citations):
+        chunk = chunks_by_id.get(citation.chunk_id)
+        if chunk:
+            is_valid, score, status = evidence.validate_citation(
+                citation.snippet,
+                chunk["chunk_text"],
+                similarity_threshold=CITATION_SIMILARITY_THRESHOLD,
+            )
+            citation.validation_status = status
+            citation.validation_score = score
+            if is_valid:
+                validated_citations.append(citation)
+                validated_answer_parts.append(answer_parts[i])
+            else:
+                logger.warning(
+                    f"Citation validation failed [{request_id}]: chunk_id={citation.chunk_id} "
+                    f"score={score} status={status}"
+                )
+        else:
+            citation.validation_status = "NOT_FOUND"
+            citation.validation_score = 0.0
+            logger.warning(
+                f"Citation validation failed [{request_id}]: chunk_id={citation.chunk_id} not found"
+            )
+
+    # If all citations failed validation, refuse
+    if not validated_citations:
+        logger.warning(f"Citation Validation Fail [{request_id}]: All citations failed validation")
+        return _emit_refusal(
+            request_id=request_id,
+            docs_snapshot_id=docs_snapshot_id,
+            version_snapshot=version_snapshot,
+            refusal_code=RefusalCode.CITATION_VALIDATION_FAILED,
+            reason="All citations failed validation (text mismatch with source).",
+            failure_label="CITATION_VALIDATION_FAILED",
+            start_time=start_time,
+            question_len=question_len,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            cost_est=cost_est,
+            citations=citations,  # Include failed citations for debugging
+            trace_metadata=trace_metadata,
+        )
+
+    # Re-index validated citations to maintain [1], [2], [3] markers
+    for new_idx, citation in enumerate(validated_citations, start=1):
+        citation.citation_index = new_idx
+
+    citations = validated_citations
+    answer_parts = validated_answer_parts
+
     # Use first citation for evidence support metadata
     primary_citation = citations[0]
 

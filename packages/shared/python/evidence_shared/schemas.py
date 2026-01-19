@@ -1,6 +1,6 @@
 from enum import Enum
-from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from typing import List, Optional
+from pydantic import BaseModel
 
 
 class RefusalCode(str, Enum):
@@ -9,6 +9,7 @@ class RefusalCode(str, Enum):
     INJECTION_DETECTED = "INJECTION_DETECTED"
     PARSE_FAILED = "PARSE_FAILED"
     POLICY_REFUSAL = "POLICY_REFUSAL"
+    CITATION_VALIDATION_FAILED = "CITATION_VALIDATION_FAILED"  # FR-025
 
 
 class VersionSnapshot(BaseModel):
@@ -40,6 +41,8 @@ class Citation(BaseModel):
     snippet: str
     highlighted_text: Optional[str] = None
     score: float
+    validation_status: str = "PENDING"  # FR-025: VALID | PARTIAL_MATCH | NOT_FOUND | PENDING
+    validation_score: float = 0.0  # FR-025: 0.0-1.0 similarity score
 
 
 class EvidenceSupport(BaseModel):
