@@ -171,7 +171,9 @@ usage_daily (
 
 ---
 
-## Interfaces
+## Interfaces (Target Architecture)
+
+> **Status:** These interfaces are PLANNED but not yet implemented. Current code uses Azure services directly. Implement these when doing NFR-032, 034, 035.
 
 ### LLMClient (NFR-032)
 
@@ -254,17 +256,231 @@ class LocalEmbeddingClient(EmbeddingClient):
 class OpenAIEmbeddingClient(EmbeddingClient):
     """Cloud option: text-embedding-3-large (1536 dims)"""
     pass
+
+class AzureEmbeddingClient(EmbeddingClient):
+    """Azure OpenAI embeddings"""
+    pass
+```
+
+### SearchClient (Retrieval Abstraction)
+
+Provider-agnostic search interface. **Swap Azure AI Search ↔ pgvector via config only.**
+
+```python
+# apps/api/app/search/client.py
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+
+@dataclass
+class SearchResult:
+    chunk_id: str
+    text: str
+    score: float
+    page_number: int
+    document_id: str
+    metadata: dict
+
+class SearchClient(ABC):
+    @abstractmethod
+    async def hybrid_search(
+        self,
+        query: str,
+        query_embedding: list[float],
+        tenant_id: str,
+        matter_id: str,
+        top_k: int = 20,
+        filters: dict | None = None,
+    ) -> list[SearchResult]:
+        """
+        Hybrid search: BM25 (keyword) + vector (semantic) with fusion.
+        
+        All implementations MUST:
+        - Filter by tenant_id and matter_id (isolation)
+        - Return results sorted by fused score
+        - Include chunk_id for citation mapping
+        """
+        pass
+
+# Implementations
+class AzureSearchClient(SearchClient):
+    """
+    Azure AI Search with:
+    - BM25 keyword search
+    - Vector search (HNSW index)
+    - Semantic reranker (optional)
+    """
+    pass
+
+class PgVectorSearchClient(SearchClient):
+    """
+    PostgreSQL with:
+    - Full-text search (tsvector + GIN index) for BM25
+    - pgvector (ivfflat index) for vector search
+    - Reciprocal Rank Fusion (RRF) for combining results
+    """
+    pass
+```
+
+**Config-driven selection:**
+
+```python
+# config.py
+SEARCH_PROVIDER = os.getenv("SEARCH_PROVIDER", "pgvector")  # 'pgvector' or 'azure'
+
+def get_search_client() -> SearchClient:
+    if SEARCH_PROVIDER == "azure":
+        return AzureSearchClient(
+            endpoint=os.getenv("AZURE_SEARCH_ENDPOINT"),
+            api_key=os.getenv("AZURE_SEARCH_API_KEY"),
+            index_name=os.getenv("AZURE_SEARCH_INDEX", "evidence-chunks"),
+        )
+    elif SEARCH_PROVIDER == "pgvector":
+        return PgVectorSearchClient(
+            database_url=os.getenv("DATABASE_URL"),
+        )
+    else:
+        raise ValueError(f"Unknown SEARCH_PROVIDER: {SEARCH_PROVIDER}")
+```
+
+**RRF Fusion (for pgvector implementation):**
+
+```python
+def reciprocal_rank_fusion(
+    bm25_results: list[SearchResult],
+    vector_results: list[SearchResult],
+    k: int = 60,
+) -> list[SearchResult]:
+    """
+    Combine BM25 and vector results using RRF.
+    Score = sum(1 / (k + rank)) for each list where doc appears.
+    """
+    scores = defaultdict(float)
+    docs = {}
+    
+    for rank, result in enumerate(bm25_results):
+        scores[result.chunk_id] += 1 / (k + rank + 1)
+        docs[result.chunk_id] = result
+    
+    for rank, result in enumerate(vector_results):
+        scores[result.chunk_id] += 1 / (k + rank + 1)
+        docs[result.chunk_id] = result
+    
+    sorted_ids = sorted(scores.keys(), key=lambda x: scores[x], reverse=True)
+    return [docs[chunk_id] for chunk_id in sorted_ids]
 ```
 
 ---
 
-## Deployment Tiers (NFR-033)
+## Deployment Tiers (NFR-033, NFR-034)
 
-| Tier | LLM Primary | LLM Fallback | Embeddings | Notes |
-|------|-------------|--------------|------------|-------|
-| **Cloud/Hosted** | Anthropic Claude 3.5 Sonnet | OpenAI GPT-4o | OpenAI text-embedding-3-large | Multi-tenant SaaS |
-| **VPC** | Azure OpenAI (customer tenant) | Anthropic API | Azure OpenAI embeddings | Single-tenant in customer cloud |
-| **On-Prem** | Ollama + Llama 3.1 70B | Ollama + Qwen 2.5 72B | nomic-embed-text-v1.5 (local) | Air-gapped option |
+> **All providers controlled by environment variables.** No code changes to switch tiers.
+
+### Provider Matrix
+
+| Tier | Search | Embeddings | LLM Primary | LLM Fallback |
+|------|--------|------------|-------------|--------------|
+| **Azure (current)** | Azure AI Search | Azure OpenAI | Azure OpenAI (GPT-4o) | — |
+| **Cloud OSS** | pgvector + FTS | OpenAI | Anthropic Claude 3.5 Sonnet | OpenAI GPT-4o |
+| **VPC** | pgvector + FTS | Azure OpenAI | Azure OpenAI (customer tenant) | Anthropic API |
+| **On-Prem** | pgvector + FTS | local (nomic) | Ollama + Llama 3.1 70B | Ollama + Qwen 2.5 72B |
+
+### Config by Tier
+
+**Azure Mode (current implementation):**
+
+```bash
+# Search
+SEARCH_PROVIDER=azure
+AZURE_SEARCH_ENDPOINT=https://your-search.search.windows.net
+AZURE_SEARCH_API_KEY=xxx
+AZURE_SEARCH_INDEX=evidence-chunks
+
+# Embeddings
+EMBEDDING_PROVIDER=azure
+AZURE_OPENAI_ENDPOINT=https://your-openai.openai.azure.com
+AZURE_OPENAI_API_KEY=xxx
+AZURE_EMBEDDING_DEPLOYMENT=text-embedding-3-large
+
+# LLM
+LLM_PROVIDER=azure
+AZURE_LLM_DEPLOYMENT=gpt-4o
+```
+
+**Cloud OSS Mode (new direction):**
+
+```bash
+# Search
+SEARCH_PROVIDER=pgvector
+DATABASE_URL=postgresql://user:pass@host:5432/evidence
+
+# Embeddings
+EMBEDDING_PROVIDER=openai
+OPENAI_API_KEY=xxx
+
+# LLM
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=xxx
+LLM_MODEL=claude-3.5-sonnet
+LLM_FALLBACK_PROVIDER=openai
+LLM_FALLBACK_MODEL=gpt-4o
+```
+
+**VPC Mode (customer cloud):**
+
+```bash
+# Search
+SEARCH_PROVIDER=pgvector
+DATABASE_URL=postgresql://...  # Customer's managed Postgres
+
+# Embeddings  
+EMBEDDING_PROVIDER=azure
+AZURE_OPENAI_ENDPOINT=https://customer.openai.azure.com
+AZURE_OPENAI_API_KEY=xxx  # Customer's key
+
+# LLM
+LLM_PROVIDER=azure
+AZURE_LLM_DEPLOYMENT=gpt-4o
+```
+
+**On-Prem Mode (air-gapped):**
+
+```bash
+# Search
+SEARCH_PROVIDER=pgvector
+DATABASE_URL=postgresql://localhost:5432/evidence
+
+# Embeddings
+EMBEDDING_PROVIDER=local
+EMBEDDING_MODEL=nomic-embed-text-v1.5
+
+# LLM
+LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+LLM_MODEL=llama3.1:70b
+LLM_FALLBACK_MODEL=qwen2.5:72b
+```
+
+### Switching Providers
+
+To switch from Azure to pgvector:
+
+```bash
+# 1. Change config
+export SEARCH_PROVIDER=pgvector
+export DATABASE_URL=postgresql://...
+
+# 2. Run migrations (create pgvector indexes)
+python -m alembic upgrade head
+
+# 3. Re-embed documents (if embedding model changed)
+python -m app.tasks.reindex --all
+
+# 4. Verify with evals
+pytest evals/ -v
+```
+
+**No code changes required.** The `get_search_client()`, `get_embedding_client()`, and `get_llm_client()` functions read config and return the appropriate implementation.
 
 ### On-Prem Requirements (NFR-031)
 
@@ -273,31 +489,6 @@ class OpenAIEmbeddingClient(EmbeddingClient):
   - Llama 3.1 70B: ~85-90% of Claude quality on legal reasoning
   - Higher latency (2-5x slower)
   - No external API calls (air-gap compatible)
-
-### Environment Variables by Tier
-
-```bash
-# Cloud/Hosted
-LLM_PROVIDER=anthropic
-LLM_MODEL=claude-3.5-sonnet
-LLM_FALLBACK_PROVIDER=openai
-LLM_FALLBACK_MODEL=gpt-4o
-EMBEDDING_PROVIDER=openai
-EMBEDDING_MODEL=text-embedding-3-large
-
-# VPC (Azure)
-LLM_PROVIDER=azure
-AZURE_OPENAI_ENDPOINT=https://customer.openai.azure.com
-AZURE_OPENAI_DEPLOYMENT=gpt-4o
-EMBEDDING_PROVIDER=azure
-
-# On-Prem
-LLM_PROVIDER=ollama
-LLM_MODEL=llama3.1:70b
-EMBEDDING_PROVIDER=local
-EMBEDDING_MODEL=nomic-embed-text-v1.5
-OLLAMA_BASE_URL=http://localhost:11434
-```
 
 ---
 
@@ -358,6 +549,7 @@ Same images, Helm chart for:
 
 | Constraint | Rationale |
 |------------|-----------|
+| **All providers config-driven** | Swap Search/Embedding/LLM via env vars, no code changes (NFR-032, 034, 035) |
 | All queries filter by `tenant_id` | Tenant isolation (FR-001) |
 | All artifacts scoped by `matter_id` | Matter isolation (FR-002) |
 | `embedding_model` stored with vectors | Mixed-model deployments; future migrations |
