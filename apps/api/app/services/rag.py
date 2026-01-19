@@ -1,16 +1,13 @@
 import hashlib
-from typing import List, Dict, Optional, Tuple
 
-from app import evidence, retrieval, verification
+from app import evidence
 from app.config import (
-    CONF_MIN,
+    CONFIDENCE_THRESHOLD,
     AZURE_RERANK_MIN,
     AZURE_SEARCH_SCORE_MIN,
-    CONFIDENCE_VERSION,
-    INDEX_VERSION,
 )
 from app.db import get_doc_name
-from app.schemas import Citation, EvidenceSupport, DebugCandidate
+from app.schemas import DebugCandidate
 
 
 def retrieval_score_key(results: list[dict]) -> str:
@@ -38,7 +35,7 @@ def confidence_threshold(score_key: str) -> float:
         return AZURE_RERANK_MIN
     if score_key == "azure_search_score":
         return AZURE_SEARCH_SCORE_MIN
-    return CONF_MIN
+    return CONFIDENCE_THRESHOLD
 
 
 def score_value(chunk: dict, key: str) -> float:

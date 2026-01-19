@@ -8,6 +8,8 @@
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v1.4 | Jan 2026 | Added Code Quality NFRs (NFR-040, NFR-041) |
+| v1.3 | Jan 2026 | Added LLM synthesis and cross-doc aggregation FRs (FR-026, FR-027) |
 | v1.2 | Jan 2026 | Added Search/Embedding abstraction NFRs (NFR-034, NFR-035) |
 | v1.1 | Jan 2026 | Added LLM Provider NFRs (NFR-030 to NFR-033) |
 | v1 | Jan 2026 | Initial release — 27 FRs, 11 NFRs |
@@ -61,6 +63,8 @@
 | FR-023 | Evidence-grounded answers: every factual claim backed by citation | No claim without [N] citation marker |
 | FR-024 | Below-threshold confidence → explicit "insufficient evidence" response | Low confidence returns refusal message, not a guess |
 | FR-025 | Prevent fabricated citations: cited spans must exist and match | Post-check validates chunk exists and text matches (≥90% similarity) |
+| FR-026 | LLM-synthesized natural language answers | LLM generates coherent answer from multiple chunks; maintains [N] citation markers; fallback to template if LLM fails |
+| FR-027 | Cross-document citation aggregation | Answer can cite spans from multiple documents; citations grouped by document in response |
 
 ### 4.4 Citations, Viewer, and Exports
 
@@ -128,6 +132,13 @@
 | NFR-033 | Default providers by tier: Cloud (Claude 3.5 Sonnet + GPT-4o fallback), VPC (Azure OpenAI), On-Prem (Ollama + Llama 3.1 70B) | Each tier works with documented provider |
 | NFR-034 | Search/retrieval abstracted behind `SearchClient` interface | Swap Azure AI Search ↔ pgvector via config only, no code changes |
 | NFR-035 | Embeddings abstracted behind `EmbeddingClient` interface | Swap Azure ↔ OpenAI ↔ local via config only, no code changes |
+
+### 5.5 Code Quality & Maintainability
+
+| ID | Requirement | Acceptance Criteria |
+|----|-------------|---------------------|
+| NFR-040 | Full type annotations; `mypy --strict` passes | Zero mypy errors; generic types parameterized; all functions typed |
+| NFR-041 | Dev dependencies separated from production | `requirements-dev.txt` for ruff, mypy, pytest; not in main requirements.txt |
 
 ---
 

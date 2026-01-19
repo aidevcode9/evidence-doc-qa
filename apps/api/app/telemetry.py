@@ -1,7 +1,7 @@
 import logging
 import sys
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Dict, List, Any
 
 from app.db import Telemetry, insert_telemetry, load_telemetry

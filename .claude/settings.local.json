@@ -6,7 +6,8 @@
       "Bash(findstr:*)",
       "Bash(pytest:*)",
       "Bash(where:*)",
-      "Read(//c/**)"
+      "Read(//c/**)",
+      "Bash(dir:*)"
     ]
   }
 }

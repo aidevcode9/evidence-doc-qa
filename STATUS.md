@@ -15,15 +15,14 @@ Last updated: 2026-01-18
 
 | Task | FR | Branch | Started | Notes |
 |------|-----|--------|---------|-------|
-| Chunking with offsets | FR-013 | feat/chunking-offsets | 01-18 | page_start, page_end, char_start, char_end |
+| Evidence-grounded answers + Confidence gating | FR-023, FR-024 | feat/evidence-grounded-answers | 01-18 | Multi-citation `[N]` markers; configurable threshold (0.70 default) |
 
 ## Next (Priority Order)
 
 | Task | FR | Depends On | Notes |
 |------|-----|------------|-------|
-| Evidence-grounded answers | FR-023 | FR-021 | Every claim needs `[N]` citation |
-| Confidence gating | FR-024 | FR-023 | Threshold 0.70; refuse below |
 | Citation validation | FR-025 | FR-024 | Post-LLM check; ≥90% text match |
+| Type annotations cleanup | NFR-040 | — | Fix 130+ mypy --strict errors; add generic type params, type stubs |
 
 ## Blocked
 
@@ -39,6 +38,7 @@ Last updated: 2026-01-18
 | Document upload | FR-010 | #2 | 01-16 |
 | PDF text extraction + OCR | FR-012 | #3 | 01-16 |
 | Hybrid retrieval (BM25 + vector + RRF) | FR-021 | — | 01-18 |
+| Chunking with page/char offsets | FR-013 | — | 01-18 |
 
 ---
 
@@ -48,13 +48,13 @@ Last updated: 2026-01-18
 |----|-------------|--------|
 | FR-010 | Upload PDFs/images | ✅ Shipped |
 | FR-012 | Text extraction + OCR | ✅ Shipped |
-| FR-013 | Chunking with page/char offsets | 🔄 In Progress |
+| FR-013 | Chunking with page/char offsets | ✅ Shipped |
 | FR-021 | Hybrid retrieval (BM25 + vector) | ✅ Shipped |
-| FR-023 | Evidence-grounded answers | ⬜ Next |
-| FR-024 | Confidence refusal | ⬜ Next |
+| FR-023 | Evidence-grounded answers | 🔄 In Progress |
+| FR-024 | Confidence refusal | 🔄 In Progress |
 | FR-025 | Citation validation | ⬜ Next |
 
-**Remaining:** 4 of 7 FRs
+**Remaining:** 2 of 7 FRs
 
 ---
 
@@ -62,6 +62,8 @@ Last updated: 2026-01-18
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
+| 01-18 | **Template-based multi-citation** (FR-023) | MVP approach; up to 3 citations with `[N]` markers; LLM synthesis (FR-026) deferred |
+| 01-18 | **Configurable threshold via .env** (FR-024) | DOCQA_CONFIDENCE_THRESHOLD=0.70 default; exposed in API response for UI display |
 | 01-18 | **Provider abstraction planned** (NFR-032, 034, 035) | Support Azure + pgvector + others via config; interfaces in ARCHITECTURE.md |
 | 01-17 | **pgvector target for Phase 2** | Azure AI Search works but latency concerns; pgvector simpler long-term |
 | 01-16 | Confidence threshold 0.70 | Per architecture review |

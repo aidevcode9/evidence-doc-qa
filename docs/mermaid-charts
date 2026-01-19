@@ -54,7 +54,7 @@ sequenceDiagram
       RET->>DB: load_index_records()
       RET->>RET: overlap + cosine + RRF fuse
     end
-    API->>API: confidence gate (CONF_MIN)
+    API->>API: confidence gate (CONFIDENCE_THRESHOLD)
     alt low confidence
       API->>TEL: record_telemetry(refusal)
       API-->>W: refusal_code=LOW_RETRIEVAL_CONFIDENCE
