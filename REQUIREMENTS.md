@@ -8,6 +8,7 @@
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v1.3 | Jan 2026 | Added Developer Tooling FRs (FR-060 to FR-063) |
 | v1.2 | Jan 2026 | Added Search/Embedding abstraction NFRs (NFR-034, NFR-035) |
 | v1.1 | Jan 2026 | Added LLM Provider NFRs (NFR-030 to NFR-033) |
 | v1 | Jan 2026 | Initial release — 27 FRs, 11 NFRs |
@@ -87,6 +88,15 @@
 | FR-050 | Email/password + MFA (hosted); OIDC/SAML SSO (VPC/on-prem) | Login works; MFA enforced; SSO integrates |
 | FR-051 | Admin UI: manage users, roles, matters, retention, API keys | Admin can CRUD all entities |
 | FR-052 | Rate limiting and abuse controls; per-tenant quotas | Rate limits enforced; quota exceeded → 429 |
+
+### 4.7 Developer Tooling & Quality
+
+| ID | Requirement | Acceptance Criteria |
+|----|-------------|---------------------|
+| FR-060 | Linting with ruff; all code passes lint checks | `ruff check apps/` passes with no errors |
+| FR-061 | Type checking with mypy; strict mode enabled | `mypy apps/api/app --strict` passes |
+| FR-062 | Unit tests with pytest; minimum 80% coverage on core modules | `pytest tests/ -v` passes; coverage report shows ≥80% on policy.py, verification.py, evidence.py |
+| FR-063 | Security tests for injection detection and span filtering | Tests cover unicode homoglyphs, XSS patterns, blocked content |
 
 ---
 
@@ -187,6 +197,7 @@
 | Phase | FRs | Goal |
 |-------|-----|------|
 | 1. Core RAG | FR-010, FR-012, FR-013, FR-021, FR-023, FR-024, FR-025 | Working Q&A with citations |
+| 1b. Dev Tooling | FR-060, FR-061, FR-062, FR-063 | Lint, type check, tests, security tests |
 | 2. Citations UI | FR-030, FR-031, FR-032 | Clickable citations, export |
 | 3. Multi-tenancy | FR-001, FR-002, FR-003, FR-004, FR-020 | Tenant + matter isolation |
 | 4. Auth | FR-050, FR-051, FR-052 | Login, SSO, admin |

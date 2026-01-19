@@ -15,7 +15,7 @@ Last updated: 2026-01-18
 
 | Task | FR | Branch | Started | Notes |
 |------|-----|--------|---------|-------|
-| Chunking with offsets | FR-013 | feat/chunking-offsets | 01-18 | page_start, page_end, char_start, char_end |
+| Dev tooling setup | FR-060–063 | — | 01-18 | ruff, mypy, pytest, security tests |
 
 ## Next (Priority Order)
 
@@ -24,6 +24,14 @@ Last updated: 2026-01-18
 | Evidence-grounded answers | FR-023 | FR-021 | Every claim needs `[N]` citation |
 | Confidence gating | FR-024 | FR-023 | Threshold 0.70; refuse below |
 | Citation validation | FR-025 | FR-024 | Post-LLM check; ≥90% text match |
+
+## Done (This Week)
+
+| Task | FR | Date | Notes |
+|------|-----|------|-------|
+| Chunking with offsets | FR-013 | 01-18 | page_end, char_start, char_end through pipeline |
+| Security hardening | — | 01-18 | H-1: injection detection, H-2: span filtering, H-3: LLM timeout |
+| Dev tooling FRs | FR-060–063 | 01-18 | Added to REQUIREMENTS.md |
 
 ## Blocked
 
@@ -48,13 +56,13 @@ Last updated: 2026-01-18
 |----|-------------|--------|
 | FR-010 | Upload PDFs/images | ✅ Shipped |
 | FR-012 | Text extraction + OCR | ✅ Shipped |
-| FR-013 | Chunking with page/char offsets | 🔄 In Progress |
+| FR-013 | Chunking with page/char offsets | ✅ Shipped |
 | FR-021 | Hybrid retrieval (BM25 + vector) | ✅ Shipped |
 | FR-023 | Evidence-grounded answers | ⬜ Next |
 | FR-024 | Confidence refusal | ⬜ Next |
 | FR-025 | Citation validation | ⬜ Next |
 
-**Remaining:** 4 of 7 FRs
+**Remaining:** 3 of 7 FRs
 
 ---
 
@@ -62,6 +70,8 @@ Last updated: 2026-01-18
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
+| 01-18 | **Dev tooling FRs added** (FR-060–063) | Need ruff, mypy, pytest before more features |
+| 01-18 | **Security hardening before commit** | /wsskeptic review found 3 HIGH issues; fixed |
 | 01-18 | **Provider abstraction planned** (NFR-032, 034, 035) | Support Azure + pgvector + others via config; interfaces in ARCHITECTURE.md |
 | 01-17 | **pgvector target for Phase 2** | Azure AI Search works but latency concerns; pgvector simpler long-term |
 | 01-16 | Confidence threshold 0.70 | Per architecture review |
