@@ -97,6 +97,7 @@ def build_chunk_rows(
 ) -> List[tuple]:
     rows = []
     for page_num, page_text in enumerate(pages, start=1):
+        page_end = page_num  # Single-page chunks for now (FR-013)
         for chunk_index, (char_start, char_end, chunk_text) in enumerate(
             chunk_page_text(page_text)
         ):
@@ -108,6 +109,7 @@ def build_chunk_rows(
                     doc_id,
                     doc_sha256,
                     page_num,
+                    page_end,
                     chunk_index,
                     char_start,
                     char_end,

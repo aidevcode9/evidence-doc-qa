@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh pr list:*)",
+      "Bash(dir /b \"c:\\\\Users\\\\chuck-iykyknow.ai\\\\Documents\\\\GitHub\\\\evidence-doc-qa\")",
+      "Bash(findstr:*)",
+      "Bash(pytest:*)",
+      "Bash(where:*)",
+      "Read(//c/**)"
+    ]
+  }
+}

@@ -32,6 +32,9 @@ class Citation(BaseModel):
     doc_id: str
     doc_name: str
     page_num: int
+    page_end: int
+    char_start: int
+    char_end: int
     chunk_id: str
     snippet: str
     highlighted_text: Optional[str] = None
@@ -61,6 +64,9 @@ class DebugCandidate(BaseModel):
     doc_id: str
     doc_name: str
     page_num: int
+    page_end: int
+    char_start: int
+    char_end: int
     chunk_id: str
     rrf_score: Optional[float] = None
     azure_search_score: Optional[float] = None

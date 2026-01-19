@@ -21,6 +21,7 @@ async def process_document_upload(file: UploadFile) -> dict:
         raise HTTPException(status_code=400, detail=f"PARSE_FAILED: {exc}") from exc
 
     chunk_rows = ingestion.build_chunk_rows(doc_id, doc_sha256, docs_snapshot_id, pages)
+    # Tuple structure (FR-013): (chunk_id, snap_id, doc_id, sha256, page_num, page_end, chunk_idx, char_start, char_end, text, mode)
     insert_chunks(
         Chunk(
             chunk_id=row[0],
@@ -28,11 +29,12 @@ async def process_document_upload(file: UploadFile) -> dict:
             doc_id=row[2],
             doc_sha256=row[3],
             page_num=row[4],
-            chunk_index=row[5],
-            char_start=row[6],
-            char_end=row[7],
-            chunk_text=row[8],
-            parse_mode=row[9],
+            page_end=row[5],
+            chunk_index=row[6],
+            char_start=row[7],
+            char_end=row[8],
+            chunk_text=row[9],
+            parse_mode=row[10],
         )
         for row in chunk_rows
     )

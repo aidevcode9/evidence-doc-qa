@@ -21,7 +21,7 @@ from app.config import (
     INDEX_VERSION,
 )
 from app.db import get_latest_docs_snapshot_id
-from app.schemas import AskRequest, AskResponse, Citation, EvidenceSupport, RefusalCode
+from app.schemas import AskRequest, AskResponse, Citation, DebugCandidate, EvidenceSupport, RefusalCode
 from app.telemetry import logger, record_telemetry
 from app.services import cost, rag
 
@@ -380,6 +380,9 @@ def execute_ask(
         doc_id=verified_chunk["doc_id"],
         doc_name=verified_chunk.get("doc_name") or rag.doc_name_for(verified_chunk["doc_id"]),
         page_num=verified_chunk["page_num"],
+        page_end=verified_chunk.get("page_end", verified_chunk["page_num"]),
+        char_start=verified_chunk.get("char_start", 0),
+        char_end=verified_chunk.get("char_end", 0),
         chunk_id=verified_chunk["chunk_id"],
         snippet=supporting_span,
         highlighted_text=verified_chunk.get("highlighted_text"),

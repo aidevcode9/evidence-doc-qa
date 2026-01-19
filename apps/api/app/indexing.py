@@ -28,7 +28,8 @@ def index_chunk_rows(
     if not ENABLE_INDEXING:
         return
 
-    texts = [row[8] for row in chunk_rows]
+    # Tuple structure (FR-013): (chunk_id, snap_id, doc_id, sha256, page_num, page_end, chunk_idx, char_start, char_end, text, mode)
+    texts = [row[9] for row in chunk_rows]
     embeddings = embed_texts(texts)
     indexed_at = utc_now()
 
@@ -40,6 +41,7 @@ def index_chunk_rows(
             doc_id_row,
             doc_sha256,
             page_num,
+            page_end,
             chunk_index,
             char_start,
             char_end,
@@ -53,6 +55,9 @@ def index_chunk_rows(
                 "doc_id": doc_id_row,
                 "doc_name": doc_name,
                 "page_num": page_num,
+                "page_end": page_end,
+                "char_start": char_start,
+                "char_end": char_end,
                 "chunk_index": chunk_index,
                 "chunk_text": chunk_text,
                 "embedding_vector": embedding,
@@ -73,6 +78,9 @@ def index_chunk_rows(
                 doc_id=rec["doc_id"],
                 doc_name=rec["doc_name"],
                 page_num=rec["page_num"],
+                page_end=rec["page_end"],
+                char_start=rec["char_start"],
+                char_end=rec["char_end"],
                 chunk_index=rec["chunk_index"],
                 chunk_text=rec["chunk_text"],
                 embedding_json=json.dumps(rec["embedding_vector"]),
@@ -104,6 +112,9 @@ def ensure_index(force: bool = False) -> None:
             {"name": "doc_id", "type": "Edm.String", "filterable": True},
             {"name": "doc_name", "type": "Edm.String", "filterable": True},
             {"name": "page_num", "type": "Edm.Int32", "filterable": True},
+            {"name": "page_end", "type": "Edm.Int32", "filterable": True, "retrievable": True},
+            {"name": "char_start", "type": "Edm.Int32", "filterable": True, "retrievable": True},
+            {"name": "char_end", "type": "Edm.Int32", "filterable": True, "retrievable": True},
             {"name": "chunk_index", "type": "Edm.Int32", "filterable": True},
             {"name": "chunk_text", "type": "Edm.String", "searchable": True, "retrievable": True},
             {

@@ -163,7 +163,7 @@ def _call_openai(payload: dict) -> dict:
         headers=headers,
     )
     try:
-        with urllib.request.urlopen(req) as resp:
+        with urllib.request.urlopen(req, timeout=30) as resp:
             return json.load(resp)
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
@@ -255,6 +255,28 @@ _ALLOWED_REASONS = {
     "CONFLICT",
 }
 
+# Patterns that should not appear in verified answer spans
+_SPAN_BLOCKLIST_PATTERNS = [
+    r"ignore\s*(previous|prior|all|the|your)?\s*instructions?",
+    r"system\s*prompt",
+    r"jailbreak",
+    r"bypass",
+    r"disregard",
+    r"override\s*(the|your|all)?\s*(instructions?|rules?)",
+    r"new\s*instructions?\s*:",
+    r"<\s*script",
+    r"javascript\s*:",
+    r"on\w+\s*=",  # onclick=, onerror=, etc.
+]
+
+
+def _span_contains_blocked_content(span: str) -> bool:
+    """Check if span contains potentially malicious content."""
+    if not span:
+        return False
+    lower = span.lower()
+    return any(re.search(pat, lower) for pat in _SPAN_BLOCKLIST_PATTERNS)
+
 
 def _parse_verifier_output(
     raw: str,
@@ -272,6 +294,8 @@ def _parse_verifier_output(
             if span.startswith(("\"", "'")) and span.endswith(("\"", "'")) and len(span) >= 2:
                 span = span[1:-1]
             if span and span in chunk_text:
+                if _span_contains_blocked_content(span):
+                    return "rejected", None, "BLOCKED_CONTENT"
                 return "verified", span, "FOUND"
             return "rejected", None, "SPAN_MISMATCH"
         if "NO" in upper:
@@ -298,6 +322,8 @@ def _parse_verifier_output(
     expected = chunk_text[start:end]
     if not span or span != expected:
         return "rejected", None, "SPAN_MISMATCH"
+    if _span_contains_blocked_content(span):
+        return "rejected", None, "BLOCKED_CONTENT"
     return "verified", span, reason
 
 

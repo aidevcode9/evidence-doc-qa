@@ -93,6 +93,9 @@ def build_debug_candidates(
                 doc_id=chunk["doc_id"],
                 doc_name=chunk.get("doc_name") or doc_name_for(chunk["doc_id"]),
                 page_num=chunk["page_num"],
+                page_end=chunk.get("page_end", chunk["page_num"]),
+                char_start=chunk.get("char_start", 0),
+                char_end=chunk.get("char_end", 0),
                 chunk_id=chunk["chunk_id"],
                 rrf_score=round(chunk["rrf_score"], 4) if "rrf_score" in chunk else None,
                 azure_search_score=(
