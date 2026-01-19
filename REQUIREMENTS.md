@@ -8,6 +8,7 @@
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v1.5 | Jan 2026 | Added Document Parsing NFRs (NFR-036 to NFR-039) — OCR, table extraction, Marker LLM mode |
 | v1.4 | Jan 2026 | Added Code Quality NFRs (NFR-040, NFR-041) |
 | v1.3 | Jan 2026 | Added LLM synthesis and cross-doc aggregation FRs (FR-026, FR-027) |
 | v1.2 | Jan 2026 | Added Search/Embedding abstraction NFRs (NFR-034, NFR-035) |
@@ -132,6 +133,10 @@
 | NFR-033 | Default providers by tier: Cloud (Claude 3.5 Sonnet + GPT-4o fallback), VPC (Azure OpenAI), On-Prem (Ollama + Llama 3.1 70B) | Each tier works with documented provider |
 | NFR-034 | Search/retrieval abstracted behind `SearchClient` interface | Swap Azure AI Search ↔ pgvector via config only, no code changes |
 | NFR-035 | Embeddings abstracted behind `EmbeddingClient` interface | Swap Azure ↔ OpenAI ↔ local via config only, no code changes |
+| NFR-036 | Document parsing abstracted behind `ParserClient` interface | Swap LlamaParse ↔ Marker ↔ Docling ↔ Unstructured via config; cache parsed results |
+| NFR-037 | OCR accuracy ≥95% on scanned legal documents | Measured via test corpus of scanned court filings |
+| NFR-038 | Table extraction preserves structure for indemnification schedules | Complex tables extracted as structured data, not flattened text |
+| NFR-039 | Parser supports LLM enhancement mode (Marker `--use_llm`) | Configurable via MARKER_USE_LLM env var; works with Gemini or Ollama |
 
 ### 5.5 Code Quality & Maintainability
 

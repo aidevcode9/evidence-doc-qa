@@ -1,6 +1,6 @@
 # STATUS.md
 
-Last updated: 2026-01-18
+Last updated: 2026-01-18 (evening)
 
 ---
 
@@ -15,13 +15,13 @@ Last updated: 2026-01-18
 
 | Task | FR | Branch | Started | Notes |
 |------|-----|--------|---------|-------|
-| Evidence-grounded answers + Confidence gating | FR-023, FR-024 | feat/evidence-grounded-answers | 01-18 | Multi-citation `[N]` markers; configurable threshold (0.70 default) |
+| Citation validation | FR-025 | feat/citation-validation | 01-18 | Post-LLM check; ≥90% text match |
 
 ## Next (Priority Order)
 
 | Task | FR | Depends On | Notes |
 |------|-----|------------|-------|
-| Citation validation | FR-025 | FR-024 | Post-LLM check; ≥90% text match |
+| OCR + image support | FR-010, FR-012 | — | Implement ParserClient (NFR-036); LlamaParse (cloud) or Marker (on-prem) |
 | Type annotations cleanup | NFR-040 | — | Fix 130+ mypy --strict errors; add generic type params, type stubs |
 
 ## Blocked
@@ -35,10 +35,13 @@ Last updated: 2026-01-18
 | Task | FR | PR | Date |
 |------|-----|-----|------|
 | Project structure | — | #1 | 01-15 |
-| Document upload | FR-010 | #2 | 01-16 |
-| PDF text extraction + OCR | FR-012 | #3 | 01-16 |
+| Document upload (PDF only) | FR-010 | #2 | 01-16 |
+| PDF text extraction (digital only) | FR-012 | #3 | 01-16 |
 | Hybrid retrieval (BM25 + vector + RRF) | FR-021 | — | 01-18 |
 | Chunking with page/char offsets | FR-013 | — | 01-18 |
+| Evidence-grounded answers + Confidence gating | FR-023, FR-024 | — | 01-18 |
+
+> ⚠️ **FR-010/FR-012 Partial:** Digital PDFs only. Image upload and OCR for scanned docs not yet implemented.
 
 ---
 
@@ -46,15 +49,15 @@ Last updated: 2026-01-18
 
 | FR | Requirement | Status |
 |----|-------------|--------|
-| FR-010 | Upload PDFs/images | ✅ Shipped |
-| FR-012 | Text extraction + OCR | ✅ Shipped |
+| FR-010 | Upload PDFs/images | ⚠️ Partial (PDFs only; images crash) |
+| FR-012 | Text extraction + OCR | ⚠️ Partial (digital PDFs; no OCR) |
 | FR-013 | Chunking with page/char offsets | ✅ Shipped |
 | FR-021 | Hybrid retrieval (BM25 + vector) | ✅ Shipped |
-| FR-023 | Evidence-grounded answers | 🔄 In Progress |
-| FR-024 | Confidence refusal | 🔄 In Progress |
-| FR-025 | Citation validation | ⬜ Next |
+| FR-023 | Evidence-grounded answers | ✅ Shipped |
+| FR-024 | Confidence refusal | ✅ Shipped |
+| FR-025 | Citation validation | 🔄 In Progress |
 
-**Remaining:** 2 of 7 FRs
+**Remaining:** 1 of 7 FRs (+ FR-010/FR-012 need OCR + image support)
 
 ---
 
@@ -62,15 +65,17 @@ Last updated: 2026-01-18
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
+| 01-19 | **Parser options: LlamaParse (cloud), Marker (on-prem fast), Docling (tables)** | LlamaParse best OCR; Marker 25pg/s with --use_llm; Docling 97.9% on complex tables |
+| 01-18 | **FR-010/FR-012 partial for MVP** | Digital PDFs work; OCR + image support deferred; scanned docs return empty text |
 | 01-18 | **Template-based multi-citation** (FR-023) | MVP approach; up to 3 citations with `[N]` markers; LLM synthesis (FR-026) deferred |
 | 01-18 | **Configurable threshold via .env** (FR-024) | DOCQA_CONFIDENCE_THRESHOLD=0.70 default; exposed in API response for UI display |
-| 01-18 | **Provider abstraction planned** (NFR-032, 034, 035) | Support Azure + pgvector + others via config; interfaces in ARCHITECTURE.md |
+| 01-18 | **Provider abstraction planned** (NFR-032, 034, 035, 036) | Support Azure + pgvector + others via config; interfaces in ARCHITECTURE.md |
 | 01-17 | **pgvector target for Phase 2** | Azure AI Search works but latency concerns; pgvector simpler long-term |
 | 01-16 | Confidence threshold 0.70 | Per architecture review |
 | 01-15 | Azure stack for MVP | Fastest path to working demo |
 
-> **Current Stack:** Azure AI Search + Azure OpenAI (see CLAUDE.md)
-> **Target Stack:** Config-driven providers (see ARCHITECTURE.md)
+> **Current Stack:** Azure AI Search + Azure OpenAI + pypdf (see CLAUDE.md)
+> **Target Stack:** Config-driven providers — LlamaParse/Marker/Docling for parsing (see ARCHITECTURE.md)
 
 ## Risks / Unknowns
 
@@ -97,7 +102,7 @@ Last updated: 2026-01-18
 |-------|----------|------|
 | 2. Citations UI | FR-030, FR-031, FR-032 | Clickable citations, export |
 | 3. Multi-tenancy | FR-001–004, FR-020 | Tenant + matter isolation |
-| 4. Provider Abstraction | NFR-032, NFR-034, NFR-035 | Config-driven Search/LLM/Embeddings |
+| 4. Provider Abstraction | NFR-032, NFR-034, NFR-035, NFR-036 | Config-driven Parser/Search/LLM/Embeddings |
 | 5. Auth | FR-050–052 | Login, SSO, admin |
 | 6. Audit | FR-040–043 | Logging, retention, deletion |
 | 7. Polish | FR-011, FR-014, FR-015, FR-022, FR-033 | Dedup, metadata, reranker |

@@ -370,6 +370,226 @@ def reciprocal_rank_fusion(
     return [docs[chunk_id] for chunk_id in sorted_ids]
 ```
 
+### ParserClient (NFR-036) — Document Parsing
+
+> **Status:** PLANNED. Current code uses `pypdf` directly in ingestion.
+
+Provider-agnostic interface for PDF/DOCX parsing with OCR. Critical for legal documents.
+
+```python
+# apps/api/app/parser/client.py
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from enum import Enum
+
+class ParserProvider(Enum):
+    LLAMAPARSE = "llamaparse"    # Cloud API, best scanned OCR
+    MARKER = "marker"            # Open source, fast, good with --use_llm
+    DOCLING = "docling"          # IBM, 97.9% on complex tables
+    UNSTRUCTURED = "unstructured" # Fallback, works offline
+
+@dataclass
+class PageContent:
+    page_number: int
+    text: str
+    tables: list[dict]  # Structured table data
+    images: list[dict]  # Image metadata (not raw bytes)
+
+@dataclass
+class ParseResult:
+    text: str                      # Full extracted text (markdown format)
+    pages: list[PageContent]       # Per-page content with metadata
+    tables: list[dict]             # All extracted tables (structured)
+    metadata: dict                 # Title, author, dates, page_count
+    parse_time_ms: int
+    provider: str                  # 'llamaparse' | 'marker' | 'docling' | 'unstructured'
+    cached: bool                   # True if loaded from cache
+
+class ParserClient(ABC):
+    @abstractmethod
+    async def parse(
+        self,
+        file_path: str,
+        *,
+        parsing_instructions: str | None = None,  # Natural language hints
+        extract_tables: bool = True,
+        force_ocr: bool = False,                  # Force OCR even on digital PDFs
+        use_cache: bool = True,
+    ) -> ParseResult:
+        """Parse document to structured text/markdown."""
+        pass
+
+# Implementations
+
+class LlamaParseClient(ParserClient):
+    """
+    LlamaParse API (cloud-only).
+
+    Strengths:
+    - VLM-powered OCR with self-correcting reasoning
+    - Best for scanned court filings
+    - Natural language parsing instructions
+    - ~6s per document regardless of size
+
+    Limitations:
+    - Struggles with deeply nested financial tables
+    - Cloud-only (requires API)
+    - Free tier: 1000 pages/day
+
+    Config:
+        PARSER_PROVIDER=llamaparse
+        LLAMAPARSE_API_KEY=xxx
+    """
+    pass
+
+class MarkerClient(ParserClient):
+    """
+    Datalab Marker (open source, self-hosted).
+
+    Strengths:
+    - Fast: 25 pages/sec on H100
+    - Benchmarks favorably vs LlamaParse
+    - With --use_llm: higher accuracy than LlamaParse on tables
+    - Outputs Markdown/JSON/HTML
+    - Works with Gemini or Ollama for LLM enhancement
+
+    Limitations:
+    - Needs GPU for best performance
+    - Requires --force_ocr for scanned docs
+
+    Config:
+        PARSER_PROVIDER=marker
+        MARKER_USE_LLM=true              # Enable LLM for better accuracy
+        MARKER_LLM_PROVIDER=gemini       # or 'ollama'
+        MARKER_LLM_MODEL=gemini-2.0-flash
+        MARKER_FORCE_OCR=false           # Set true for scanned documents
+    """
+    pass
+
+class DoclingClient(ParserClient):
+    """
+    IBM Docling (open source, self-hosted).
+
+    Strengths:
+    - 97.9% accuracy on complex tables (TableFormer model)
+    - Best for financial schedules, indemnification tables
+    - No API dependency (fully local)
+    - MIT license
+    - Integrates with LlamaIndex/LangChain
+
+    Limitations:
+    - Slower than Marker
+    - Struggles with scanned/handwritten documents
+
+    Config:
+        PARSER_PROVIDER=docling
+    """
+    pass
+
+class UnstructuredClient(ParserClient):
+    """
+    Unstructured.io (open source fallback).
+
+    Strengths:
+    - Works offline, no API dependency
+    - Good for simple documents
+    - 100% accuracy on simple tables
+
+    Limitations:
+    - 75% accuracy on complex tables
+    - Slow: 141s for 50 pages
+
+    Config:
+        PARSER_PROVIDER=unstructured
+    """
+    pass
+```
+
+**Parser comparison (2025 benchmarks):**
+
+| Parser | Speed | Simple Tables | Complex Tables | Scanned OCR | Deployment |
+|--------|-------|---------------|----------------|-------------|------------|
+| LlamaParse | ~6s/doc | Good | Struggles | **Best** (VLM) | Cloud API |
+| Marker | **25 pg/s** | Good | Good (w/ LLM) | Good | Self-hosted (GPU) |
+| Docling | Medium | Good | **97.9%** | Limited | Self-hosted |
+| Unstructured | Slow | 100% | 75% | Good | Self-hosted |
+
+**Legal document parsing requirements:**
+
+| Document Type | Challenge | Recommended Parser |
+|---------------|-----------|-------------------|
+| Scanned court filings | OCR accuracy | LlamaParse (VLM) or Marker (--force_ocr) |
+| Multi-column contracts | Layout preservation | Marker or LlamaParse |
+| Indemnification schedules | Complex tables | **Docling** (97.9%) |
+| Handwritten annotations | Handwriting recognition | LlamaParse |
+| Exhibits with mixed content | Multi-modal | LlamaParse or Marker (--use_llm) |
+| Financial statements | Nested tables | **Docling** |
+| High-volume batch | Speed | **Marker** (25 pg/s) |
+
+**Config-driven selection:**
+
+```python
+# config.py
+import os
+from enum import Enum
+
+PARSER_PROVIDER = os.getenv("PARSER_PROVIDER", "unstructured")
+
+# Marker-specific config
+MARKER_USE_LLM = os.getenv("MARKER_USE_LLM", "false").lower() == "true"
+MARKER_LLM_PROVIDER = os.getenv("MARKER_LLM_PROVIDER", "gemini")
+MARKER_LLM_MODEL = os.getenv("MARKER_LLM_MODEL", "gemini-2.0-flash")
+MARKER_FORCE_OCR = os.getenv("MARKER_FORCE_OCR", "false").lower() == "true"
+
+def get_parser_client() -> ParserClient:
+    if PARSER_PROVIDER == "llamaparse":
+        return LlamaParseClient(
+            api_key=os.getenv("LLAMAPARSE_API_KEY"),
+        )
+    elif PARSER_PROVIDER == "marker":
+        return MarkerClient(
+            use_llm=MARKER_USE_LLM,
+            llm_provider=MARKER_LLM_PROVIDER,
+            llm_model=MARKER_LLM_MODEL,
+            force_ocr=MARKER_FORCE_OCR,
+        )
+    elif PARSER_PROVIDER == "docling":
+        return DoclingClient()
+    elif PARSER_PROVIDER == "unstructured":
+        return UnstructuredClient()
+    else:
+        raise ValueError(f"Unknown PARSER_PROVIDER: {PARSER_PROVIDER}")
+```
+
+**Parsed document cache (recommended pattern):**
+
+```python
+# Cache parsed results to avoid re-parsing on re-index
+import hashlib
+from pathlib import Path
+
+CACHE_DIR = Path(".cache/parsed")
+
+async def parse_with_cache(
+    parser: ParserClient,
+    file_path: str,
+    force_ocr: bool = False,
+) -> ParseResult:
+    # Hash file content + config for cache key
+    file_hash = hashlib.sha256(Path(file_path).read_bytes()).hexdigest()[:16]
+    config_hash = f"{PARSER_PROVIDER}_{force_ocr}"
+    cache_path = CACHE_DIR / f"{file_hash}_{config_hash}.json"
+
+    if cache_path.exists():
+        return ParseResult.from_json(cache_path.read_text())
+
+    result = await parser.parse(file_path, force_ocr=force_ocr)
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(result.to_json())
+    return result
+```
+
 ---
 
 ## Deployment Tiers (NFR-033, NFR-034)
@@ -378,18 +598,32 @@ def reciprocal_rank_fusion(
 
 ### Provider Matrix
 
-| Tier | Search | Embeddings | LLM Primary | LLM Fallback |
-|------|--------|------------|-------------|--------------|
-| **Azure (current)** | Azure AI Search | Azure OpenAI | Azure OpenAI (GPT-4o) | — |
-| **Cloud OSS** | pgvector + FTS | OpenAI | Anthropic Claude 3.5 Sonnet | OpenAI GPT-4o |
-| **VPC** | pgvector + FTS | Azure OpenAI | Azure OpenAI (customer tenant) | Anthropic API |
-| **On-Prem** | pgvector + FTS | local (nomic) | Ollama + Llama 3.1 70B | Ollama + Qwen 2.5 72B |
+| Tier | Parser | Search | Embeddings | LLM Primary | LLM Fallback |
+|------|--------|--------|------------|-------------|--------------|
+| **Azure (current)** | pypdf (digital only) | Azure AI Search | Azure OpenAI | Azure OpenAI (GPT-4o) | — |
+| **Cloud OSS** | LlamaParse | pgvector + FTS | OpenAI | Anthropic Claude 3.5 Sonnet | OpenAI GPT-4o |
+| **VPC** | LlamaParse | pgvector + FTS | Azure OpenAI | Azure OpenAI (customer tenant) | Anthropic API |
+| **On-Prem (GPU)** | Marker (w/ Ollama) | pgvector + FTS | local (nomic) | Ollama + Llama 3.1 70B | Ollama + Qwen 2.5 72B |
+| **On-Prem (tables)** | Docling | pgvector + FTS | local (nomic) | Ollama + Llama 3.1 70B | Ollama + Qwen 2.5 72B |
+
+**Parser selection guide:**
+
+| Scenario | Parser | Why |
+|----------|--------|-----|
+| Scanned court filings | LlamaParse | Best VLM-powered OCR |
+| High-volume batch processing | Marker | 25 pages/sec on GPU |
+| Complex financial tables | Docling | 97.9% accuracy |
+| Air-gapped / no API | Docling or Marker | No cloud dependency |
+| Mixed (scans + tables) | Marker + `--use_llm` | Good balance |
 
 ### Config by Tier
 
 **Azure Mode (current implementation):**
 
 ```bash
+# Parser (document ingestion) - digital PDFs only, no OCR
+PARSER_PROVIDER=pypdf
+
 # Search
 SEARCH_PROVIDER=azure
 AZURE_SEARCH_ENDPOINT=https://your-search.search.windows.net
@@ -407,9 +641,19 @@ LLM_PROVIDER=azure
 AZURE_LLM_DEPLOYMENT=gpt-4o
 ```
 
-**Cloud OSS Mode (new direction):**
+**Cloud OSS Mode (recommended for new deployments):**
 
 ```bash
+# Parser (LlamaParse for best scanned OCR)
+PARSER_PROVIDER=llamaparse
+LLAMAPARSE_API_KEY=xxx
+
+# Alternative: Marker with Gemini for self-hosted
+# PARSER_PROVIDER=marker
+# MARKER_USE_LLM=true
+# MARKER_LLM_PROVIDER=gemini
+# MARKER_LLM_MODEL=gemini-2.0-flash
+
 # Search
 SEARCH_PROVIDER=pgvector
 DATABASE_URL=postgresql://user:pass@host:5432/evidence
@@ -429,11 +673,15 @@ LLM_FALLBACK_MODEL=gpt-4o
 **VPC Mode (customer cloud):**
 
 ```bash
+# Parser
+PARSER_PROVIDER=llamaparse
+LLAMAPARSE_API_KEY=xxx
+
 # Search
 SEARCH_PROVIDER=pgvector
 DATABASE_URL=postgresql://...  # Customer's managed Postgres
 
-# Embeddings  
+# Embeddings
 EMBEDDING_PROVIDER=azure
 AZURE_OPENAI_ENDPOINT=https://customer.openai.azure.com
 AZURE_OPENAI_API_KEY=xxx  # Customer's key
@@ -443,9 +691,16 @@ LLM_PROVIDER=azure
 AZURE_LLM_DEPLOYMENT=gpt-4o
 ```
 
-**On-Prem Mode (air-gapped):**
+**On-Prem Mode (air-gapped) — Option A: Marker (fast, GPU required):**
 
 ```bash
+# Parser (Marker with Ollama for LLM enhancement)
+PARSER_PROVIDER=marker
+MARKER_USE_LLM=true
+MARKER_LLM_PROVIDER=ollama
+MARKER_LLM_MODEL=llama3.1:70b
+MARKER_FORCE_OCR=false          # Set true for scanned documents
+
 # Search
 SEARCH_PROVIDER=pgvector
 DATABASE_URL=postgresql://localhost:5432/evidence
@@ -460,6 +715,34 @@ OLLAMA_BASE_URL=http://localhost:11434
 LLM_MODEL=llama3.1:70b
 LLM_FALLBACK_MODEL=qwen2.5:72b
 ```
+
+**On-Prem Mode (air-gapped) — Option B: Docling (best for complex tables):**
+
+```bash
+# Parser (Docling for 97.9% table accuracy)
+PARSER_PROVIDER=docling
+
+# Search
+SEARCH_PROVIDER=pgvector
+DATABASE_URL=postgresql://localhost:5432/evidence
+
+# Embeddings
+EMBEDDING_PROVIDER=local
+EMBEDDING_MODEL=nomic-embed-text-v1.5
+
+# LLM
+LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+LLM_MODEL=llama3.1:70b
+LLM_FALLBACK_MODEL=qwen2.5:72b
+```
+
+**On-Prem hardware requirements:**
+
+| Parser | GPU | RAM | Notes |
+|--------|-----|-----|-------|
+| Marker | Required (H100 ideal) | 16GB+ | 25 pages/sec throughput |
+| Docling | Optional | 8GB+ | Slower but no GPU needed |
 
 ### Switching Providers
 
@@ -549,7 +832,7 @@ Same images, Helm chart for:
 
 | Constraint | Rationale |
 |------------|-----------|
-| **All providers config-driven** | Swap Search/Embedding/LLM via env vars, no code changes (NFR-032, 034, 035) |
+| **All providers config-driven** | Swap Parser/Search/Embedding/LLM via env vars, no code changes (NFR-032, 034, 035, 036) |
 | All queries filter by `tenant_id` | Tenant isolation (FR-001) |
 | All artifacts scoped by `matter_id` | Matter isolation (FR-002) |
 | `embedding_model` stored with vectors | Mixed-model deployments; future migrations |
