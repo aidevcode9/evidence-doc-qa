@@ -18,5 +18,5 @@ Implement a robust structured logging system and enhanced diagnostic traces to d
 
 ## Acceptance Criteria
 - [ ] The API console shows clear, structured logs for every search and refusal.
-- [ ] Developers can see exactly why a query was refused (e.g., "Top score 0.12 < CONF_MIN 0.35").
+- [ ] Developers can see exactly why a query was refused (e.g., "Top score 0.12 < CONFIDENCE_THRESHOLD 0.70").
 - [ ] The `telemetry` table in Postgres contains realistic token estimations.

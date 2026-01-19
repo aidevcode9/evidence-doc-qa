@@ -60,7 +60,7 @@ Note: Azure Semantic Ranker requires Azure AI Search Standard S1+; if the servic
 ## 5. Retrieval Tuning
 | Variable | Description | Value |
 | :--- | :--- | :--- |
-| `DOCQA_CONF_MIN` | Minimum confidence for answering. | `0.35` |
+| `DOCQA_CONFIDENCE_THRESHOLD` | Minimum confidence for answering (FR-024). | `0.70` |
 | `DOCQA_AZURE_SEARCH_SCORE_MIN` | Minimum Azure hybrid search score for confidence gating. | `0.02` |
 | `DOCQA_AZURE_RERANK_MIN` | Minimum Azure semantic reranker score for confidence gating. | `1.5` |
 | `DOCQA_CONFIDENCE_VERSION` | Confidence calibration version label. | `v1` |

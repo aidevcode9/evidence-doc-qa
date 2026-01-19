@@ -15,7 +15,7 @@ from app.config import (
     STRICT_EVIDENCE,
     ALLOW_UNVERIFIED,
     CONFIDENCE_VERSION,
-    CONF_MIN,
+    CONFIDENCE_THRESHOLD,
     AZURE_SEARCH_SCORE_MIN,
     AZURE_RERANK_MIN,
     INDEX_VERSION,
@@ -129,7 +129,7 @@ def execute_ask(
     conf_score_key = rag.confidence_score_key(results)
     conf_min = rag.confidence_threshold(conf_score_key)
     conf_version = (
-        f"{CONFIDENCE_VERSION}|local={CONF_MIN}|azure_search={AZURE_SEARCH_SCORE_MIN}|azure_rerank={AZURE_RERANK_MIN}"
+        f"{CONFIDENCE_VERSION}|local={CONFIDENCE_THRESHOLD}|azure_search={AZURE_SEARCH_SCORE_MIN}|azure_rerank={AZURE_RERANK_MIN}"
     )
     confidence_meta = {
         "confidence_version": conf_version,
@@ -376,19 +376,55 @@ def execute_ask(
             reranker_score=azure_rerank_score,
         )
         
-    citation = Citation(
-        doc_id=verified_chunk["doc_id"],
-        doc_name=verified_chunk.get("doc_name") or rag.doc_name_for(verified_chunk["doc_id"]),
-        page_num=verified_chunk["page_num"],
-        page_end=verified_chunk.get("page_end", verified_chunk["page_num"]),
-        char_start=verified_chunk.get("char_start", 0),
-        char_end=verified_chunk.get("char_end", 0),
-        chunk_id=verified_chunk["chunk_id"],
-        snippet=supporting_span,
-        highlighted_text=verified_chunk.get("highlighted_text"),
-        score=round(ret_score, 4),
-    )
+    # Build multiple citations from verified/high-confidence chunks (FR-023)
+    verified_chunks = [verified_chunk]
+    for chunk in candidates[:3]:
+        chunk_id = chunk["chunk_id"]
+        if chunk_id != verified_chunk["chunk_id"]:
+            status, _ = verification_results.get(chunk_id, ("skipped", None))
+            if status == "verified":
+                verified_chunks.append(chunk)
+        if len(verified_chunks) >= 3:
+            break
+
+    citations = []
+    answer_parts = []
+    for idx, chunk in enumerate(verified_chunks, start=1):
+        # Get span for this chunk
+        chunk_span = verification_results.get(chunk["chunk_id"], (None, None))[1]
+        if not chunk_span:
+            chunk_span = evidence.best_supporting_span(question, chunk["chunk_text"])
+        if not chunk_span:
+            chunk_span = rag.snippet_for(chunk["chunk_text"])
+
+        doc_name = chunk.get("doc_name") or rag.doc_name_for(chunk["doc_id"])
+        page = chunk["page_num"]
+        chunk_score = rag.score_value(chunk, ret_score_key)
+
+        citation = Citation(
+            citation_index=idx,
+            doc_id=chunk["doc_id"],
+            doc_name=doc_name,
+            page_num=page,
+            page_end=chunk.get("page_end", page),
+            char_start=chunk.get("char_start", 0),
+            char_end=chunk.get("char_end", 0),
+            chunk_id=chunk["chunk_id"],
+            snippet=chunk_span,
+            highlighted_text=chunk.get("highlighted_text"),
+            score=round(chunk_score, 4),
+        )
+        citations.append(citation)
+
+        # Build answer part with [N] marker (FR-023)
+        if idx == 1:
+            answer_parts.append(f"According to {doc_name} (page {page}) [{idx}], {chunk_span}")
+        else:
+            answer_parts.append(f"Additionally, {doc_name} (page {page}) [{idx}] states: {chunk_span}")
     
+    # Use first citation for evidence support metadata
+    primary_citation = citations[0]
+
     evidence_support = EvidenceSupport(
         verdict=verification_status,
         verifier_model=verification.verifier_model(),
@@ -410,10 +446,11 @@ def execute_ask(
         rrf_margin=round(rrf_margin, 4),
         overlap_score=round(overlap, 4),
         supporting_span=supporting_span,
-        supporting_page_num=citation.page_num,
-        supporting_doc_name=citation.doc_name,
+        supporting_page_num=primary_citation.page_num,
+        supporting_doc_name=primary_citation.doc_name,
         docs_snapshot_id=docs_snapshot_id,
         index_version=INDEX_VERSION,
+        confidence_threshold=conf_min,  # FR-024: Show threshold in response
     )
     
     debug_candidates = rag.build_debug_candidates(
@@ -443,17 +480,18 @@ def execute_ask(
             tokens_out=tokens_out,
             cost_est=cost_est,
             evidence=evidence_support,
-            citations=[citation],
+            citations=citations,
             debug_candidates=debug_candidates,
             trace_metadata=trace_metadata,
         )
-        
-    answer_text = f"Based on the document, {supporting_span}"
+
+    # Build answer with [N] citation markers (FR-023)
+    answer_text = ". ".join(answer_parts) + "."
 
     response = AskResponse(
         request_id=request_id,
         answer_text=answer_text,
-        citations=[citation],
+        citations=citations,
         refusal_code=None,
         reason=None,
         evidence=evidence_support,
@@ -475,7 +513,7 @@ def execute_ask(
         cost_est=cost_est,
         trace_metadata=trace_metadata,
     )
-    logger.info(f"Success [{request_id}]: Response returned with citation from {citation.doc_name}")
+    logger.info(f"Success [{request_id}]: Response returned with {len(citations)} citation(s) from {primary_citation.doc_name}")
     return response
 
 

@@ -29,6 +29,7 @@ class AskRequest(BaseModel):
 
 
 class Citation(BaseModel):
+    citation_index: int  # Maps to [1], [2], [3] markers in answer_text
     doc_id: str
     doc_name: str
     page_num: int
@@ -58,6 +59,7 @@ class EvidenceSupport(BaseModel):
     supporting_doc_name: str
     docs_snapshot_id: str
     index_version: str
+    confidence_threshold: float  # Shows current threshold used for refusal (FR-024)
 
 
 class DebugCandidate(BaseModel):

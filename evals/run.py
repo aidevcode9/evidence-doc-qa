@@ -105,6 +105,35 @@ def main() -> None:
                         passed = False
                         failure_label = _set_failure(failure_label, "CITATION_MISMATCH")
 
+        # FR-023: Check citation markers in answer_text
+        answer_text = response.get("answer_text") or ""
+        if case.get("check_citation_markers"):
+            if "[1]" not in answer_text:
+                passed = False
+                failure_label = _set_failure(failure_label, "MISSING_CITATION_MARKER")
+
+        # FR-023: Check citation_index matches markers in answer_text
+        if case.get("check_citation_index"):
+            for c in citations:
+                idx = c.get("citation_index")
+                if idx is None or f"[{idx}]" not in answer_text:
+                    passed = False
+                    failure_label = _set_failure(failure_label, "CITATION_INDEX_MISMATCH")
+                    break
+
+        # FR-024: Check confidence_threshold exposed in evidence
+        if case.get("check_confidence_threshold"):
+            evidence_data = response.get("evidence") or {}
+            if evidence_data.get("confidence_threshold") is None:
+                passed = False
+                failure_label = _set_failure(failure_label, "MISSING_CONFIDENCE_THRESHOLD")
+
+        # FR-024: Check specific refusal code matches expected
+        if case.get("expected_refusal_code"):
+            if refusal_code != case["expected_refusal_code"]:
+                passed = False
+                failure_label = _set_failure(failure_label, "REFUSAL_CODE_MISMATCH")
+
         details.append(
             {
                 "id": case.get("id"),
