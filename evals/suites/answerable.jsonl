@@ -1,0 +1,6 @@
+{"id":"ans-001","category":"answerable","question":"What are the non-negotiable demo invariants?","docs_snapshot_id":"snap_demo","expected_behavior":"answer","expected_doc_id":"doc_demo","expected_page_num":1}
+{"id":"ans-002","category":"answerable","question":"Which Azure services are included in the demo default architecture?","docs_snapshot_id":"snap_demo","expected_behavior":"answer","expected_doc_id":"doc_demo","expected_page_num":1}
+{"id":"ans-003","category":"answerable","question":"What is the refusal behavior when retrieval confidence is below threshold?","docs_snapshot_id":"snap_demo","expected_behavior":"answer","expected_doc_id":"doc_demo","expected_page_num":1}
+{"id":"ans-004","category":"answerable","question":"What is the required response schema for answers?","docs_snapshot_id":"snap_demo","expected_behavior":"answer","expected_doc_id":"doc_demo","expected_page_num":1}
+{"id":"ans-005","category":"answerable","question":"Which changes require evals to pass before promotion?","docs_snapshot_id":"snap_demo","expected_behavior":"answer","expected_doc_id":"doc_demo","expected_page_num":1}
+{"id":"ans-006","category":"answerable","question":"What telemetry fields must be logged per request?","docs_snapshot_id":"snap_demo","expected_behavior":"answer","expected_doc_id":"doc_demo","expected_page_num":1}

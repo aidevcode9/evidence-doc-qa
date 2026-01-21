@@ -126,18 +126,223 @@ qa_messages (
 
 ```sql
 -- Track every LLM call for audit + cost
+# ARCHITECTURE.md — LLM Observability Update
+
+> **Instructions:** Replace the existing "LLM Tracking (NFR-030)" section (lines ~457-473) with this content.
+> Also add the new "LLM Observability" section immediately after.
+
+---
+
+### LLM Tracking (NFR-030)
+
+```sql
+-- Track every LLM call for audit + cost + Langfuse correlation
 llm_calls (
     id UUID PRIMARY KEY,
+    tenant_id UUID REFERENCES tenants(id),
     session_id UUID REFERENCES qa_sessions(id),
     message_id UUID REFERENCES qa_messages(id),
-    provider TEXT NOT NULL,      -- 'anthropic', 'openai', 'azure', 'ollama'
-    model TEXT NOT NULL,         -- 'claude-3.5-sonnet', 'gpt-4o', 'llama-3.1-70b'
+    
+    -- Provider info
+    provider TEXT NOT NULL,           -- 'anthropic', 'openai', 'azure', 'ollama'
+    model TEXT NOT NULL,              -- 'claude-3.5-sonnet', 'gpt-4o', 'llama-3.1-70b'
+    
+    -- Usage metrics
     prompt_tokens INT,
     completion_tokens INT,
     latency_ms INT,
-    status TEXT NOT NULL,        -- 'success', 'error', 'timeout'
+    
+    -- Status
+    status TEXT NOT NULL,             -- 'success', 'error', 'timeout'
+    error_message TEXT,               -- Error details if status != 'success'
+    
+    -- Langfuse correlation (for debugging UI)
+    langfuse_trace_id TEXT,           -- Links to Langfuse trace for debugging
+    langfuse_generation_id TEXT,      -- Links to specific generation span
+    
     created_at TIMESTAMP DEFAULT NOW()
 );
+
+-- Index for billing queries
+CREATE INDEX idx_llm_calls_tenant_date ON llm_calls(tenant_id, created_at);
+
+-- Index for Langfuse correlation lookups
+CREATE INDEX idx_llm_calls_langfuse ON llm_calls(langfuse_trace_id);
+```
+
+### LLM Observability with Langfuse
+
+> **Dual logging:** Every LLM call is logged to BOTH `llm_calls` table (for billing/audit) AND Langfuse (for debugging UI).
+
+#### Why Dual Logging?
+
+| Concern | Solution |
+|---------|----------|
+| **Billing accuracy** | `llm_calls` table — you own the data |
+| **Legal audit trail** | `llm_calls` table — data stays in your DB |
+| **Debugging UI** | Langfuse — trace viewer, prompt playground |
+| **Cost dashboard** | Langfuse — built-in cost tracking |
+| **Offline access** | `llm_calls` table — no external dependency |
+
+#### Langfuse Configuration
+
+```python
+# apps/api/app/config.py
+
+import os
+
+# Langfuse settings
+LANGFUSE_ENABLED = os.getenv("LANGFUSE_ENABLED", "true").lower() == "true"
+LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")
+LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
+LANGFUSE_HOST = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")  # or self-hosted URL
+```
+
+#### Environment Variables
+
+```bash
+# Langfuse (add to existing env vars)
+LANGFUSE_ENABLED=true
+LANGFUSE_PUBLIC_KEY=pk-lf-xxx
+LANGFUSE_SECRET_KEY=sk-lf-xxx
+LANGFUSE_HOST=https://cloud.langfuse.com  # or http://localhost:3000 for self-hosted
+```
+
+#### TracedLLMClient Interface
+
+```python
+# apps/api/app/llm/traced_client.py
+
+from dataclasses import dataclass
+from typing import Optional
+
+from app.llm.client import LLMClient, LLMResponse
+
+
+@dataclass
+class TracedLLMResponse(LLMResponse):
+    """LLM response with observability metadata."""
+    langfuse_trace_id: Optional[str] = None
+    langfuse_generation_id: Optional[str] = None
+
+
+class TracedLLMClient:
+    """
+    Wrapper that logs all LLM calls to:
+    1. llm_calls table (for billing + audit)
+    2. Langfuse (for debugging UI)
+    
+    INVARIANT: Every LLM call MUST go through this wrapper.
+    Direct calls to LLMClient are prohibited.
+    """
+    
+    def __init__(self, client: LLMClient, db_session: AsyncSession):
+        self.client = client
+        self.db_session = db_session
+        self.langfuse = self._init_langfuse()
+    
+    async def complete(
+        self,
+        tenant_id: str,
+        session_id: str,
+        message_id: Optional[str],
+        system_prompt: str,
+        user_prompt: str,
+        user_id: Optional[str] = None,
+        matter_id: Optional[str] = None,
+        temperature: float = 0.0,
+        max_tokens: int = 4096,
+    ) -> TracedLLMResponse:
+        """
+        Complete with full observability.
+        
+        Flow:
+        1. Start Langfuse trace
+        2. Make LLM call
+        3. Log to llm_calls table
+        4. End Langfuse generation
+        5. Return enriched response
+        """
+        # Implementation details in full file
+        pass
+```
+
+#### Usage Pattern
+
+```python
+# apps/api/app/services/ask_service.py
+
+class AskService:
+    def __init__(self, db_session: AsyncSession):
+        self.llm = TracedLLMClient(
+            client=get_llm_client(),
+            db_session=db_session,
+        )
+    
+    async def answer_question(self, ...):
+        # CORRECT: Use TracedLLMClient
+        response = await self.llm.complete(
+            tenant_id=tenant_id,
+            session_id=session_id,
+            message_id=message_id,
+            system_prompt=prompt,
+            user_prompt=question,
+        )
+        
+        # WRONG: Direct LLM call (no telemetry)
+        # response = await self.raw_client.complete(...)
+```
+
+#### Self-Hosted Langfuse (Enterprise/VPC/On-Prem)
+
+```yaml
+# docker-compose.langfuse.yml
+services:
+  langfuse:
+    image: langfuse/langfuse:latest
+    ports:
+      - "3001:3000"
+    environment:
+      DATABASE_URL: postgresql://langfuse:password@postgres-langfuse:5432/langfuse
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET}
+      NEXTAUTH_URL: ${LANGFUSE_URL}
+      SALT: ${LANGFUSE_SALT}
+    depends_on:
+      - postgres-langfuse
+  
+  postgres-langfuse:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: ${LANGFUSE_DB_PASSWORD}
+      POSTGRES_DB: langfuse
+    volumes:
+      - langfuse_pgdata:/var/lib/postgresql/data
+
+volumes:
+  langfuse_pgdata:
+```
+
+#### Deployment Tiers
+
+| Tier | Langfuse Deployment | Notes |
+|------|---------------------|-------|
+| Starter | Langfuse Cloud (free: 50k traces/mo) | Quick start |
+| Professional | Langfuse Cloud (Pro: $59/mo) | More traces |
+| Enterprise | Self-hosted Langfuse | Data sovereignty |
+| VPC | Self-hosted in customer VPC | Customer controls |
+| On-Prem | Self-hosted on-prem | Air-gapped option |
+
+---
+
+> **Add to Key Constraints section:**
+
+| Constraint | Rationale |
+|------------|-----------|
+| **Dual logging to llm_calls + Langfuse** | Billing/audit in DB; debugging in Langfuse (NFR-030) |
+| **langfuse_trace_id stored in llm_calls** | Correlation for debugging specific calls |
+| **Self-hosted Langfuse for Enterprise+** | Data sovereignty for legal industry |
+| **All LLM calls via TracedLLMClient** | No raw LLM calls allowed; ensures telemetry |
 ```
 
 ### Audit & Usage Tables

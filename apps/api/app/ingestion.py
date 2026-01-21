@@ -1,7 +1,8 @@
 import hashlib
 import os
+import warnings
 from datetime import datetime, timezone
-from typing import List, Tuple
+from typing import TYPE_CHECKING, List, Tuple
 
 from pypdf import PdfReader
 from azure.storage.blob import BlobServiceClient
@@ -15,6 +16,9 @@ from app.config import (
     RAW_DIR,
 )
 from app.telemetry import logger
+
+if TYPE_CHECKING:
+    from app.parsers.base import ParseResult
 
 
 def compute_sha256(data: bytes) -> str:
@@ -59,7 +63,43 @@ def _upload_to_azure(blob_name: str, data: bytes) -> None:
         print(f"Warning: Failed to upload to Azure Blob Storage: {e}")
 
 
+async def parse_document(path: str, *, force_ocr: bool = False) -> "ParseResult":
+    """Parse a document using the configured ParserClient.
+
+    This is the recommended method for document parsing. It uses the parser
+    configured via PARSER_PROVIDER environment variable.
+
+    Args:
+        path: Path to the document file.
+        force_ocr: Force OCR even on digital documents (if supported).
+
+    Returns:
+        ParseResult with extracted text, pages, and metadata.
+    """
+    from app.parsers import get_parser_client
+
+    parser = get_parser_client()
+    return await parser.parse(path, force_ocr=force_ocr)
+
+
 def parse_pdf_pages(path: str) -> List[str]:
+    """Parse PDF pages using pypdf.
+
+    .. deprecated::
+        Use :func:`parse_document` instead for better OCR support
+        and structured results.
+
+    Args:
+        path: Path to PDF file.
+
+    Returns:
+        List of page text strings.
+    """
+    warnings.warn(
+        "parse_pdf_pages is deprecated. Use parse_document() instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     reader = PdfReader(path)
     pages = []
     for page in reader.pages:

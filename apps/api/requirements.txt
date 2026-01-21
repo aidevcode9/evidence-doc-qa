@@ -13,3 +13,7 @@ opentelemetry-sdk==1.27.0
 opentelemetry-instrumentation-fastapi==0.48b0
 opentelemetry-instrumentation-urllib==0.48b0
 azure-monitor-opentelemetry-exporter>=1.0.0b20
+
+# Document Parsing (FR-010, FR-012, NFR-036)
+marker-pdf>=1.0.0
+llama-parse>=0.4.0

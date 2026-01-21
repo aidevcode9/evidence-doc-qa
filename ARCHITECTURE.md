@@ -125,20 +125,364 @@ qa_messages (
 ### LLM Tracking (NFR-030)
 
 ```sql
--- Track every LLM call for audit + cost
+-- Track every LLM call for audit + cost + Langfuse correlation
 llm_calls (
     id UUID PRIMARY KEY,
+    tenant_id UUID REFERENCES tenants(id),
     session_id UUID REFERENCES qa_sessions(id),
     message_id UUID REFERENCES qa_messages(id),
-    provider TEXT NOT NULL,      -- 'anthropic', 'openai', 'azure', 'ollama'
-    model TEXT NOT NULL,         -- 'claude-3.5-sonnet', 'gpt-4o', 'llama-3.1-70b'
+    
+    -- Provider info
+    provider TEXT NOT NULL,           -- 'anthropic', 'openai', 'azure', 'ollama'
+    model TEXT NOT NULL,              -- 'claude-3.5-sonnet', 'gpt-4o', 'llama-3.1-70b'
+    
+    -- Usage metrics
     prompt_tokens INT,
     completion_tokens INT,
     latency_ms INT,
-    status TEXT NOT NULL,        -- 'success', 'error', 'timeout'
+    
+    -- Status
+    status TEXT NOT NULL,             -- 'success', 'error', 'timeout'
+    error_message TEXT,               -- Error details if status != 'success'
+    
+    -- Langfuse correlation (for debugging UI)
+    langfuse_trace_id TEXT,           -- Links to Langfuse trace for debugging
+    langfuse_generation_id TEXT,      -- Links to specific generation span
+    
     created_at TIMESTAMP DEFAULT NOW()
 );
+
+-- Index for billing queries
+CREATE INDEX idx_llm_calls_tenant_date ON llm_calls(tenant_id, created_at);
+
+-- Index for Langfuse correlation lookups
+CREATE INDEX idx_llm_calls_langfuse ON llm_calls(langfuse_trace_id);
 ```
+
+### LLM Observability with Langfuse
+
+> **Dual logging:** Every LLM call is logged to BOTH `llm_calls` table (for billing/audit) AND Langfuse (for debugging UI).
+
+#### Why Dual Logging?
+
+| Concern | Solution |
+|---------|----------|
+| **Billing accuracy** | `llm_calls` table — you own the data |
+| **Legal audit trail** | `llm_calls` table — data stays in your DB |
+| **Debugging UI** | Langfuse — trace viewer, prompt playground |
+| **Cost dashboard** | Langfuse — built-in cost tracking |
+| **Offline access** | `llm_calls` table — no external dependency |
+
+#### Langfuse Configuration
+
+```python
+# apps/api/app/config.py
+
+import os
+
+# Langfuse settings
+LANGFUSE_ENABLED = os.getenv("LANGFUSE_ENABLED", "true").lower() == "true"
+LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")
+LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
+LANGFUSE_HOST = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")  # or self-hosted URL
+```
+
+#### Environment Variables
+
+```bash
+# Langfuse (add to existing env vars)
+LANGFUSE_ENABLED=true
+LANGFUSE_PUBLIC_KEY=pk-lf-xxx
+LANGFUSE_SECRET_KEY=sk-lf-xxx
+LANGFUSE_HOST=https://cloud.langfuse.com  # or http://localhost:3000 for self-hosted
+```
+
+#### TracedLLMClient Wrapper
+
+```python
+# apps/api/app/llm/traced_client.py
+
+import time
+from uuid import uuid4
+from typing import Optional
+from dataclasses import dataclass
+
+from langfuse import Langfuse
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
+
+from app.config import (
+    LANGFUSE_ENABLED, 
+    LANGFUSE_PUBLIC_KEY, 
+    LANGFUSE_SECRET_KEY,
+    LANGFUSE_HOST,
+)
+from app.llm.client import LLMClient, LLMResponse
+
+
+@dataclass
+class TracedLLMResponse(LLMResponse):
+    """LLM response with observability metadata."""
+    langfuse_trace_id: Optional[str] = None
+    langfuse_generation_id: Optional[str] = None
+
+
+class TracedLLMClient:
+    """
+    Wrapper that logs all LLM calls to:
+    1. llm_calls table (for billing + audit)
+    2. Langfuse (for debugging UI)
+    
+    INVARIANT: Every LLM call MUST go through this wrapper.
+    Direct calls to LLMClient are prohibited.
+    """
+    
+    def __init__(self, client: LLMClient, db_session: AsyncSession):
+        self.client = client
+        self.db_session = db_session
+        self.langfuse: Optional[Langfuse] = None
+        
+        if LANGFUSE_ENABLED and LANGFUSE_PUBLIC_KEY:
+            self.langfuse = Langfuse(
+                public_key=LANGFUSE_PUBLIC_KEY,
+                secret_key=LANGFUSE_SECRET_KEY,
+                host=LANGFUSE_HOST,
+            )
+    
+    async def complete(
+        self,
+        tenant_id: str,
+        session_id: str,
+        message_id: Optional[str],
+        system_prompt: str,
+        user_prompt: str,
+        user_id: Optional[str] = None,
+        matter_id: Optional[str] = None,
+        temperature: float = 0.0,
+        max_tokens: int = 4096,
+    ) -> TracedLLMResponse:
+        """
+        Complete with full observability.
+        Logs to both llm_calls table AND Langfuse.
+        """
+        call_id = str(uuid4())
+        langfuse_trace_id = None
+        langfuse_generation_id = None
+        
+        # Start Langfuse trace
+        trace = None
+        generation = None
+        if self.langfuse:
+            trace = self.langfuse.trace(
+                name="qa_completion",
+                user_id=user_id,
+                session_id=session_id,
+                metadata={
+                    "tenant_id": tenant_id,
+                    "matter_id": matter_id,
+                    "call_id": call_id,
+                },
+            )
+            langfuse_trace_id = trace.id
+            
+            generation = trace.generation(
+                name="llm_completion",
+                model=self.client.model,
+                input={"system": system_prompt, "user": user_prompt},
+                model_parameters={
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                },
+            )
+            langfuse_generation_id = generation.id
+        
+        # Make LLM call
+        start_time = time.perf_counter()
+        status = "success"
+        error_message = None
+        response = None
+        
+        try:
+            response = await self.client.complete(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            
+            if generation:
+                generation.end(
+                    output=response.content,
+                    usage={
+                        "prompt_tokens": response.prompt_tokens,
+                        "completion_tokens": response.completion_tokens,
+                    },
+                )
+                
+        except Exception as e:
+            status = "error"
+            error_message = str(e)
+            
+            if generation:
+                generation.end(
+                    output=None,
+                    status_message=error_message,
+                    level="ERROR",
+                )
+            raise
+            
+        finally:
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
+            
+            # Log to llm_calls table (ALWAYS, even on error)
+            await self._log_to_database(
+                call_id=call_id,
+                tenant_id=tenant_id,
+                session_id=session_id,
+                message_id=message_id,
+                provider=self.client.provider,
+                model=self.client.model,
+                prompt_tokens=response.prompt_tokens if response else 0,
+                completion_tokens=response.completion_tokens if response else 0,
+                latency_ms=latency_ms,
+                status=status,
+                error_message=error_message,
+                langfuse_trace_id=langfuse_trace_id,
+                langfuse_generation_id=langfuse_generation_id,
+            )
+            
+            if self.langfuse:
+                self.langfuse.flush()
+        
+        return TracedLLMResponse(
+            content=response.content,
+            provider=response.provider,
+            model=response.model,
+            prompt_tokens=response.prompt_tokens,
+            completion_tokens=response.completion_tokens,
+            latency_ms=latency_ms,
+            langfuse_trace_id=langfuse_trace_id,
+            langfuse_generation_id=langfuse_generation_id,
+        )
+    
+    async def _log_to_database(
+        self,
+        call_id: str,
+        tenant_id: str,
+        session_id: str,
+        message_id: Optional[str],
+        provider: str,
+        model: str,
+        prompt_tokens: int,
+        completion_tokens: int,
+        latency_ms: int,
+        status: str,
+        error_message: Optional[str],
+        langfuse_trace_id: Optional[str],
+        langfuse_generation_id: Optional[str],
+    ) -> None:
+        """Log to llm_calls table for billing and audit."""
+        await self.db_session.execute(
+            text("""
+                INSERT INTO llm_calls (
+                    id, tenant_id, session_id, message_id,
+                    provider, model,
+                    prompt_tokens, completion_tokens, latency_ms,
+                    status, error_message,
+                    langfuse_trace_id, langfuse_generation_id,
+                    created_at
+                ) VALUES (
+                    :id, :tenant_id, :session_id, :message_id,
+                    :provider, :model,
+                    :prompt_tokens, :completion_tokens, :latency_ms,
+                    :status, :error_message,
+                    :langfuse_trace_id, :langfuse_generation_id,
+                    NOW()
+                )
+            """),
+            {
+                "id": call_id,
+                "tenant_id": tenant_id,
+                "session_id": session_id,
+                "message_id": message_id,
+                "provider": provider,
+                "model": model,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "latency_ms": latency_ms,
+                "status": status,
+                "error_message": error_message,
+                "langfuse_trace_id": langfuse_trace_id,
+                "langfuse_generation_id": langfuse_generation_id,
+            }
+        )
+```
+
+#### Usage in Services
+
+```python
+# apps/api/app/services/ask_service.py
+
+class AskService:
+    def __init__(self, db_session: AsyncSession):
+        self.llm = TracedLLMClient(
+            client=get_llm_client(),
+            db_session=db_session,
+        )
+    
+    async def answer_question(self, ...):
+        # CORRECT: Use TracedLLMClient
+        response = await self.llm.complete(
+            tenant_id=tenant_id,
+            session_id=session_id,
+            message_id=message_id,
+            system_prompt=prompt,
+            user_prompt=question,
+        )
+        
+        # WRONG: Direct LLM call (no telemetry)
+        # response = await self.raw_client.complete(...)
+```
+
+#### Self-Hosted Langfuse (Enterprise/VPC/On-Prem)
+
+```yaml
+# docker-compose.langfuse.yml
+services:
+  langfuse:
+    image: langfuse/langfuse:latest
+    ports:
+      - "3001:3000"
+    environment:
+      DATABASE_URL: postgresql://langfuse:password@postgres-langfuse:5432/langfuse
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET}
+      NEXTAUTH_URL: ${LANGFUSE_URL}
+      SALT: ${LANGFUSE_SALT}
+    depends_on:
+      - postgres-langfuse
+  
+  postgres-langfuse:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: ${LANGFUSE_DB_PASSWORD}
+      POSTGRES_DB: langfuse
+    volumes:
+      - langfuse_pgdata:/var/lib/postgresql/data
+
+volumes:
+  langfuse_pgdata:
+```
+
+#### Deployment Tiers
+
+| Tier | Langfuse Deployment | Notes |
+|------|---------------------|-------|
+| Starter | Langfuse Cloud (free: 50k traces/mo) | Quick start |
+| Professional | Langfuse Cloud (Pro: $59/mo) | More traces |
+| Enterprise | Self-hosted Langfuse | Data sovereignty |
+| VPC | Self-hosted in customer VPC | Customer controls |
+| On-Prem | Self-hosted on-prem | Air-gapped option |
 
 ### Audit & Usage Tables
 
@@ -372,7 +716,7 @@ def reciprocal_rank_fusion(
 
 ### ParserClient (NFR-036) — Document Parsing
 
-> **Status:** PLANNED. Current code uses `pypdf` directly in ingestion.
+> **Status:** ✅ IMPLEMENTED. See `apps/api/app/parsers/` module.
 
 Provider-agnostic interface for PDF/DOCX parsing with OCR. Critical for legal documents.
 
@@ -419,175 +763,6 @@ class ParserClient(ABC):
     ) -> ParseResult:
         """Parse document to structured text/markdown."""
         pass
-
-# Implementations
-
-class LlamaParseClient(ParserClient):
-    """
-    LlamaParse API (cloud-only).
-
-    Strengths:
-    - VLM-powered OCR with self-correcting reasoning
-    - Best for scanned court filings
-    - Natural language parsing instructions
-    - ~6s per document regardless of size
-
-    Limitations:
-    - Struggles with deeply nested financial tables
-    - Cloud-only (requires API)
-    - Free tier: 1000 pages/day
-
-    Config:
-        PARSER_PROVIDER=llamaparse
-        LLAMAPARSE_API_KEY=xxx
-    """
-    pass
-
-class MarkerClient(ParserClient):
-    """
-    Datalab Marker (open source, self-hosted).
-
-    Strengths:
-    - Fast: 25 pages/sec on H100
-    - Benchmarks favorably vs LlamaParse
-    - With --use_llm: higher accuracy than LlamaParse on tables
-    - Outputs Markdown/JSON/HTML
-    - Works with Gemini or Ollama for LLM enhancement
-
-    Limitations:
-    - Needs GPU for best performance
-    - Requires --force_ocr for scanned docs
-
-    Config:
-        PARSER_PROVIDER=marker
-        MARKER_USE_LLM=true              # Enable LLM for better accuracy
-        MARKER_LLM_PROVIDER=gemini       # or 'ollama'
-        MARKER_LLM_MODEL=gemini-2.0-flash
-        MARKER_FORCE_OCR=false           # Set true for scanned documents
-    """
-    pass
-
-class DoclingClient(ParserClient):
-    """
-    IBM Docling (open source, self-hosted).
-
-    Strengths:
-    - 97.9% accuracy on complex tables (TableFormer model)
-    - Best for financial schedules, indemnification tables
-    - No API dependency (fully local)
-    - MIT license
-    - Integrates with LlamaIndex/LangChain
-
-    Limitations:
-    - Slower than Marker
-    - Struggles with scanned/handwritten documents
-
-    Config:
-        PARSER_PROVIDER=docling
-    """
-    pass
-
-class UnstructuredClient(ParserClient):
-    """
-    Unstructured.io (open source fallback).
-
-    Strengths:
-    - Works offline, no API dependency
-    - Good for simple documents
-    - 100% accuracy on simple tables
-
-    Limitations:
-    - 75% accuracy on complex tables
-    - Slow: 141s for 50 pages
-
-    Config:
-        PARSER_PROVIDER=unstructured
-    """
-    pass
-```
-
-**Parser comparison (2025 benchmarks):**
-
-| Parser | Speed | Simple Tables | Complex Tables | Scanned OCR | Deployment |
-|--------|-------|---------------|----------------|-------------|------------|
-| LlamaParse | ~6s/doc | Good | Struggles | **Best** (VLM) | Cloud API |
-| Marker | **25 pg/s** | Good | Good (w/ LLM) | Good | Self-hosted (GPU) |
-| Docling | Medium | Good | **97.9%** | Limited | Self-hosted |
-| Unstructured | Slow | 100% | 75% | Good | Self-hosted |
-
-**Legal document parsing requirements:**
-
-| Document Type | Challenge | Recommended Parser |
-|---------------|-----------|-------------------|
-| Scanned court filings | OCR accuracy | LlamaParse (VLM) or Marker (--force_ocr) |
-| Multi-column contracts | Layout preservation | Marker or LlamaParse |
-| Indemnification schedules | Complex tables | **Docling** (97.9%) |
-| Handwritten annotations | Handwriting recognition | LlamaParse |
-| Exhibits with mixed content | Multi-modal | LlamaParse or Marker (--use_llm) |
-| Financial statements | Nested tables | **Docling** |
-| High-volume batch | Speed | **Marker** (25 pg/s) |
-
-**Config-driven selection:**
-
-```python
-# config.py
-import os
-from enum import Enum
-
-PARSER_PROVIDER = os.getenv("PARSER_PROVIDER", "unstructured")
-
-# Marker-specific config
-MARKER_USE_LLM = os.getenv("MARKER_USE_LLM", "false").lower() == "true"
-MARKER_LLM_PROVIDER = os.getenv("MARKER_LLM_PROVIDER", "gemini")
-MARKER_LLM_MODEL = os.getenv("MARKER_LLM_MODEL", "gemini-2.0-flash")
-MARKER_FORCE_OCR = os.getenv("MARKER_FORCE_OCR", "false").lower() == "true"
-
-def get_parser_client() -> ParserClient:
-    if PARSER_PROVIDER == "llamaparse":
-        return LlamaParseClient(
-            api_key=os.getenv("LLAMAPARSE_API_KEY"),
-        )
-    elif PARSER_PROVIDER == "marker":
-        return MarkerClient(
-            use_llm=MARKER_USE_LLM,
-            llm_provider=MARKER_LLM_PROVIDER,
-            llm_model=MARKER_LLM_MODEL,
-            force_ocr=MARKER_FORCE_OCR,
-        )
-    elif PARSER_PROVIDER == "docling":
-        return DoclingClient()
-    elif PARSER_PROVIDER == "unstructured":
-        return UnstructuredClient()
-    else:
-        raise ValueError(f"Unknown PARSER_PROVIDER: {PARSER_PROVIDER}")
-```
-
-**Parsed document cache (recommended pattern):**
-
-```python
-# Cache parsed results to avoid re-parsing on re-index
-import hashlib
-from pathlib import Path
-
-CACHE_DIR = Path(".cache/parsed")
-
-async def parse_with_cache(
-    parser: ParserClient,
-    file_path: str,
-    force_ocr: bool = False,
-) -> ParseResult:
-    # Hash file content + config for cache key
-    file_hash = hashlib.sha256(Path(file_path).read_bytes()).hexdigest()[:16]
-    config_hash = f"{PARSER_PROVIDER}_{force_ocr}"
-    cache_path = CACHE_DIR / f"{file_hash}_{config_hash}.json"
-
-    if cache_path.exists():
-        return ParseResult.from_json(cache_path.read_text())
-
-    result = await parser.parse(file_path, force_ocr=force_ocr)
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    cache_path.write_text(result.to_json())
-    return result
 ```
 
 ---
@@ -600,63 +775,27 @@ async def parse_with_cache(
 
 | Tier | Parser | Search | Embeddings | LLM Primary | LLM Fallback |
 |------|--------|--------|------------|-------------|--------------|
-| **Azure (current)** | pypdf (digital only) | Azure AI Search | Azure OpenAI | Azure OpenAI (GPT-4o) | — |
-| **Cloud OSS** | LlamaParse | pgvector + FTS | OpenAI | Anthropic Claude 3.5 Sonnet | OpenAI GPT-4o |
-| **VPC** | LlamaParse | pgvector + FTS | Azure OpenAI | Azure OpenAI (customer tenant) | Anthropic API |
+| **Starter** | pypdf | pgvector + FTS | OpenAI | Anthropic Claude 3.5 | OpenAI GPT-4o |
+| **Professional** | LlamaParse | pgvector + FTS | OpenAI | Anthropic Claude 3.5 | OpenAI GPT-4o |
+| **Enterprise** | LlamaParse | pgvector + FTS | OpenAI | Anthropic Claude 3.5 | OpenAI GPT-4o |
+| **VPC** | LlamaParse | pgvector + FTS | Azure OpenAI | Azure OpenAI (customer) | Anthropic API |
 | **On-Prem (GPU)** | Marker (w/ Ollama) | pgvector + FTS | local (nomic) | Ollama + Llama 3.1 70B | Ollama + Qwen 2.5 72B |
 | **On-Prem (tables)** | Docling | pgvector + FTS | local (nomic) | Ollama + Llama 3.1 70B | Ollama + Qwen 2.5 72B |
 
-**Parser selection guide:**
-
-| Scenario | Parser | Why |
-|----------|--------|-----|
-| Scanned court filings | LlamaParse | Best VLM-powered OCR |
-| High-volume batch processing | Marker | 25 pages/sec on GPU |
-| Complex financial tables | Docling | 97.9% accuracy |
-| Air-gapped / no API | Docling or Marker | No cloud dependency |
-| Mixed (scans + tables) | Marker + `--use_llm` | Good balance |
-
 ### Config by Tier
 
-**Azure Mode (current implementation):**
+**Starter/Professional Mode:**
 
 ```bash
-# Parser (document ingestion) - digital PDFs only, no OCR
-PARSER_PROVIDER=pypdf
+# Database
+DATABASE_URL=postgresql://user:pass@host:5432/evidence
 
-# Search
-SEARCH_PROVIDER=azure
-AZURE_SEARCH_ENDPOINT=https://your-search.search.windows.net
-AZURE_SEARCH_API_KEY=xxx
-AZURE_SEARCH_INDEX=evidence-chunks
-
-# Embeddings
-EMBEDDING_PROVIDER=azure
-AZURE_OPENAI_ENDPOINT=https://your-openai.openai.azure.com
-AZURE_OPENAI_API_KEY=xxx
-AZURE_EMBEDDING_DEPLOYMENT=text-embedding-3-large
-
-# LLM
-LLM_PROVIDER=azure
-AZURE_LLM_DEPLOYMENT=gpt-4o
-```
-
-**Cloud OSS Mode (recommended for new deployments):**
-
-```bash
-# Parser (LlamaParse for best scanned OCR)
-PARSER_PROVIDER=llamaparse
+# Parser
+PARSER_PROVIDER=llamaparse  # or pypdf for Starter
 LLAMAPARSE_API_KEY=xxx
-
-# Alternative: Marker with Gemini for self-hosted
-# PARSER_PROVIDER=marker
-# MARKER_USE_LLM=true
-# MARKER_LLM_PROVIDER=gemini
-# MARKER_LLM_MODEL=gemini-2.0-flash
 
 # Search
 SEARCH_PROVIDER=pgvector
-DATABASE_URL=postgresql://user:pass@host:5432/evidence
 
 # Embeddings
 EMBEDDING_PROVIDER=openai
@@ -668,81 +807,22 @@ ANTHROPIC_API_KEY=xxx
 LLM_MODEL=claude-3.5-sonnet
 LLM_FALLBACK_PROVIDER=openai
 LLM_FALLBACK_MODEL=gpt-4o
+
+# Langfuse (cloud)
+LANGFUSE_ENABLED=true
+LANGFUSE_PUBLIC_KEY=pk-lf-xxx
+LANGFUSE_SECRET_KEY=sk-lf-xxx
+LANGFUSE_HOST=https://cloud.langfuse.com
 ```
 
-**VPC Mode (customer cloud):**
+**Enterprise/VPC/On-Prem Mode:**
 
 ```bash
-# Parser
-PARSER_PROVIDER=llamaparse
-LLAMAPARSE_API_KEY=xxx
+# ... same as above, plus:
 
-# Search
-SEARCH_PROVIDER=pgvector
-DATABASE_URL=postgresql://...  # Customer's managed Postgres
-
-# Embeddings
-EMBEDDING_PROVIDER=azure
-AZURE_OPENAI_ENDPOINT=https://customer.openai.azure.com
-AZURE_OPENAI_API_KEY=xxx  # Customer's key
-
-# LLM
-LLM_PROVIDER=azure
-AZURE_LLM_DEPLOYMENT=gpt-4o
+# Langfuse (self-hosted)
+LANGFUSE_HOST=http://langfuse.internal:3000
 ```
-
-**On-Prem Mode (air-gapped) — Option A: Marker (fast, GPU required):**
-
-```bash
-# Parser (Marker with Ollama for LLM enhancement)
-PARSER_PROVIDER=marker
-MARKER_USE_LLM=true
-MARKER_LLM_PROVIDER=ollama
-MARKER_LLM_MODEL=llama3.1:70b
-MARKER_FORCE_OCR=false          # Set true for scanned documents
-
-# Search
-SEARCH_PROVIDER=pgvector
-DATABASE_URL=postgresql://localhost:5432/evidence
-
-# Embeddings
-EMBEDDING_PROVIDER=local
-EMBEDDING_MODEL=nomic-embed-text-v1.5
-
-# LLM
-LLM_PROVIDER=ollama
-OLLAMA_BASE_URL=http://localhost:11434
-LLM_MODEL=llama3.1:70b
-LLM_FALLBACK_MODEL=qwen2.5:72b
-```
-
-**On-Prem Mode (air-gapped) — Option B: Docling (best for complex tables):**
-
-```bash
-# Parser (Docling for 97.9% table accuracy)
-PARSER_PROVIDER=docling
-
-# Search
-SEARCH_PROVIDER=pgvector
-DATABASE_URL=postgresql://localhost:5432/evidence
-
-# Embeddings
-EMBEDDING_PROVIDER=local
-EMBEDDING_MODEL=nomic-embed-text-v1.5
-
-# LLM
-LLM_PROVIDER=ollama
-OLLAMA_BASE_URL=http://localhost:11434
-LLM_MODEL=llama3.1:70b
-LLM_FALLBACK_MODEL=qwen2.5:72b
-```
-
-**On-Prem hardware requirements:**
-
-| Parser | GPU | RAM | Notes |
-|--------|-----|-----|-------|
-| Marker | Required (H100 ideal) | 16GB+ | 25 pages/sec throughput |
-| Docling | Optional | 8GB+ | Slower but no GPU needed |
 
 ### Switching Providers
 
@@ -786,6 +866,7 @@ pytest evals/ -v
 | Metrics | Prometheus + Grafana | Dashboards, alerts |
 | Logs | Loki | Centralized logging |
 | Tracing | OpenTelemetry + Jaeger | Distributed tracing |
+| LLM Observability | Langfuse (self-hosted or cloud) | LLM debugging, cost tracking |
 | Ingestion Queue | PostgreSQL SKIP LOCKED | Simple job queue (or Redis for scale) |
 
 ### Docker Compose (Single Node)
@@ -797,9 +878,12 @@ services:
     environment:
       DATABASE_URL: postgresql://...
       LLM_PROVIDER: anthropic
+      LANGFUSE_ENABLED: "true"
+      LANGFUSE_HOST: http://langfuse:3000
     depends_on:
       - postgres
       - minio
+      - langfuse
 
   postgres:
     image: pgvector/pgvector:pg16
@@ -816,6 +900,33 @@ services:
     build: ./apps/api
     command: python -m app.worker
     # Ingestion worker (OCR, chunking, embedding)
+
+  # Langfuse for LLM observability
+  langfuse:
+    image: langfuse/langfuse:latest
+    ports:
+      - "3001:3000"
+    environment:
+      DATABASE_URL: postgresql://langfuse:password@postgres-langfuse:5432/langfuse
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET}
+      NEXTAUTH_URL: http://localhost:3001
+      SALT: ${LANGFUSE_SALT}
+    depends_on:
+      - postgres-langfuse
+  
+  postgres-langfuse:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: ${LANGFUSE_DB_PASSWORD}
+      POSTGRES_DB: langfuse
+    volumes:
+      - langfuse_pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
+  miniodata:
+  langfuse_pgdata:
 ```
 
 ### Kubernetes (Multi-Node)
@@ -825,6 +936,7 @@ Same images, Helm chart for:
 - StatefulSet for Postgres (or managed RDS/Cloud SQL)
 - PVC for MinIO (or managed S3)
 - Separate worker deployment (scale independently)
+- Langfuse deployment (or use Langfuse Cloud)
 
 ---
 
@@ -833,10 +945,13 @@ Same images, Helm chart for:
 | Constraint | Rationale |
 |------------|-----------|
 | **All providers config-driven** | Swap Parser/Search/Embedding/LLM via env vars, no code changes (NFR-032, 034, 035, 036) |
+| **Dual logging to llm_calls + Langfuse** | Billing/audit in DB; debugging in Langfuse (NFR-030) |
+| **langfuse_trace_id stored in llm_calls** | Correlation for debugging specific calls |
+| **All LLM calls via TracedLLMClient** | No raw LLM calls allowed; ensures telemetry |
+| **Self-hosted Langfuse for Enterprise+** | Data sovereignty for legal industry |
 | All queries filter by `tenant_id` | Tenant isolation (FR-001) |
 | All artifacts scoped by `matter_id` | Matter isolation (FR-002) |
 | `embedding_model` stored with vectors | Mixed-model deployments; future migrations |
-| `llm_calls` logged for every response | Audit trail + cost tracking (NFR-030) |
 | No hard cloud vendor deps | Deployment portability (Section 6.3) |
 | pgvector over dedicated vector DB | Single database reduces ops complexity |
 

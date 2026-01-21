@@ -74,6 +74,21 @@ AZURE_SEMANTIC_ENABLED = _is_truthy(_getenv("DOCQA_AZURE_SEMANTIC_ENABLED", "1")
 AZURE_SEARCH_CREATE_INDEX = _is_truthy(_getenv("AZURE_SEARCH_CREATE_INDEX", "0"))
 ENABLE_INDEXING = _is_truthy(_getenv("DOCQA_ENABLE_INDEXING", "1"))
 
+# Document Parsing (NFR-036)
+PARSER_PROVIDER = _getenv("PARSER_PROVIDER", "marker")  # pypdf | marker | llamaparse
+
+# Marker-specific
+MARKER_USE_LLM = _is_truthy(_getenv("MARKER_USE_LLM", "0"))
+MARKER_FORCE_OCR = _is_truthy(_getenv("MARKER_FORCE_OCR", "0"))
+
+# LlamaParse-specific (cloud)
+LLAMAPARSE_API_KEY = _getenv("LLAMAPARSE_API_KEY", "")
+
+# Upload limits
+MAX_UPLOAD_SIZE_MB = int(_getenv("DOCQA_MAX_UPLOAD_SIZE_MB", "50"))
+MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
+MIN_EXTRACTED_TEXT_CHARS = int(_getenv("DOCQA_MIN_EXTRACTED_TEXT_CHARS", "10"))
+
 METRICS_ADMIN_TOKEN = _getenv(
     "METRICS_ADMIN_TOKEN", _getenv("DOCQA_METRICS_ADMIN_TOKEN", "")
 )

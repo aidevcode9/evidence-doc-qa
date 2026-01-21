@@ -2,25 +2,90 @@ import uuid
 from fastapi import UploadFile, HTTPException
 
 from app import ingestion, indexing
+from app.config import MAX_UPLOAD_SIZE_BYTES, MAX_UPLOAD_SIZE_MB, MIN_EXTRACTED_TEXT_CHARS
 from app.db import Chunk, Document, insert_chunks, insert_document
+from app.parsers import get_parser_client
+from app.telemetry import logger
 
 
 async def process_document_upload(file: UploadFile) -> dict:
+    """Process an uploaded document.
+
+    Handles PDF and image uploads (FR-010). Uses the configured parser
+    for text extraction including OCR for scanned documents (FR-012).
+
+    Args:
+        file: Uploaded file from FastAPI.
+
+    Returns:
+        Dict with doc_id, doc_sha256, docs_snapshot_id, and optional warnings.
+
+    Raises:
+        HTTPException: If file is empty, too large, unsupported type, or parsing fails.
+    """
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="Empty upload.")
 
+    # Check file size limit
+    if len(data) > MAX_UPLOAD_SIZE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE_MB}MB.",
+        )
+
+    # Validate file extension
+    filename = file.filename or "upload.pdf"
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+
+    parser = get_parser_client()
+    if ext not in parser.supported_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type: {ext}. "
+            f"Supported: {', '.join(sorted(parser.supported_extensions))}",
+        )
+
     doc_id = uuid.uuid4().hex
     doc_sha256 = ingestion.compute_sha256(data)
     docs_snapshot_id = ingestion.docs_snapshot_id_for(doc_sha256)
-    storage_path = ingestion.save_raw_pdf(doc_id, file.filename or "upload.pdf", data)
+    storage_path = ingestion.save_raw_pdf(doc_id, filename, data)
 
     try:
-        pages = ingestion.parse_pdf_pages(storage_path)
+        # Use new async parse_document (FR-012)
+        parse_result = await ingestion.parse_document(storage_path)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"PARSE_FAILED: {exc}") from exc
+        # Sanitize error message to not leak internal paths
+        error_msg = str(exc)
+        if storage_path in error_msg:
+            error_msg = error_msg.replace(storage_path, "[document]")
+        logger.error(f"Parse failed for doc_id={doc_id}: {exc}")
+        raise HTTPException(status_code=400, detail=f"PARSE_FAILED: {error_msg}") from exc
 
-    chunk_rows = ingestion.build_chunk_rows(doc_id, doc_sha256, docs_snapshot_id, pages)
+    # Build chunk rows from ParseResult pages (preserves page/char offsets)
+    chunk_rows = _build_chunk_rows_from_parse_result(
+        doc_id=doc_id,
+        doc_sha256=doc_sha256,
+        docs_snapshot_id=docs_snapshot_id,
+        parse_result=parse_result,
+    )
+
+    # Check for empty extraction (OCR failure or empty document)
+    total_text_chars = sum(len(row[9]) for row in chunk_rows)  # row[9] is chunk_text
+    warnings = []
+
+    if not chunk_rows or total_text_chars < MIN_EXTRACTED_TEXT_CHARS:
+        logger.warning(
+            f"Low text extraction for doc_id={doc_id}: "
+            f"chunks={len(chunk_rows)}, chars={total_text_chars}, "
+            f"provider={parse_result.provider}"
+        )
+        warnings.append(
+            f"Low text extracted ({total_text_chars} chars). "
+            "Document may be scanned/image-based with OCR issues. "
+            "Queries against this document may not return results."
+        )
+
     # Tuple structure (FR-013): (chunk_id, snap_id, doc_id, sha256, page_num, page_end, chunk_idx, char_start, char_end, text, mode)
     insert_chunks(
         Chunk(
@@ -42,7 +107,7 @@ async def process_document_upload(file: UploadFile) -> dict:
         Document(
             doc_id=doc_id,
             doc_sha256=doc_sha256,
-            doc_name=file.filename or "upload.pdf",
+            doc_name=filename,
             storage_path=storage_path,
             ingested_at_utc=ingestion.utc_now(),
             docs_snapshot_id=docs_snapshot_id,
@@ -51,13 +116,72 @@ async def process_document_upload(file: UploadFile) -> dict:
 
     indexing.index_chunk_rows(
         doc_id=doc_id,
-        doc_name=file.filename or "upload.pdf",
+        doc_name=filename,
         docs_snapshot_id=docs_snapshot_id,
         chunk_rows=chunk_rows,
     )
 
-    return {
+    result = {
         "doc_id": doc_id,
         "doc_sha256": doc_sha256,
         "docs_snapshot_id": docs_snapshot_id,
     }
+
+    if warnings:
+        result["warnings"] = warnings
+
+    return result
+
+
+def _build_chunk_rows_from_parse_result(
+    doc_id: str,
+    doc_sha256: str,
+    docs_snapshot_id: str,
+    parse_result: "ingestion.ParseResult",
+) -> list[tuple]:
+    """Build chunk rows from ParseResult.
+
+    This preserves the page numbers and character offsets from the parser
+    while applying the configured chunking strategy.
+
+    Args:
+        doc_id: Document ID.
+        doc_sha256: Document SHA256 hash.
+        docs_snapshot_id: Snapshot ID.
+        parse_result: Result from parse_document().
+
+    Returns:
+        List of chunk row tuples.
+    """
+    from app.config import PARSER_MODE
+
+    rows = []
+    for page in parse_result.pages:
+        page_num = page.page_number
+        page_end = page_num  # Single-page chunks for now (FR-013)
+
+        # Apply chunking to page text
+        for chunk_index, (char_start_rel, char_end_rel, chunk_text) in enumerate(
+            ingestion.chunk_page_text(page.text)
+        ):
+            # Convert relative char offsets to absolute
+            char_start = page.char_start + char_start_rel
+            char_end = page.char_start + char_end_rel
+
+            chunk_id = ingestion.make_chunk_id(doc_id, page_num, chunk_index)
+            rows.append(
+                (
+                    chunk_id,
+                    docs_snapshot_id,
+                    doc_id,
+                    doc_sha256,
+                    page_num,
+                    page_end,
+                    chunk_index,
+                    char_start,
+                    char_end,
+                    chunk_text,
+                    PARSER_MODE,
+                )
+            )
+    return rows
