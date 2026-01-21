@@ -1,0 +1,2 @@
+{"id":"tbl-001","category":"table_layout","question":"If the docs contain a table, how should Tier 1 parsing preserve it?","docs_snapshot_id":"snap_demo","expected_behavior":"answer","expected_doc_id":"doc_demo","expected_page_num":1,"description":"Table preservation in parsing"}
+{"id":"tbl-002","category":"table_layout","question":"What are the tiered parsing modes and which is disabled in the demo?","docs_snapshot_id":"snap_demo","expected_behavior":"answer","expected_doc_id":"doc_demo","expected_page_num":1,"description":"Parsing mode configuration"}

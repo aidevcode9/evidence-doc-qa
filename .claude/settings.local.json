@@ -7,7 +7,8 @@
       "Bash(pytest:*)",
       "Bash(where:*)",
       "Read(//c/**)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(../../.venv/Scripts/python.exe -m pytest:*)"
     ]
   }
 }

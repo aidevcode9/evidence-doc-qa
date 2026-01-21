@@ -3,11 +3,20 @@
 ## How to Run
 
 ```bash
-# Local (quick)
+# Run pytest tests (quick)
 pytest evals/ -v -k "not slow"
 
-# Local (full)
+# Run pytest tests (full)
 pytest evals/ -v
+
+# Run eval runner (single suite)
+python -m evals.run --suite adversarial
+
+# Run eval runner (all suites)
+python -m evals.run --all
+
+# Run eval runner (verbose)
+python -m evals.run --all --verbose
 
 # CI (runs on PRs to main)
 # .github/workflows/evals.yml
@@ -122,16 +131,37 @@ When you find a bug:
 
 ```
 evals/
-├── conftest.py              # Fixtures (sample docs, test client)
-├── test_happy_path.py       # HP-* cases
-├── test_refusals.py         # RF-* cases
-├── test_edge_cases.py       # EC-* cases
-├── test_adversarial.py      # AD-* cases
-├── test_citations.py        # CI-* cases
-├── golden.jsonl             # Query + expected output pairs
-└── golden_data/
-    ├── sample_contract.pdf
-    └── sample_nda.pdf
+├── conftest.py              # Pytest fixtures (EvalClient, load_suite, markers)
+├── run.py                   # Eval runner (--suite, --all, --verbose)
+├── golden.jsonl             # Legacy query file (combined)
+│
+├── suites/                  # Suite files by category
+│   ├── answerable.jsonl     # HP-* happy path cases (6 cases)
+│   ├── refusals.jsonl       # RF-* refusal cases (7 cases)
+│   ├── adversarial.jsonl    # AD-* prompt injection tests (10 cases)
+│   ├── edge_cases.jsonl     # EC-* boundary conditions (10 cases)
+│   ├── citation_integrity.jsonl  # CI-* FR-023 tests (5 cases)
+│   ├── confidence_threshold.jsonl # CT-* FR-024 tests (4 cases)
+│   └── table_layout.jsonl   # TBL-* table tests (2 cases)
+│
+├── test_happy_path.py       # Pytest: answerable questions
+├── test_refusals.py         # Pytest: refusal cases
+├── test_edge_cases.py       # Pytest: edge cases + OCR
+├── test_adversarial.py      # Pytest: security tests
+├── test_citations.py        # Pytest: citation integrity (FR-023)
+├── test_confidence.py       # Pytest: confidence threshold (FR-024)
+│
+└── out/                     # Eval output (gitignored)
+    ├── details.jsonl        # Per-case results
+    └── summary.json         # Aggregate metrics
+```
+
+**Suite file format (JSONL):**
+
+```json
+{"id":"ans-001","category":"answerable","question":"...","expected_behavior":"answer","expected_doc_id":"doc_demo","expected_page_num":1}
+{"id":"ref-001","category":"refusal","question":"...","expected_behavior":"refuse","expected_refusal_code":"NO_SUPPORTING_EVIDENCE"}
+{"id":"adv-001","category":"adversarial","question":"...","expected_behavior":"refuse","expected_refusal_code":"INJECTION_DETECTED"}
 ```
 
 ## CI Configuration
@@ -187,4 +217,26 @@ pytest evals/ -v -s --tb=long
 
 # Generate coverage report
 pytest evals/ --cov=apps/api/app/retrieval --cov=apps/api/app/evidence
+
+# Run eval runner with specific suite
+python -m evals.run --suite adversarial --verbose
+
+# Run all suites with fail-fast
+python -m evals.run --all --fail-fast
+```
+
+## Eval Runner Options
+
+```
+--suite NAME          Run single suite (e.g., adversarial, refusals)
+--suite-dir DIR       Run all suites in directory
+--all                 Run all suites in evals/suites/
+--api-url URL         API endpoint (default: http://localhost:8000)
+--citation-threshold  Citation coverage threshold (default: 0.90)
+--refusal-threshold   Refusal correctness threshold (default: 0.90)
+--adversarial-threshold  Adversarial refusal threshold (default: 1.00)
+--retrieval-threshold Retrieval hit@k threshold (default: 0.90)
+--p95-latency-threshold  Max p95 latency in ms (default: 4000)
+--fail-fast           Stop on first suite failure
+--verbose, -v         Show per-case results
 ```

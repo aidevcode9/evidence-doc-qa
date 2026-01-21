@@ -13,8 +13,12 @@ Steps:
 6. Enter Plan mode and create a plan for implementing this task:
    - What files need to change?
    - What's the implementation approach?
-   - What tests are needed?
+   - What tests are needed? follow a naming convention.
    - Any risks or concerns?
+   - All prompts in their own files to versioned?
+   - what telemtry is needed?
+   - what key areas should be logged?
+   - any variables to add to the .env?
 7. Show me the plan and wait for approval before implementing
 
 Don't start coding until I approve the plan.

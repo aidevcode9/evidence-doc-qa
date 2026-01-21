@@ -1,9 +1,9 @@
 import os
-import uuid
 import json
 from apps.api.app import ingestion, indexing, db
 from apps.api.app.db import Chunk, Document, IndexRecord, init_db, session_scope
 from sqlalchemy import select
+
 
 def is_already_seeded(snapshot_id: str) -> bool:
     """Checks if the specific snapshot already exists in the DB."""
@@ -15,6 +15,7 @@ def is_already_seeded(snapshot_id: str) -> bool:
     except Exception:
         # If table doesn't exist yet, it's not seeded
         return False
+
 
 def seed():
     # Use ARCHITECTURE.md as the source
@@ -37,14 +38,14 @@ def seed():
 
     with open(src_path, "r", encoding="utf-8") as f:
         text = f.read()
-    
+
     doc_id = "doc_demo"
     doc_sha256 = ingestion.compute_sha256(text.encode("utf-8"))
-    
+
     # Parse and chunk
     pages = [text]
     chunk_rows = ingestion.build_chunk_rows(doc_id, doc_sha256, docs_snapshot_id, pages)
-    
+
     print(f"Building {len(chunk_rows)} chunks...")
 
     # Insert Chunks
@@ -78,10 +79,11 @@ def seed():
 
     # Insert IndexRecords (Local mode)
     from apps.api.app.embeddings import embed_texts
+
     texts = [row[8] for row in chunk_rows]
     embeddings = embed_texts(texts)
     indexed_at = ingestion.utc_now()
-    
+
     from apps.api.app.config import INDEX_VERSION, RETRIEVAL_VERSION
 
     db.insert_index_records(
@@ -110,6 +112,7 @@ def seed():
     )
 
     print("Seeding complete.")
+
 
 if __name__ == "__main__":
     seed()

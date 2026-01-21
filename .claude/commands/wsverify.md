@@ -14,6 +14,7 @@ Steps:
    - Ask if I want you to fix it
 5. If all pass:
    - Report summary
+   - Update project documenation as necessary
    - Confirm ready to commit
 
 For UI changes, also describe how to manually verify in the browser.

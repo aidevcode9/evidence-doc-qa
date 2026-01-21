@@ -1,12 +1,12 @@
 # STATUS.md
 
-Last updated: 2026-01-18 (evening)
+Last updated: 2026-01-20
 
 ---
 
 ## Current Phase: 1 — Core RAG
 
-**Goal:** Working Q&A with citations  
+**Goal:** Working Q&A with citations
 **Target:** End of January 2026
 
 ---
@@ -15,14 +15,13 @@ Last updated: 2026-01-18 (evening)
 
 | Task | FR | Branch | Started | Notes |
 |------|-----|--------|---------|-------|
-| Citation validation | FR-025 | feat/citation-validation | 01-18 | Post-LLM check; ≥90% text match |
+| Type annotations cleanup | NFR-040 | — | — | Fix 130+ mypy --strict errors; add generic type params, type stubs |
 
 ## Next (Priority Order)
 
 | Task | FR | Depends On | Notes |
 |------|-----|------------|-------|
-| OCR + image support | FR-010, FR-012 | — | Implement ParserClient (NFR-036); LlamaParse (cloud) or Marker (on-prem) |
-| Type annotations cleanup | NFR-040 | — | Fix 130+ mypy --strict errors; add generic type params, type stubs |
+| — | — | — | — |
 
 ## Blocked
 
@@ -40,8 +39,12 @@ Last updated: 2026-01-18 (evening)
 | Hybrid retrieval (BM25 + vector + RRF) | FR-021 | — | 01-18 |
 | Chunking with page/char offsets | FR-013 | — | 01-18 |
 | Evidence-grounded answers + Confidence gating | FR-023, FR-024 | — | 01-18 |
+| Citation validation | FR-025 | — | 01-19 |
+| **OCR + Image support** | FR-010, FR-012, NFR-036 | — | 01-20 |
+| **ParserClient abstraction** | NFR-036 | — | 01-20 |
+| **Eval suite reorganization** | — | — | 01-20 |
 
-> ⚠️ **FR-010/FR-012 Partial:** Digital PDFs only. Image upload and OCR for scanned docs not yet implemented.
+> ✅ **FR-010/FR-012 Complete:** PDF + image upload with OCR support via Marker (default) or LlamaParse (cloud).
 
 ---
 
@@ -49,15 +52,16 @@ Last updated: 2026-01-18 (evening)
 
 | FR | Requirement | Status |
 |----|-------------|--------|
-| FR-010 | Upload PDFs/images | ⚠️ Partial (PDFs only; images crash) |
-| FR-012 | Text extraction + OCR | ⚠️ Partial (digital PDFs; no OCR) |
+| FR-010 | Upload PDFs/images | ✅ Shipped (PDF + PNG/JPG/TIFF) |
+| FR-012 | Text extraction + OCR | ✅ Shipped (Marker default, LlamaParse optional) |
 | FR-013 | Chunking with page/char offsets | ✅ Shipped |
 | FR-021 | Hybrid retrieval (BM25 + vector) | ✅ Shipped |
 | FR-023 | Evidence-grounded answers | ✅ Shipped |
 | FR-024 | Confidence refusal | ✅ Shipped |
-| FR-025 | Citation validation | 🔄 In Progress |
+| FR-025 | Citation validation | ✅ Shipped |
+| NFR-036 | ParserClient abstraction | ✅ Shipped |
 
-**Remaining:** 1 of 7 FRs (+ FR-010/FR-012 need OCR + image support)
+**Phase 1 Complete!** All core RAG features shipped.
 
 ---
 
@@ -65,8 +69,11 @@ Last updated: 2026-01-18 (evening)
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
+| 01-20 | **Marker as default parser** | Marker is fast (25pg/s on GPU), open-source, supports OCR; LlamaParse available for cloud OCR |
+| 01-20 | **Eval suites by category** | Separate JSONL files per category (answerable, refusals, adversarial, etc.) for maintainability |
+| 01-20 | **File size limit 50MB** | `MAX_UPLOAD_SIZE_MB` env var; prevents memory issues; returns HTTP 413 on violation |
+| 01-20 | **OCR warning on low text extraction** | Returns warning when < 10 chars extracted; alerts user to potential OCR failures |
 | 01-19 | **Parser options: LlamaParse (cloud), Marker (on-prem fast), Docling (tables)** | LlamaParse best OCR; Marker 25pg/s with --use_llm; Docling 97.9% on complex tables |
-| 01-18 | **FR-010/FR-012 partial for MVP** | Digital PDFs work; OCR + image support deferred; scanned docs return empty text |
 | 01-18 | **Template-based multi-citation** (FR-023) | MVP approach; up to 3 citations with `[N]` markers; LLM synthesis (FR-026) deferred |
 | 01-18 | **Configurable threshold via .env** (FR-024) | DOCQA_CONFIDENCE_THRESHOLD=0.70 default; exposed in API response for UI display |
 | 01-18 | **Provider abstraction planned** (NFR-032, 034, 035, 036) | Support Azure + pgvector + others via config; interfaces in ARCHITECTURE.md |
@@ -74,15 +81,15 @@ Last updated: 2026-01-18 (evening)
 | 01-16 | Confidence threshold 0.70 | Per architecture review |
 | 01-15 | Azure stack for MVP | Fastest path to working demo |
 
-> **Current Stack:** Azure AI Search + Azure OpenAI + pypdf (see CLAUDE.md)
-> **Target Stack:** Config-driven providers — LlamaParse/Marker/Docling for parsing (see ARCHITECTURE.md)
+> **Current Stack:** Azure AI Search + Azure OpenAI + configurable parser
+> **Parser options:** `PARSER_PROVIDER=marker` (default, OCR), `pypdf` (digital only), `llamaparse` (cloud OCR)
 
 ## Risks / Unknowns
 
 | Risk | Impact | Mitigation | Status |
 |------|--------|------------|--------|
 | Hybrid retrieval latency | p95 > 3s | Load test before demo | ⬜ TODO |
-| OCR accuracy on scanned docs | Bad citations | Test with real docs; add to EVALS.md | ⬜ TODO |
+| OCR accuracy on scanned docs | Bad citations | Marker OCR implemented; evals added | ✅ Mitigated |
 | Claude rate limits | Demo fails | Request increase; add caching | ⬜ TODO |
 | Multi-page table extraction | Missing data | Test with sample contracts | ⬜ TODO |
 
