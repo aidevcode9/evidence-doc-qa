@@ -1,6 +1,6 @@
 # STATUS.md
 
-Last updated: 2026-01-20
+Last updated: 2026-01-21 (Phase 1 Complete)
 
 ---
 
@@ -15,7 +15,7 @@ Last updated: 2026-01-20
 
 | Task | FR | Branch | Started | Notes |
 |------|-----|--------|---------|-------|
-| Type annotations cleanup | NFR-040 | — | — | Fix 130+ mypy --strict errors; add generic type params, type stubs |
+| — | — | — | — | — |
 
 ## Next (Priority Order)
 
@@ -43,6 +43,8 @@ Last updated: 2026-01-20
 | **OCR + Image support** | FR-010, FR-012, NFR-036 | — | 01-20 |
 | **ParserClient abstraction** | NFR-036 | — | 01-20 |
 | **Eval suite reorganization** | — | — | 01-20 |
+| **Type annotations (mypy --strict)** | NFR-040 | — | 01-21 |
+| **pytest-asyncio configuration** | — | — | 01-21 |
 
 > ✅ **FR-010/FR-012 Complete:** PDF + image upload with OCR support via Marker (default) or LlamaParse (cloud).
 

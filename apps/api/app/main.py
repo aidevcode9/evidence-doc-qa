@@ -35,7 +35,7 @@ app.include_router(metrics.router)
 
 
 @app.on_event("startup")
-def startup_event():
+def startup_event() -> None:
     # Initialize DB
     try:
         init_db()

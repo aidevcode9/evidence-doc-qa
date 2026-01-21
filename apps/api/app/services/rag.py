@@ -1,4 +1,5 @@
 import hashlib
+from typing import Any
 
 from app import evidence
 from app.config import (
@@ -9,8 +10,10 @@ from app.config import (
 from app.db import get_doc_name
 from app.schemas import DebugCandidate
 
+ChunkDict = dict[str, Any]
 
-def retrieval_score_key(results: list[dict]) -> str:
+
+def retrieval_score_key(results: list[ChunkDict]) -> str:
     if not results:
         return "rrf_score"
     if "rrf_score" in results[0]:
@@ -20,7 +23,7 @@ def retrieval_score_key(results: list[dict]) -> str:
     return "rrf_score"
 
 
-def confidence_score_key(results: list[dict]) -> str:
+def confidence_score_key(results: list[ChunkDict]) -> str:
     if not results:
         return "rrf_score"
     if "azure_search_score" in results[0]:
@@ -38,7 +41,7 @@ def confidence_threshold(score_key: str) -> float:
     return CONFIDENCE_THRESHOLD
 
 
-def score_value(chunk: dict, key: str) -> float:
+def score_value(chunk: ChunkDict, key: str) -> float:
     value = chunk.get(key)
     if value is None:
         return 0.0
@@ -55,7 +58,7 @@ def doc_name_for(doc_id: str) -> str:
 
 def build_debug_candidates(
     question: str,
-    chunks: list[dict],
+    chunks: list[ChunkDict],
     *,
     verification_results: dict[str, tuple[str, str | None]] | None = None,
     verification_reasons: dict[str, str] | None = None,
@@ -114,7 +117,7 @@ def build_debug_candidates(
     return debug_candidates
 
 
-def build_retrieval_trace(results: list[dict]) -> dict | None:
+def build_retrieval_trace(results: list[ChunkDict]) -> dict[str, Any] | None:
     if not results:
         return None
     trace: dict[str, float | str | bool | None] = {}

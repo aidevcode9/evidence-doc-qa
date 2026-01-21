@@ -1,19 +1,24 @@
 import os
 from contextlib import contextmanager
+from typing import Any, Generator, TYPE_CHECKING
 from app.config import OTEL_ENABLED, OTEL_SERVICE_NAME
 from app.telemetry import logger
 
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+
 _OTEL_INITIALIZED = False
+_TRACER: Any = None
 
 try:
     from opentelemetry import trace
     _TRACER = trace.get_tracer("docqa.api")
 except Exception:
-    _TRACER = None
+    pass
 
 
 @contextmanager
-def span(name: str, **attrs):
+def span(name: str, **attrs: Any) -> Generator[Any, None, None]:
     if not _TRACER or not OTEL_ENABLED:
         yield None
         return
@@ -24,7 +29,7 @@ def span(name: str, **attrs):
         yield s
 
 
-def setup_otel(app) -> None:
+def setup_otel(app: "FastAPI") -> None:
     global _OTEL_INITIALIZED
     if _OTEL_INITIALIZED or not OTEL_ENABLED:
         return
@@ -35,11 +40,14 @@ def setup_otel(app) -> None:
         return
 
     try:
-        from opentelemetry import trace
+        from opentelemetry import trace as otel_trace
+        AzureMonitorTraceExporter: Any = None
         try:
-            from azure.monitor.opentelemetry.exporter import AzureMonitorTraceExporter
+            from azure.monitor.opentelemetry.exporter import AzureMonitorTraceExporter as AzureExporter
+            AzureMonitorTraceExporter = AzureExporter
         except Exception:
-            from opentelemetry.exporter.azuremonitor import AzureMonitorTraceExporter
+            from opentelemetry.exporter.azuremonitor import AzureMonitorTraceExporter as AzureExporterAlt
+            AzureMonitorTraceExporter = AzureExporterAlt
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
         from opentelemetry.instrumentation.urllib import URLLibInstrumentor
         from opentelemetry.sdk.resources import Resource, SERVICE_NAME
@@ -53,7 +61,7 @@ def setup_otel(app) -> None:
     provider = TracerProvider(resource=resource)
     exporter = AzureMonitorTraceExporter(connection_string=connection_string)
     provider.add_span_processor(BatchSpanProcessor(exporter))
-    trace.set_tracer_provider(provider)
+    otel_trace.set_tracer_provider(provider)
 
     FastAPIInstrumentor.instrument_app(app)
     URLLibInstrumentor().instrument()

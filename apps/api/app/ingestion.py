@@ -2,7 +2,7 @@ import hashlib
 import os
 import warnings
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, List, Tuple
+from typing import TYPE_CHECKING
 
 from pypdf import PdfReader
 from azure.storage.blob import BlobServiceClient
@@ -82,7 +82,7 @@ async def parse_document(path: str, *, force_ocr: bool = False) -> "ParseResult"
     return await parser.parse(path, force_ocr=force_ocr)
 
 
-def parse_pdf_pages(path: str) -> List[str]:
+def parse_pdf_pages(path: str) -> list[str]:
     """Parse PDF pages using pypdf.
 
     .. deprecated::
@@ -112,7 +112,7 @@ def _normalize_whitespace(text: str) -> str:
     return " ".join(text.split())
 
 
-def chunk_page_text(page_text: str) -> List[Tuple[int, int, str]]:
+def chunk_page_text(page_text: str) -> list[tuple[int, int, str]]:
     chunks = []
     start = 0
     while start < len(page_text):
@@ -133,8 +133,8 @@ def build_chunk_rows(
     doc_id: str,
     doc_sha256: str,
     docs_snapshot_id: str,
-    pages: List[str],
-) -> List[tuple]:
+    pages: list[str],
+) -> list[tuple[str, str, str, str, int, int, int, int, int, str, str]]:
     rows = []
     for page_num, page_text in enumerate(pages, start=1):
         page_end = page_num  # Single-page chunks for now (FR-013)

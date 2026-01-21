@@ -7,14 +7,18 @@ except Exception as e:
     print(f"Warning: Failed to load .env file: {e}")
 
 
-def _getenv(key, default=None):
+def _getenv(key: str, default: str | None = None) -> str:
+    """Get environment variable with fallback to default."""
     value = os.getenv(key)
-    if value not in (None, ""):
+    if value is not None and value != "":
         return value
-    return default
+    return default if default is not None else ""
 
 
-def _is_truthy(value):
+def _is_truthy(value: str | None) -> bool:
+    """Check if a value is truthy (1, true, yes)."""
+    if value is None:
+        return False
     return str(value).lower() in ("1", "true", "yes")
 
 
