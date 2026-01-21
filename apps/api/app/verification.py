@@ -7,7 +7,7 @@ import urllib.request
 import urllib.error
 import urllib.parse
 from pathlib import Path
-from typing import Optional, Tuple, Dict, Any
+from typing import Any
 
 from app.config import (
     AZURE_OPENAI_CHAT_API_KEY,
@@ -17,14 +17,16 @@ from app.config import (
 )
 from app.telemetry import logger
 
+UsageInfo = dict[str, int | bool | str]
+
 
 def verify_relevance(
     question: str,
     chunk_text: str,
     *,
-    request_id: Optional[str] = None,
-    chunk_id: Optional[str] = None,
-) -> Tuple[str, Optional[str], str, Dict[str, object]]:
+    request_id: str | None = None,
+    chunk_id: str | None = None,
+) -> tuple[str, str | None, str, UsageInfo]:
     """
     Uses the LLM to verify if the chunk actually contains the answer.
     Returns ("verified"|"rejected"|"unverified", span_or_none, reason).
@@ -44,7 +46,7 @@ def verify_relevance(
     )
 
     token_param = _verifier_token_param()
-    payload = {
+    payload: dict[str, Any] = {
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -128,11 +130,11 @@ def is_enabled() -> bool:
     return _llm_enabled()
 
 
-def verifier_model() -> Optional[str]:
+def verifier_model() -> str | None:
     return MODEL_ID if _llm_enabled() else None
 
 
-def verifier_trace_metadata() -> Dict[str, Any]:
+def verifier_trace_metadata() -> dict[str, Any]:
     return {
         "verifier": {
             "prompt_id": VERIFIER_PROMPT_ID,
@@ -150,7 +152,7 @@ def _llm_enabled() -> bool:
     return bool(AZURE_OPENAI_CHAT_ENDPOINT and AZURE_OPENAI_CHAT_API_KEY and MODEL_ID)
 
 
-def _call_openai(payload: dict) -> dict:
+def _call_openai(payload: dict[str, Any]) -> dict[str, Any]:
     url = f"{AZURE_OPENAI_CHAT_ENDPOINT.rstrip('/')}/openai/deployments/{MODEL_ID}/chat/completions?api-version={AZURE_OPENAI_CHAT_API_VERSION}"
     headers = {
         "Content-Type": "application/json",
@@ -164,11 +166,12 @@ def _call_openai(payload: dict) -> dict:
     )
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
-            return json.load(resp)
+            result: dict[str, Any] = json.load(resp)
+            return result
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
         logger.error("Verifier HTTP %s: %s", exc.code, body[:2000])
-        exc.body = body
+        setattr(exc, "body", body)  # Store body for retry logic
         raise
 
 
@@ -281,7 +284,7 @@ def _span_contains_blocked_content(span: str) -> bool:
 def _parse_verifier_output(
     raw: str,
     chunk_text: str,
-) -> Tuple[str, Optional[str], str]:
+) -> tuple[str, str | None, str]:
     if not raw:
         return "rejected", None, "EMPTY_OUTPUT"
     payload = _extract_json_payload(raw)
@@ -303,7 +306,8 @@ def _parse_verifier_output(
         return "rejected", None, "INVALID_OUTPUT"
 
     verdict = str(payload.get("verdict", "")).strip().upper()
-    span = payload.get("span") if isinstance(payload.get("span"), str) else ""
+    span_val = payload.get("span")
+    parsed_span: str = span_val if isinstance(span_val, str) else ""
     start = payload.get("start")
     end = payload.get("end")
     reason = str(payload.get("reason", "")).strip().upper()
@@ -320,16 +324,17 @@ def _parse_verifier_output(
     if start < 0 or end <= start or end > len(chunk_text):
         return "rejected", None, "SPAN_MISMATCH"
     expected = chunk_text[start:end]
-    if not span or span != expected:
+    if not parsed_span or parsed_span != expected:
         return "rejected", None, "SPAN_MISMATCH"
-    if _span_contains_blocked_content(span):
+    if _span_contains_blocked_content(parsed_span):
         return "rejected", None, "BLOCKED_CONTENT"
-    return "verified", span, reason
+    return "verified", parsed_span, reason
 
 
-def _extract_json_payload(raw: str) -> dict | None:
+def _extract_json_payload(raw: str) -> dict[str, Any] | None:
     try:
-        return json.loads(raw)
+        result: dict[str, Any] = json.loads(raw)
+        return result
     except json.JSONDecodeError:
         pass
     cleaned = raw.strip()
@@ -341,17 +346,18 @@ def _extract_json_payload(raw: str) -> dict | None:
     if start == -1 or end == -1 or end <= start:
         return None
     try:
-        return json.loads(cleaned[start : end + 1])
+        result2: dict[str, Any] = json.loads(cleaned[start : end + 1])
+        return result2
     except json.JSONDecodeError:
         return None
 
 
 def _extract_usage(
-    response: dict,
+    response: dict[str, Any],
     system_prompt: str,
     user_prompt: str,
     content: str,
-) -> Dict[str, object]:
+) -> UsageInfo:
     usage = response.get("usage", {}) if isinstance(response, dict) else {}
     prompt_tokens = usage.get("prompt_tokens")
     completion_tokens = usage.get("completion_tokens")
@@ -381,7 +387,7 @@ def _estimate_tokens(text: str) -> int:
     return max(1, len(text) // 4)
 
 
-def _empty_usage() -> Dict[str, object]:
+def _empty_usage() -> UsageInfo:
     return {
         "prompt_tokens": 0,
         "completion_tokens": 0,

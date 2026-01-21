@@ -1,3 +1,11 @@
+from typing import Any
+
+
+CostEntry = dict[str, int | float | bool | str | None]
+CostBreakdown = dict[str, CostEntry]
+TraceMetadata = dict[str, Any]
+
+
 def estimate_cost(
     prompt_tokens: int,
     completion_tokens: int,
@@ -8,7 +16,7 @@ def estimate_cost(
 
 
 def merge_cost_breakdown(
-    breakdown: dict[str, dict],
+    breakdown: CostBreakdown,
     key: str,
     prompt_tokens: int,
     completion_tokens: int,
@@ -25,9 +33,12 @@ def merge_cost_breakdown(
             "estimated": False,
         },
     )
-    entry["prompt_tokens"] += prompt_tokens
-    entry["completion_tokens"] += completion_tokens
-    entry["cost_est"] = round(entry["cost_est"] + cost_est, 6)
+    prompt_val = entry.get("prompt_tokens", 0)
+    completion_val = entry.get("completion_tokens", 0)
+    cost_val = entry.get("cost_est", 0.0)
+    entry["prompt_tokens"] = (int(prompt_val) if isinstance(prompt_val, (int, float)) else 0) + prompt_tokens
+    entry["completion_tokens"] = (int(completion_val) if isinstance(completion_val, (int, float)) else 0) + completion_tokens
+    entry["cost_est"] = round((float(cost_val) if isinstance(cost_val, (int, float)) else 0.0) + cost_est, 6)
     if estimated:
         entry["estimated"] = True
     if source:
@@ -36,13 +47,13 @@ def merge_cost_breakdown(
 
 
 def attach_cost_trace(
-    trace_metadata: dict | None,
-    breakdown: dict[str, dict],
+    trace_metadata: TraceMetadata | None,
+    breakdown: CostBreakdown,
     usage_fallback: bool,
-) -> dict | None:
+) -> TraceMetadata | None:
     if not breakdown and not usage_fallback:
         return trace_metadata
-    filtered: dict[str, dict] = {}
+    filtered: CostBreakdown = {}
     for key, entry in breakdown.items():
         if (
             entry.get("prompt_tokens")
@@ -53,7 +64,7 @@ def attach_cost_trace(
             filtered[key] = entry
     if not filtered and not usage_fallback:
         return trace_metadata
-    merged = dict(trace_metadata or {})
+    merged: TraceMetadata = dict(trace_metadata or {})
     if filtered:
         merged["cost_breakdown"] = filtered
     if usage_fallback:

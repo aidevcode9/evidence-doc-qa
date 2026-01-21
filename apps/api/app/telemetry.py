@@ -2,7 +2,7 @@ import logging
 import sys
 import json
 from datetime import datetime, timezone
-from typing import Dict, List, Any
+from typing import Any
 
 from app.db import Telemetry, insert_telemetry, load_telemetry
 
@@ -33,7 +33,7 @@ def record_telemetry(
     failure_label: str | None = None,
     question_len: int = 0,
     answer_len: int = 0,
-    trace_metadata: Dict[str, Any] | None = None,
+    trace_metadata: dict[str, Any] | None = None,
 ) -> None:
     # Estimate tokens if not provided (approx 4 chars per token)
     est_in = tokens_in if tokens_in is not None else (question_len // 4 if question_len else 0)
@@ -60,7 +60,7 @@ def record_telemetry(
     )
 
 
-def load_window_telemetry(hours: int = 24, limit: int = 500) -> List[Dict]:
+def load_window_telemetry(hours: int = 24, limit: int = 500) -> list[dict[str, Any]]:
     rows = load_telemetry(hours=hours, limit=limit)
     return [
         {
@@ -84,7 +84,7 @@ def load_window_telemetry(hours: int = 24, limit: int = 500) -> List[Dict]:
     ]
 
 
-def compute_metrics(rows: List[Dict]) -> Dict:
+def compute_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     if not rows:
         now = datetime.now(timezone.utc).isoformat()
         return {
@@ -101,7 +101,7 @@ def compute_metrics(rows: List[Dict]) -> Dict:
     p50 = _percentile(latencies, 50)
     p95 = _percentile(latencies, 95)
     avg_cost = sum(row["cost_est"] for row in rows) / len(rows)
-    refusal_counts = {}
+    refusal_counts: dict[str, int] = {}
     cache_hits = 0
     for row in rows:
         if row["refusal_code"]:
@@ -124,7 +124,7 @@ def compute_metrics(rows: List[Dict]) -> Dict:
     }
 
 
-def _percentile(values: List[int], pct: int) -> int:
+def _percentile(values: list[int], pct: int) -> int:
     if not values:
         return 0
     k = (len(values) - 1) * (pct / 100)

@@ -4,7 +4,7 @@ import re
 import urllib.request
 import urllib.error
 from collections import Counter
-from typing import Dict, List, Optional
+from typing import Any
 
 from app.config import (
     AZURE_SEARCH_API_KEY,
@@ -21,15 +21,20 @@ from app.db import load_chunks, load_index_records
 from app.embeddings import embed_texts_with_usage
 from app.telemetry import logger
 
-_BM25_CACHE: dict[str, dict] = {}
+# Type aliases for clarity
+ChunkRecord = dict[str, Any]
+BM25Stats = dict[str, Any]
+UsageInfo = dict[str, Any]
+
+_BM25_CACHE: dict[str, BM25Stats] = {}
 
 
 def hybrid_search(
     question: str,
-    docs_snapshot_id: Optional[str],
+    docs_snapshot_id: str | None,
     *,
     return_usage: bool = False,
-) -> List[Dict] | tuple[List[Dict], dict]:
+) -> list[ChunkRecord] | tuple[list[ChunkRecord], UsageInfo]:
     embeddings, embedding_usage = embed_texts_with_usage([question])
     query_embedding = embeddings[0]
     if _azure_enabled():
@@ -70,7 +75,7 @@ def hybrid_search(
         :TOP_K_VECTOR
     ]
 
-    combined: Dict[str, Dict] = {}
+    combined: dict[str, ChunkRecord] = {}
     _apply_rank_scores(combined, bm25_ranked, key="bm25")
     _apply_rank_scores(combined, vec_ranked, key="vector")
 
@@ -81,7 +86,7 @@ def hybrid_search(
     fused = sorted(combined.values(), key=lambda r: r["rrf_score"], reverse=True)[:TOP_K]
     for idx, rec in enumerate(fused, start=1):
         rec["rrf_rank"] = idx
-    
+
     logger.info(f"Local Hybrid Search: Found {len(fused)} fused results")
     return (fused, embedding_usage) if return_usage else fused
 
@@ -92,11 +97,11 @@ def _azure_enabled() -> bool:
 
 def _azure_search(
     question: str,
-    docs_snapshot_id: Optional[str],
-    query_embedding: List[float],
-) -> List[Dict]:
+    docs_snapshot_id: str | None,
+    query_embedding: list[float],
+) -> list[ChunkRecord]:
     vector_len = len(query_embedding)
-    base_payload = {
+    base_payload: dict[str, Any] = {
         "search": question,
         "vectorQueries": [
             {
@@ -108,7 +113,7 @@ def _azure_search(
         ],
         "top": TOP_K,
     }
-    semantic_payload = {
+    semantic_payload: dict[str, Any] = {
         **base_payload,
         "queryType": "semantic",
         "semanticConfiguration": "default",
@@ -124,7 +129,8 @@ def _azure_search(
     url = f"{AZURE_SEARCH_ENDPOINT.rstrip('/')}/indexes/{AZURE_SEARCH_INDEX}/docs/search?api-version={AZURE_SEARCH_API_VERSION}"
     semantic_requested = bool(AZURE_SEMANTIC_ENABLED)
     semantic_used = False
-    fallback_reason = None
+    fallback_reason: str | None = None
+    data: dict[str, Any] = {}
 
     if semantic_requested:
         _log_azure_search_request(semantic_payload, vector_len, filter_state)
@@ -172,7 +178,7 @@ def _azure_search(
             f"  Hit {idx+1}: AzureScore={doc.get('@search.score')} Reranker={doc.get('@search.rerankerScore')} ID={doc['chunk_id']}"
         )
 
-    results = []
+    results: list[ChunkRecord] = []
     for doc in hits:
         azure_search_score = doc.get("@search.score", 0.0)
         azure_reranker_score = doc.get("@search.rerankerScore")
@@ -180,7 +186,7 @@ def _azure_search(
         # Extract captions if available (semantic highlight)
         captions = doc.get("@search.captions", [])
         highlighted_text = captions[0].get("highlights") if captions else None
-        
+
         # If no highlight, fallback to chunk_text or text from caption
         if not highlighted_text and captions:
             highlighted_text = captions[0].get("text")
@@ -209,7 +215,7 @@ def _azure_search(
     return results
 
 
-def _request_azure_search(url: str, payload: dict) -> dict:
+def _request_azure_search(url: str, payload: dict[str, Any]) -> dict[str, Any]:
     req = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
@@ -220,10 +226,11 @@ def _request_azure_search(url: str, payload: dict) -> dict:
         },
     )
     with urllib.request.urlopen(req) as resp:
-        return json.load(resp)
+        result: dict[str, Any] = json.load(resp)
+        return result
 
 
-def _log_azure_search_request(payload: dict, vector_len: int, filter_state: str) -> None:
+def _log_azure_search_request(payload: dict[str, Any], vector_len: int, filter_state: str) -> None:
     logger.info(
         "Azure Search request: index=%s api=%s top=%s vector_k=%s vector_len=%s queryType=%s semanticConfig=%s filter=%s",
         AZURE_SEARCH_INDEX,
@@ -262,13 +269,13 @@ _SEMANTIC_UNSUPPORTED_CODES = {
 }
 
 
-def _semantic_fallback_reason(body: str) -> Optional[str]:
+def _semantic_fallback_reason(body: str) -> str | None:
     if not body:
         return None
     try:
         data = json.loads(body)
         error = data.get("error", {}) if isinstance(data, dict) else {}
-        codes = []
+        codes: list[str] = []
         code = error.get("code")
         if code:
             codes.append(code)
@@ -291,7 +298,7 @@ def _semantic_fallback_reason(body: str) -> Optional[str]:
 
 
 def _apply_rank_scores(
-    combined: Dict[str, Dict], ranked: List[Dict], key: str
+    combined: dict[str, ChunkRecord], ranked: list[ChunkRecord], key: str
 ) -> None:
     for idx, rec in enumerate(ranked, start=1):
         chunk_id = rec["chunk_id"]
@@ -304,11 +311,11 @@ def _apply_rank_scores(
         entry[f"{key}_rank"] = idx
 
 
-def _load_index_records(docs_snapshot_id: Optional[str]) -> List[Dict]:
+def _load_index_records(docs_snapshot_id: str | None) -> list[ChunkRecord]:
     rows = load_index_records(docs_snapshot_id)
-    records = []
+    records: list[ChunkRecord] = []
     for row in rows:
-        rec = {
+        rec: ChunkRecord = {
             "chunk_id": row.chunk_id,
             "docs_snapshot_id": row.docs_snapshot_id,
             "doc_id": row.doc_id,
@@ -326,14 +333,14 @@ def _load_index_records(docs_snapshot_id: Optional[str]) -> List[Dict]:
 
 
 def _fallback_overlap(
-    question: str, docs_snapshot_id: Optional[str]
-) -> List[Dict]:
+    question: str, docs_snapshot_id: str | None
+) -> list[ChunkRecord]:
     query_tokens = _tokenize(question)
     rows = load_chunks(docs_snapshot_id)
-    scored = []
+    scored: list[ChunkRecord] = []
     for row in rows:
         score = _overlap_score(query_tokens, row.chunk_text)
-        entry = {
+        entry: ChunkRecord = {
             "chunk_id": row.chunk_id,
             "docs_snapshot_id": row.docs_snapshot_id,
             "doc_id": row.doc_id,
@@ -353,14 +360,14 @@ def _fallback_overlap(
     return scored[:TOP_K]
 
 
-def _build_doc_stats(text: str) -> dict:
+def _build_doc_stats(text: str) -> dict[str, Any]:
     tokens = _tokenize(text)
     return {"tf": Counter(tokens), "dl": len(tokens)}
 
 
-def _build_bm25_stats(records: List[Dict]) -> dict:
-    df = Counter()
-    doc_stats: dict[str, dict] = {}
+def _build_bm25_stats(records: list[ChunkRecord]) -> BM25Stats:
+    df: Counter[str] = Counter()
+    doc_stats: dict[str, dict[str, Any]] = {}
     total_len = 0
     for rec in records:
         stats = _build_doc_stats(rec["chunk_text"])
@@ -377,7 +384,7 @@ def _build_bm25_stats(records: List[Dict]) -> dict:
     }
 
 
-def _get_bm25_stats(records: List[Dict], snapshot_key: str) -> dict:
+def _get_bm25_stats(records: list[ChunkRecord], snapshot_key: str) -> BM25Stats:
     cached = _BM25_CACHE.get(snapshot_key)
     if cached and cached.get("num_docs") == len(records):
         return cached
@@ -387,9 +394,9 @@ def _get_bm25_stats(records: List[Dict], snapshot_key: str) -> dict:
 
 
 def _bm25_score(
-    query_tokens: List[str],
-    tf: Counter,
-    df: Counter,
+    query_tokens: list[str],
+    tf: Counter[str],
+    df: Counter[str],
     num_docs: int,
     dl: int,
     avgdl: float,
@@ -422,12 +429,12 @@ STOP_WORDS = {
 }
 
 
-def _tokenize(text: str) -> List[str]:
+def _tokenize(text: str) -> list[str]:
     tokens = re.findall(r"[a-z0-9]+", text.lower())
     return [t for t in tokens if t not in STOP_WORDS]
 
 
-def _overlap_score(query_tokens: List[str], text: str) -> float:
+def _overlap_score(query_tokens: list[str], text: str) -> float:
     if not query_tokens:
         return 0.0
     text_tokens = set(_tokenize(text))
@@ -435,7 +442,7 @@ def _overlap_score(query_tokens: List[str], text: str) -> float:
     return overlap / max(len(query_tokens), 1)
 
 
-def _cosine(vec_a: List[float], vec_b: List[float]) -> float:
+def _cosine(vec_a: list[float], vec_b: list[float]) -> float:
     if not vec_a or not vec_b:
         return 0.0
     dot = sum(a * b for a, b in zip(vec_a, vec_b, strict=False))

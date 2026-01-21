@@ -1,5 +1,6 @@
 import time
 import uuid
+from typing import Any
 
 from fastapi import HTTPException
 
@@ -24,6 +25,10 @@ from app.db import get_latest_docs_snapshot_id
 from app.schemas import AskRequest, AskResponse, Citation, DebugCandidate, EvidenceSupport, RefusalCode
 from app.telemetry import logger, record_telemetry
 from app.services import cost, rag
+from app.services.cost import CostBreakdown, TraceMetadata
+
+ChunkDict = dict[str, Any]
+VersionSnapshot = dict[str, str]
 
 
 def execute_ask(
@@ -43,12 +48,12 @@ def execute_ask(
     tokens_in = 0
     tokens_out = 0
     cost_est = 0.0
-    cost_breakdown: dict[str, dict] = {}
+    cost_breakdown: CostBreakdown = {}
     usage_fallback = False
     
     logger.info(f"Incoming Request [{request_id}] - Snapshot: {docs_snapshot_id}")
 
-    version_snapshot = {
+    version_snapshot: VersionSnapshot = {
         "request_id": request_id,
         "docs_snapshot_id": docs_snapshot_id,
         "prompt_version": PROMPT_VERSION,
@@ -58,7 +63,7 @@ def execute_ask(
         "parser_mode": PARSER_MODE,
     }
 
-    trace_metadata = {
+    trace_metadata: TraceMetadata = {
         "session_id": session_id,
         "question_hash": question_hash,
         "question_len": question_len,
@@ -83,18 +88,27 @@ def execute_ask(
         )
 
     with otel.span("retrieval", docs_snapshot_id=docs_snapshot_id) as retrieval_span:
-        results, embedding_usage = retrieval.hybrid_search(
+        search_result = retrieval.hybrid_search(
             question,
             docs_snapshot_id,
             return_usage=True,
         )
+        # hybrid_search with return_usage=True returns tuple
+        results: list[ChunkDict]
+        embedding_usage: dict[str, Any]
+        if isinstance(search_result, tuple):
+            results, embedding_usage = search_result
+        else:
+            results = search_result
+            embedding_usage = {}
         if retrieval_span and results:
             retrieval_span.set_attribute(
                 "retrieval.mode",
                 "azure" if "azure_search_score" in results[0] else "local",
             )
     
-    embedding_usage = embedding_usage or {}
+    if not embedding_usage:
+        embedding_usage = {}
     embed_prompt_tokens = int(embedding_usage.get("prompt_tokens") or 0)
     embed_cost = cost.estimate_cost(
         embed_prompt_tokens,
@@ -107,6 +121,7 @@ def execute_ask(
     embed_estimated = bool(embedding_usage.get("estimated"))
     
     if embed_prompt_tokens or embed_cost or embed_estimated:
+        embed_source = embedding_usage.get("source")
         cost.merge_cost_breakdown(
             cost_breakdown,
             "embeddings",
@@ -114,16 +129,18 @@ def execute_ask(
             0,
             embed_cost,
             embed_estimated,
-            embedding_usage.get("source"),
+            str(embed_source) if embed_source else None,
         )
     if embed_estimated:
         usage_fallback = True
         
     retrieval_trace = rag.build_retrieval_trace(results)
     if retrieval_trace:
-        trace_metadata = {**(trace_metadata or {}), **retrieval_trace}
-    
-    trace_metadata = cost.attach_cost_trace(trace_metadata, cost_breakdown, usage_fallback)
+        trace_metadata = {**trace_metadata, **retrieval_trace}
+
+    attached_trace = cost.attach_cost_trace(trace_metadata, cost_breakdown, usage_fallback)
+    if attached_trace is not None:
+        trace_metadata = attached_trace
 
     ret_score_key = rag.retrieval_score_key(results)
     conf_score_key = rag.confidence_score_key(results)
@@ -131,12 +148,12 @@ def execute_ask(
     conf_version = (
         f"{CONFIDENCE_VERSION}|local={CONFIDENCE_THRESHOLD}|azure_search={AZURE_SEARCH_SCORE_MIN}|azure_rerank={AZURE_RERANK_MIN}"
     )
-    confidence_meta = {
+    confidence_meta: TraceMetadata = {
         "confidence_version": conf_version,
         "confidence_score_key": conf_score_key,
         "confidence_threshold": conf_min,
     }
-    trace_metadata = {**(trace_metadata or {}), **confidence_meta}
+    trace_metadata = {**trace_metadata, **confidence_meta}
 
     if not results or rag.score_value(results[0], ret_score_key) == 0.0:
         logger.warning(f"Retrieval Fail [{request_id}]: No evidence found")
@@ -226,6 +243,7 @@ def execute_ask(
                 v_estimated = bool(usage.get("estimated"))
                 
                 if v_prompt_t or v_compl_t or v_cost or v_estimated:
+                    v_source = usage.get("source")
                     cost.merge_cost_breakdown(
                         cost_breakdown,
                         "verifier",
@@ -233,7 +251,7 @@ def execute_ask(
                         v_compl_t,
                         v_cost,
                         v_estimated,
-                        usage.get("source"),
+                        str(v_source) if v_source else None,
                     )
                 if v_estimated:
                     usage_fallback = True
@@ -262,7 +280,9 @@ def execute_ask(
                 verify_span.set_attribute("verifier.verdict", "NO")
                 verify_span.set_attribute("verifier.reason", last_verifier_reason or "NOT_FOUND")
 
-        trace_metadata = cost.attach_cost_trace(trace_metadata, cost_breakdown, usage_fallback)
+        attached_trace2 = cost.attach_cost_trace(trace_metadata, cost_breakdown, usage_fallback)
+        if attached_trace2 is not None:
+            trace_metadata = attached_trace2
 
         if verified_chunk is None:
             if verification_rejected:
@@ -521,7 +541,7 @@ def _record_request_internal(
     *,
     request_id: str,
     docs_snapshot_id: str,
-    version_snapshot: dict,
+    version_snapshot: VersionSnapshot,
     refusal_code: RefusalCode | None,
     failure_label: str | None,
     start_time: float,
@@ -530,7 +550,7 @@ def _record_request_internal(
     tokens_in: int = 0,
     tokens_out: int = 0,
     cost_est: float = 0.0,
-    trace_metadata: dict | None = None,
+    trace_metadata: TraceMetadata | None = None,
 ) -> None:
     latency_ms = int((time.perf_counter() - start_time) * 1000)
     if trace_metadata is None:
@@ -563,7 +583,7 @@ def _emit_refusal(
     *,
     request_id: str,
     docs_snapshot_id: str,
-    version_snapshot: dict,
+    version_snapshot: VersionSnapshot,
     refusal_code: RefusalCode,
     reason: str,
     failure_label: str,
@@ -575,7 +595,7 @@ def _emit_refusal(
     evidence: EvidenceSupport | None = None,
     citations: list[Citation] | None = None,
     debug_candidates: list[DebugCandidate] | None = None,
-    trace_metadata: dict | None = None,
+    trace_metadata: TraceMetadata | None = None,
 ) -> AskResponse:
     response = AskResponse(
         request_id=request_id,

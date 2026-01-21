@@ -3,7 +3,7 @@ import json
 import logging
 import urllib.request
 import urllib.error
-from typing import List, Tuple, Dict
+from typing import Any
 
 from app.config import (
     AZURE_OPENAI_API_KEY,
@@ -16,28 +16,30 @@ from app.config import (
 
 logger = logging.getLogger("docqa")
 
+UsageInfo = dict[str, int | bool | str]
 
-def embed_texts(texts: List[str]) -> List[List[float]]:
+
+def embed_texts(texts: list[str]) -> list[list[float]]:
     embeddings, _usage = embed_texts_with_usage(texts)
     return embeddings
 
 
-def embed_texts_with_usage(texts: List[str]) -> Tuple[List[List[float]], Dict[str, object]]:
+def embed_texts_with_usage(texts: list[str]) -> tuple[list[list[float]], UsageInfo]:
     if EMBEDDINGS_MODE != "local":
         return _azure_openai_embeddings_with_usage(texts)
     embeddings = [_hash_embed(text) for text in texts]
     return embeddings, {"prompt_tokens": 0, "total_tokens": 0, "estimated": False, "source": "local"}
 
 
-def _hash_embed(text: str) -> List[float]:
+def _hash_embed(text: str) -> list[float]:
     digest = hashlib.sha256(text.encode("utf-8")).digest()
-    vec = []
+    vec: list[float] = []
     for i in range(EMBEDDINGS_DIM):
         vec.append(digest[i % len(digest)] / 255.0)
     return vec
 
 
-def _azure_openai_embeddings_with_usage(texts: List[str]) -> Tuple[List[List[float]], Dict[str, object]]:
+def _azure_openai_embeddings_with_usage(texts: list[str]) -> tuple[list[list[float]], UsageInfo]:
     if not AZURE_OPENAI_ENDPOINT:
         raise RuntimeError("AZURE_OPENAI_ENDPOINT is required for remote embeddings.")
     if not AZURE_OPENAI_API_KEY:
@@ -58,7 +60,7 @@ def _azure_openai_embeddings_with_usage(texts: List[str]) -> Tuple[List[List[flo
     )
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
-            data = json.load(response)
+            data: dict[str, Any] = json.load(response)
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
         logger.error("Azure OpenAI embeddings HTTP %s: %s", exc.code, body)
@@ -69,7 +71,7 @@ def _azure_openai_embeddings_with_usage(texts: List[str]) -> Tuple[List[List[flo
     return [item["embedding"] for item in data["data"]], usage
 
 
-def _extract_usage(response: dict, texts: List[str]) -> Dict[str, object]:
+def _extract_usage(response: dict[str, Any], texts: list[str]) -> UsageInfo:
     usage = response.get("usage", {}) if isinstance(response, dict) else {}
     prompt_tokens = usage.get("prompt_tokens")
     total_tokens = usage.get("total_tokens")
@@ -89,7 +91,7 @@ def _extract_usage(response: dict, texts: List[str]) -> Dict[str, object]:
     }
 
 
-def _estimate_prompt_tokens(texts: List[str]) -> int:
+def _estimate_prompt_tokens(texts: list[str]) -> int:
     total = 0
     for text in texts:
         if not text:

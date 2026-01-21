@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Generator, Iterable
 
 from sqlalchemy import Boolean, Float, Integer, String, Text, create_engine, select, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 from sqlalchemy.pool import NullPool
 
@@ -79,10 +80,10 @@ class Telemetry(Base):
     trace_metadata: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
-def init_db():
+def init_db() -> None:
     engine = _engine()
     Base.metadata.create_all(bind=engine)
-    
+
     # Auto-migration: Check if trace_metadata exists, if not add it
     from sqlalchemy import inspect
     inspector = inspect(engine)
@@ -93,7 +94,7 @@ def init_db():
             conn.commit()
 
 
-def _engine():
+def _engine() -> Engine:
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL or DB_DATABASE_URL is required.")
     return create_engine(DATABASE_URL, poolclass=NullPool)

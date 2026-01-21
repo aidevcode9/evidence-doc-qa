@@ -1,7 +1,7 @@
 import json
 import urllib.request
 import urllib.error
-from typing import List, Tuple
+from typing import Any
 
 from app.config import (
     AZURE_SEARCH_API_KEY,
@@ -18,12 +18,15 @@ from app.db import IndexRecord, insert_index_records
 from app.embeddings import embed_texts
 from app.ingestion import utc_now
 
+# Type alias for chunk row tuple
+ChunkRowTuple = tuple[str, str, str, str, int, int, int, int, int, str, str]
+
 
 def index_chunk_rows(
     doc_id: str,
     doc_name: str,
     docs_snapshot_id: str,
-    chunk_rows: List[Tuple],
+    chunk_rows: list[ChunkRowTuple],
 ) -> None:
     if not ENABLE_INDEXING:
         return
@@ -152,7 +155,7 @@ def ensure_index(force: bool = False) -> None:
         print(f"Warning: Index creation/update failed: {e}")
 
 
-def _azure_upload(records: List[dict]) -> None:
+def _azure_upload(records: list[dict[str, Any]]) -> None:
     payload = {"value": [{"@search.action": "upload", **rec} for rec in records]}
     url = _azure_url(f"/indexes/{AZURE_SEARCH_INDEX}/docs/index?api-version={AZURE_SEARCH_API_VERSION}")
     _azure_request("POST", url, payload)
@@ -162,7 +165,7 @@ def _azure_url(path: str) -> str:
     return f"{AZURE_SEARCH_ENDPOINT.rstrip('/')}{path}"
 
 
-def _azure_request(method: str, url: str, payload: dict) -> None:
+def _azure_request(method: str, url: str, payload: dict[str, Any]) -> None:
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         url,
@@ -182,8 +185,3 @@ def _azure_request(method: str, url: str, payload: dict) -> None:
         raise RuntimeError(f"Azure Search request failed: {e.code} - {error_body}") from e
     except Exception:
         raise
-
-
-def _azure_enabled() -> bool:
-    return bool(AZURE_SEARCH_ENDPOINT and AZURE_SEARCH_API_KEY and AZURE_SEARCH_INDEX)
-

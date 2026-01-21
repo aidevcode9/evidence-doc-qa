@@ -1,4 +1,6 @@
 import uuid
+from typing import Any, TYPE_CHECKING
+
 from fastapi import UploadFile, HTTPException
 
 from app import ingestion, indexing
@@ -7,8 +9,14 @@ from app.db import Chunk, Document, insert_chunks, insert_document
 from app.parsers import get_parser_client
 from app.telemetry import logger
 
+if TYPE_CHECKING:
+    from app.parsers.base import ParseResult
 
-async def process_document_upload(file: UploadFile) -> dict:
+# Type alias for chunk row tuple
+ChunkRowTuple = tuple[str, str, str, str, int, int, int, int, int, str, str]
+
+
+async def process_document_upload(file: UploadFile) -> dict[str, Any]:
     """Process an uploaded document.
 
     Handles PDF and image uploads (FR-010). Uses the configured parser
@@ -121,7 +129,7 @@ async def process_document_upload(file: UploadFile) -> dict:
         chunk_rows=chunk_rows,
     )
 
-    result = {
+    result: dict[str, Any] = {
         "doc_id": doc_id,
         "doc_sha256": doc_sha256,
         "docs_snapshot_id": docs_snapshot_id,
@@ -137,8 +145,8 @@ def _build_chunk_rows_from_parse_result(
     doc_id: str,
     doc_sha256: str,
     docs_snapshot_id: str,
-    parse_result: "ingestion.ParseResult",
-) -> list[tuple]:
+    parse_result: "ParseResult",
+) -> list[ChunkRowTuple]:
     """Build chunk rows from ParseResult.
 
     This preserves the page numbers and character offsets from the parser
@@ -155,7 +163,7 @@ def _build_chunk_rows_from_parse_result(
     """
     from app.config import PARSER_MODE
 
-    rows = []
+    rows: list[ChunkRowTuple] = []
     for page in parse_result.pages:
         page_num = page.page_number
         page_end = page_num  # Single-page chunks for now (FR-013)
