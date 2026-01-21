@@ -45,6 +45,7 @@ Last updated: 2026-01-21 (Phase 1 Complete)
 | **Eval suite reorganization** | — | — | 01-20 |
 | **Type annotations (mypy --strict)** | NFR-040 | — | 01-21 |
 | **pytest-asyncio configuration** | — | — | 01-21 |
+| **Dev dependencies separation** | NFR-041 | — | 01-21 |
 
 > ✅ **FR-010/FR-012 Complete:** PDF + image upload with OCR support via Marker (default) or LlamaParse (cloud).
 
@@ -62,6 +63,8 @@ Last updated: 2026-01-21 (Phase 1 Complete)
 | FR-024 | Confidence refusal | ✅ Shipped |
 | FR-025 | Citation validation | ✅ Shipped |
 | NFR-036 | ParserClient abstraction | ✅ Shipped |
+| NFR-040 | Type annotations (mypy --strict) | ✅ Shipped |
+| NFR-041 | Dev dependencies separated | ✅ Shipped |
 
 **Phase 1 Complete!** All core RAG features shipped.
 

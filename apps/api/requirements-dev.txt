@@ -1,0 +1,15 @@
+# Development dependencies (NFR-041)
+# Install with: pip install -r requirements-dev.txt
+
+# Linting and formatting
+ruff>=0.8.0
+
+# Type checking
+mypy>=1.13.0
+
+# Testing
+pytest>=8.0.0
+pytest-asyncio>=1.0.0
+
+# Type stubs for third-party libraries
+types-requests>=2.31.0

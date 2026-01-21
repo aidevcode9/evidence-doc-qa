@@ -69,6 +69,30 @@
 
 ---
 
+## Task 3: NFR-041 — Dev dependencies separation
+- **FR/NFR:** NFR-041
+- **Branch:** feat/ocr-image-support
+- **Status:** ✅ Complete
+
+### Changes Made
+- Created `apps/api/requirements-dev.txt` with dev-only dependencies:
+  - ruff>=0.8.0 (linting/formatting)
+  - mypy>=1.13.0 (type checking)
+  - pytest>=8.0.0 (testing)
+  - pytest-asyncio>=1.0.0 (async test support)
+  - types-requests>=2.31.0 (type stubs)
+
+### Verification
+- [x] `ruff check apps/` — passed
+- [x] `mypy apps/api/app --strict` — passed (0 errors)
+- [x] `pytest tests/ -v` — 57/57 passed
+
+### Notes
+- Production dependencies remain in `requirements.txt`
+- Dev dependencies now properly separated per NFR-041
+
+---
+
 ## Template (Copy for each task)
 
 ```markdown
