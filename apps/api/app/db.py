@@ -80,6 +80,33 @@ class Telemetry(Base):
     trace_metadata: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class QASession(Base):
+    """Q&A session for tracking conversation history (FR-032)."""
+
+    __tablename__ = "qa_sessions"
+
+    session_id: Mapped[str] = mapped_column(String, primary_key=True)
+    docs_snapshot_id: Mapped[str] = mapped_column(String, nullable=False)
+    created_at_utc: Mapped[str] = mapped_column(String, nullable=False)
+    # Future: tenant_id, matter_id, user_id (Phase 3 multi-tenancy)
+
+
+class QAMessage(Base):
+    """Q&A message within a session (FR-032)."""
+
+    __tablename__ = "qa_messages"
+
+    message_id: Mapped[str] = mapped_column(String, primary_key=True)
+    session_id: Mapped[str] = mapped_column(String, nullable=False)
+    role: Mapped[str] = mapped_column(String, nullable=False)  # "user" | "assistant"
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    citations_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    refusal_code: Mapped[str | None] = mapped_column(String, nullable=True)
+    version_snapshot_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at_utc: Mapped[str] = mapped_column(String, nullable=False)
+
+
 def init_db() -> None:
     engine = _engine()
     Base.metadata.create_all(bind=engine)
@@ -184,3 +211,66 @@ def load_telemetry(hours: int = 24, limit: int = 500) -> list[Telemetry]:
         )
         rows = list(session.scalars(stmt).all())
         return rows
+
+
+# QA Session CRUD functions (FR-032)
+
+
+def create_qa_session(session_id: str, docs_snapshot_id: str) -> QASession:
+    """Create a new QA session."""
+    qa_session = QASession(
+        session_id=session_id,
+        docs_snapshot_id=docs_snapshot_id,
+        created_at_utc=datetime.now(timezone.utc).isoformat(),
+    )
+    with session_scope() as session:
+        session.add(qa_session)
+    return qa_session
+
+
+def get_qa_session(session_id: str) -> QASession | None:
+    """Get a QA session by ID."""
+    with session_scope() as session:
+        stmt = select(QASession).where(QASession.session_id == session_id)
+        return session.scalars(stmt).first()
+
+
+def get_or_create_session(session_id: str, docs_snapshot_id: str) -> QASession:
+    """Get existing session or create a new one.
+
+    Handles race conditions where two requests try to create the same session
+    simultaneously by catching IntegrityError and retrying the get.
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    existing = get_qa_session(session_id)
+    if existing:
+        return existing
+
+    try:
+        return create_qa_session(session_id, docs_snapshot_id)
+    except IntegrityError:
+        # Race condition: another request created the session first
+        # Fetch the existing session that was created by the other request
+        existing = get_qa_session(session_id)
+        if existing:
+            return existing
+        # Should not happen, but re-raise if session still not found
+        raise
+
+
+def insert_qa_message(message: QAMessage) -> None:
+    """Insert a QA message into the database."""
+    with session_scope() as session:
+        session.add(message)
+
+
+def get_session_messages(session_id: str) -> list[QAMessage]:
+    """Get all messages for a session, ordered by creation time."""
+    with session_scope() as session:
+        stmt = (
+            select(QAMessage)
+            .where(QAMessage.session_id == session_id)
+            .order_by(QAMessage.created_at_utc.asc())
+        )
+        return list(session.scalars(stmt).all())

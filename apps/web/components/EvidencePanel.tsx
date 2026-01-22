@@ -55,9 +55,96 @@ const renderHighlightedText = (text: string): React.ReactNode[] => {
 interface EvidencePanelProps {
   message: Message | null;
   onCitationClick?: (citation: Citation) => void;
+  sessionId?: string | null;
+  apiUrl?: string;
 }
 
-export function EvidencePanel({ message, onCitationClick }: EvidencePanelProps) {
+const ExportButtons = ({ sessionId, apiUrl }: { sessionId?: string | null; apiUrl?: string }) => {
+  const [isExporting, setIsExporting] = React.useState<"pdf" | "docx" | null>(null);
+
+  if (!sessionId || !apiUrl) return null;
+
+  const handleExport = async (format: "pdf" | "docx") => {
+    if (isExporting) return;
+
+    setIsExporting(format);
+    try {
+      const url = `${apiUrl}/v1/sessions/${sessionId}/export?format=${format}`;
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "X-DocQA-Session": sessionId,
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ detail: "Export failed" }));
+        throw new Error(error.detail || "Export failed");
+      }
+
+      // Get filename from Content-Disposition header or use default
+      const contentDisposition = response.headers.get("Content-Disposition");
+      let filename = `qa-export-${sessionId.slice(0, 8)}.${format}`;
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?([^";\n]+)"?/);
+        if (match) filename = match[1];
+      }
+
+      // Create blob and trigger download
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+      console.error("Export failed:", error);
+      alert(error instanceof Error ? error.message : "Export failed");
+    } finally {
+      setIsExporting(null);
+    }
+  };
+
+  return (
+    <div className="flex gap-2 mt-4">
+      <button
+        onClick={() => handleExport("pdf")}
+        disabled={isExporting !== null}
+        className="flex-1 px-3 py-2 bg-blue-600/20 border border-blue-500/30 hover:bg-blue-600/30 text-blue-400 text-xs font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        title="Export Q&A session as PDF"
+      >
+        {isExporting === "pdf" ? (
+          <span className="inline-block w-3.5 h-3.5 mr-1.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+        ) : (
+          <svg className="w-3.5 h-3.5 inline-block mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        )}
+        {isExporting === "pdf" ? "Exporting..." : "Export PDF"}
+      </button>
+      <button
+        onClick={() => handleExport("docx")}
+        disabled={isExporting !== null}
+        className="flex-1 px-3 py-2 bg-green-600/20 border border-green-500/30 hover:bg-green-600/30 text-green-400 text-xs font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        title="Export Q&A session as DOCX"
+      >
+        {isExporting === "docx" ? (
+          <span className="inline-block w-3.5 h-3.5 mr-1.5 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
+        ) : (
+          <svg className="w-3.5 h-3.5 inline-block mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        )}
+        {isExporting === "docx" ? "Exporting..." : "Export DOCX"}
+      </button>
+    </div>
+  );
+};
+
+export function EvidencePanel({ message, onCitationClick, sessionId, apiUrl }: EvidencePanelProps) {
   if (!message) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-gray-600 p-8 text-center border-l border-white/5 bg-white/[0.02]">
@@ -498,6 +585,14 @@ export function EvidencePanel({ message, onCitationClick }: EvidencePanelProps) 
                 </div>
               )}
           </div>
+      )}
+
+      {/* Export Buttons (FR-032) */}
+      {sessionId && apiUrl && (
+        <div className="p-4 border-t border-white/5 bg-black/30">
+          <div className="text-[10px] uppercase font-bold text-gray-600 mb-2">Export Session</div>
+          <ExportButtons sessionId={sessionId} apiUrl={apiUrl} />
+        </div>
       )}
 
       {/* System Rigor / Invariants */}

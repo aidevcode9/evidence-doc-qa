@@ -11,7 +11,7 @@ from app.config import (
 from app.db import init_db
 from app.indexing import ensure_index
 from app.telemetry import logger
-from app.routers import health, ask, docs, metrics
+from app.routers import health, ask, docs, metrics, export
 
 app = FastAPI(title="DocQ&A API", version="0.0.0")
 
@@ -32,6 +32,7 @@ app.include_router(health.router)
 app.include_router(ask.router)
 app.include_router(docs.router)
 app.include_router(metrics.router)
+app.include_router(export.router)
 
 
 @app.on_event("startup")

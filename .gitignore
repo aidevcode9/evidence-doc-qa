@@ -232,7 +232,7 @@ evals/out/
 debug_db.py
 debug_env.py
 check_schema.py
-test_*.py
+/test_*.py
 
 # Gemini / AI
 .gemini/
