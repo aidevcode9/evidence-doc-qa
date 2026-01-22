@@ -203,3 +203,15 @@ class TestGetOrCreateSession:
 
                 assert result.session_id == "new-session"
                 mock_create.assert_called_once()
+
+    def test_get_or_create_handles_race_condition(self) -> None:
+        """Handles race condition when two requests try to create same session."""
+        from app.db import get_or_create_session
+        from sqlalchemy.exc import IntegrityError
+
+        # Simulate race: get returns None, but create fails due to duplicate
+        with patch("app.db.get_qa_session", side_effect=[None, MagicMock(session_id="race-session")]):
+            with patch("app.db.create_qa_session", side_effect=IntegrityError("", {}, Exception())):
+                # Should recover by fetching the existing session
+                result = get_or_create_session("race-session", "snap_abc")
+                assert result.session_id == "race-session"

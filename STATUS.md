@@ -1,6 +1,6 @@
 # STATUS.md
 
-Last updated: 2026-01-21 (Phase 2 Complete)
+Last updated: 2026-01-21 (Phase 2 Complete + Security Hardening)
 
 ---
 
@@ -36,8 +36,11 @@ Last updated: 2026-01-21 (Phase 2 Complete)
 | **UI displays citations (doc, page, excerpt)** | FR-030 | — | 01-21 |
 | **Click citation → document viewer** | FR-031 | — | 01-21 |
 | **Export Q&A with citations (PDF/DOCX)** | FR-032 | — | 01-21 |
+| **Security hardening (IDOR, temp file cleanup, rate limit)** | FR-032 | — | 01-21 |
+| **Frontend export fix (fetch with headers)** | FR-032 | — | 01-21 |
+| **Alembic migration for session tables** | FR-032 | — | 01-21 |
 
-> ✅ **Phase 2 Complete:** All Citations UI features shipped. Session-based Q&A storage + PDF/DOCX export with citations.
+> ✅ **Phase 2 Complete:** All Citations UI features shipped. Session-based Q&A storage + PDF/DOCX export with citations. Security hardened per adversarial review.
 
 ## Shipped (Phase 1)
 
@@ -90,6 +93,8 @@ Last updated: 2026-01-21 (Phase 2 Complete)
 | 01-15 | Azure stack for MVP | Fastest path to working demo |
 | 01-21 | **Iframe PDF viewer with page targeting** | Simple, reliable; native PDF support with #page= fragment; fallback to new tab |
 | 01-21 | **Session-based Q&A storage for export** | qa_sessions + qa_messages tables; messages stored automatically; enables PDF/DOCX export |
+| 01-21 | **IDOR prevention via session header** | X-DocQA-Session header required for export; prevents cross-session data access |
+| 01-21 | **Alembic for schema migrations** | Standard migration tooling; documented in ARCHITECTURE.md; `0003_add_qa_session_tables.py` |
 
 > **Current Stack:** Azure AI Search + Azure OpenAI + configurable parser
 > **Parser options:** `PARSER_PROVIDER=marker` (default, OCR), `pypdf` (digital only), `llamaparse` (cloud OCR)

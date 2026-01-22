@@ -236,11 +236,27 @@ def get_qa_session(session_id: str) -> QASession | None:
 
 
 def get_or_create_session(session_id: str, docs_snapshot_id: str) -> QASession:
-    """Get existing session or create a new one."""
+    """Get existing session or create a new one.
+
+    Handles race conditions where two requests try to create the same session
+    simultaneously by catching IntegrityError and retrying the get.
+    """
+    from sqlalchemy.exc import IntegrityError
+
     existing = get_qa_session(session_id)
     if existing:
         return existing
-    return create_qa_session(session_id, docs_snapshot_id)
+
+    try:
+        return create_qa_session(session_id, docs_snapshot_id)
+    except IntegrityError:
+        # Race condition: another request created the session first
+        # Fetch the existing session that was created by the other request
+        existing = get_qa_session(session_id)
+        if existing:
+            return existing
+        # Should not happen, but re-raise if session still not found
+        raise
 
 
 def insert_qa_message(message: QAMessage) -> None:

@@ -3,10 +3,11 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Query
 from fastapi.responses import FileResponse
 
 from app.db import get_qa_session, get_session_messages
@@ -14,21 +15,54 @@ from app.services.export_service import generate_pdf_export, generate_docx_expor
 
 router = APIRouter(tags=["export"])
 
+# Maximum messages to include in export to prevent OOM
+MAX_EXPORT_MESSAGES = 500
+
+
+def _cleanup_temp_file(path: str) -> None:
+    """Remove temporary file after response is sent."""
+    try:
+        if os.path.exists(path):
+            os.unlink(path)
+    except OSError:
+        pass  # Best effort cleanup
+
 
 @router.get("/v1/sessions/{session_id}/export")
 async def export_session(
     session_id: str,
+    background_tasks: BackgroundTasks,
     format: Literal["pdf", "docx"] = Query("pdf", description="Export format"),
+    x_docqa_session: str | None = Header(default=None),
 ) -> FileResponse:
     """Export Q&A session to PDF or DOCX.
 
     Args:
         session_id: The session ID to export
         format: Export format (pdf or docx)
+        x_docqa_session: Session header for ownership validation
 
     Returns:
         FileResponse with the exported document
+
+    Raises:
+        HTTPException 403: If session header is missing or doesn't match
+        HTTPException 404: If session not found
+        HTTPException 400: If session has no messages
     """
+    # Security: Require session header to match path session_id (prevents IDOR)
+    if not x_docqa_session:
+        raise HTTPException(
+            status_code=403,
+            detail="Session header required for export. Include X-DocQA-Session header.",
+        )
+
+    if x_docqa_session != session_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Session mismatch. You can only export your own sessions.",
+        )
+
     session = get_qa_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -36,6 +70,10 @@ async def export_session(
     messages = get_session_messages(session_id)
     if not messages:
         raise HTTPException(status_code=400, detail="Session has no messages")
+
+    # Limit messages to prevent OOM on large sessions
+    if len(messages) > MAX_EXPORT_MESSAGES:
+        messages = messages[:MAX_EXPORT_MESSAGES]
 
     # Generate export
     if format == "pdf":
@@ -54,6 +92,9 @@ async def export_session(
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as f:
         f.write(content)
         temp_path = f.name
+
+    # Schedule temp file cleanup after response is sent
+    background_tasks.add_task(_cleanup_temp_file, temp_path)
 
     return FileResponse(
         path=temp_path,

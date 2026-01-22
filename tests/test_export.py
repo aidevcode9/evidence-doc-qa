@@ -5,6 +5,7 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -329,6 +330,12 @@ class TestGenerateDocxExport:
 class TestExportEndpoint:
     """Tests for export API endpoint."""
 
+    def _mock_background_tasks(self) -> MagicMock:
+        """Create a mock BackgroundTasks object."""
+        mock_bg = MagicMock()
+        mock_bg.add_task = MagicMock()
+        return mock_bg
+
     def test_export_pdf_returns_file(self) -> None:
         """Export PDF endpoint returns file response."""
         from unittest.mock import patch, MagicMock
@@ -357,16 +364,25 @@ class TestExportEndpoint:
         mock_messages[1].refusal_code = None
         mock_messages[1].created_at_utc = datetime.now(timezone.utc).isoformat()
 
+        mock_bg = self._mock_background_tasks()
+
         with patch("app.routers.export.get_qa_session", return_value=mock_session):
             with patch("app.routers.export.get_session_messages", return_value=mock_messages):
                 import asyncio
                 result = asyncio.get_event_loop().run_until_complete(
-                    export_session("test-session-123", "pdf")
+                    export_session(
+                        "test-session-123",
+                        mock_bg,
+                        "pdf",
+                        x_docqa_session="test-session-123",
+                    )
                 )
 
                 assert result.media_type == "application/pdf"
                 assert "qa-export-" in result.filename
                 assert result.filename.endswith(".pdf")
+                # Verify cleanup was scheduled
+                mock_bg.add_task.assert_called_once()
 
     def test_export_docx_returns_file(self) -> None:
         """Export DOCX endpoint returns file response."""
@@ -396,11 +412,18 @@ class TestExportEndpoint:
         mock_messages[1].refusal_code = None
         mock_messages[1].created_at_utc = datetime.now(timezone.utc).isoformat()
 
+        mock_bg = self._mock_background_tasks()
+
         with patch("app.routers.export.get_qa_session", return_value=mock_session):
             with patch("app.routers.export.get_session_messages", return_value=mock_messages):
                 import asyncio
                 result = asyncio.get_event_loop().run_until_complete(
-                    export_session("test-session-456", "docx")
+                    export_session(
+                        "test-session-456",
+                        mock_bg,
+                        "docx",
+                        x_docqa_session="test-session-456",
+                    )
                 )
 
                 assert result.media_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -413,11 +436,18 @@ class TestExportEndpoint:
         from app.routers.export import export_session
         from fastapi import HTTPException
 
+        mock_bg = self._mock_background_tasks()
+
         with patch("app.routers.export.get_qa_session", return_value=None):
             import asyncio
             with pytest.raises(HTTPException) as exc_info:
                 asyncio.get_event_loop().run_until_complete(
-                    export_session("nonexistent-session", "pdf")
+                    export_session(
+                        "nonexistent-session",
+                        mock_bg,
+                        "pdf",
+                        x_docqa_session="nonexistent-session",
+                    )
                 )
             assert exc_info.value.status_code == 404
             assert "Session not found" in str(exc_info.value.detail)
@@ -433,12 +463,170 @@ class TestExportEndpoint:
         mock_session.docs_snapshot_id = "snap_abc"
         mock_session.created_at_utc = datetime.now(timezone.utc).isoformat()
 
+        mock_bg = self._mock_background_tasks()
+
         with patch("app.routers.export.get_qa_session", return_value=mock_session):
             with patch("app.routers.export.get_session_messages", return_value=[]):
                 import asyncio
                 with pytest.raises(HTTPException) as exc_info:
                     asyncio.get_event_loop().run_until_complete(
-                        export_session("empty-session", "pdf")
+                        export_session(
+                            "empty-session",
+                            mock_bg,
+                            "pdf",
+                            x_docqa_session="empty-session",
+                        )
                     )
                 assert exc_info.value.status_code == 400
                 assert "no messages" in str(exc_info.value.detail)
+
+    def test_export_requires_session_header_match(self) -> None:
+        """Export should require X-DocQA-Session header to match session_id."""
+        from unittest.mock import patch, MagicMock
+        from app.routers.export import export_session
+        from fastapi import HTTPException
+
+        mock_session = MagicMock(spec=QASession)
+        mock_session.session_id = "real-session-123"
+        mock_session.docs_snapshot_id = "snap_abc"
+        mock_session.created_at_utc = datetime.now(timezone.utc).isoformat()
+
+        mock_bg = self._mock_background_tasks()
+
+        with patch("app.routers.export.get_qa_session", return_value=mock_session):
+            import asyncio
+            # Try to export without providing the session header
+            with pytest.raises(HTTPException) as exc_info:
+                asyncio.get_event_loop().run_until_complete(
+                    export_session(
+                        "real-session-123",
+                        mock_bg,
+                        "pdf",
+                        x_docqa_session=None,
+                    )
+                )
+            assert exc_info.value.status_code == 403
+            assert "Session header required" in str(exc_info.value.detail)
+
+    def test_export_rejects_mismatched_session_header(self) -> None:
+        """Export should reject when header doesn't match path session_id."""
+        from unittest.mock import patch, MagicMock
+        from app.routers.export import export_session
+        from fastapi import HTTPException
+
+        mock_session = MagicMock(spec=QASession)
+        mock_session.session_id = "real-session-123"
+        mock_session.docs_snapshot_id = "snap_abc"
+        mock_session.created_at_utc = datetime.now(timezone.utc).isoformat()
+
+        mock_bg = self._mock_background_tasks()
+
+        with patch("app.routers.export.get_qa_session", return_value=mock_session):
+            import asyncio
+            # Try to export with wrong session header
+            with pytest.raises(HTTPException) as exc_info:
+                asyncio.get_event_loop().run_until_complete(
+                    export_session(
+                        "real-session-123",
+                        mock_bg,
+                        "pdf",
+                        x_docqa_session="wrong-session",
+                    )
+                )
+            assert exc_info.value.status_code == 403
+            assert "Session mismatch" in str(exc_info.value.detail)
+
+    def test_export_succeeds_with_matching_session_header(self) -> None:
+        """Export should succeed when session header matches path."""
+        from unittest.mock import patch, MagicMock
+        from app.routers.export import export_session
+
+        mock_session = MagicMock(spec=QASession)
+        mock_session.session_id = "my-session-123"
+        mock_session.docs_snapshot_id = "snap_abc"
+        mock_session.created_at_utc = datetime.now(timezone.utc).isoformat()
+
+        mock_messages = [
+            MagicMock(spec=QAMessage),
+            MagicMock(spec=QAMessage),
+        ]
+        mock_messages[0].role = "user"
+        mock_messages[0].content = "Question?"
+        mock_messages[0].citations_json = None
+        mock_messages[0].evidence_json = None
+        mock_messages[0].refusal_code = None
+        mock_messages[0].created_at_utc = datetime.now(timezone.utc).isoformat()
+
+        mock_messages[1].role = "assistant"
+        mock_messages[1].content = "Answer."
+        mock_messages[1].citations_json = None
+        mock_messages[1].evidence_json = None
+        mock_messages[1].refusal_code = None
+        mock_messages[1].created_at_utc = datetime.now(timezone.utc).isoformat()
+
+        mock_bg = self._mock_background_tasks()
+
+        with patch("app.routers.export.get_qa_session", return_value=mock_session):
+            with patch("app.routers.export.get_session_messages", return_value=mock_messages):
+                import asyncio
+                result = asyncio.get_event_loop().run_until_complete(
+                    export_session(
+                        "my-session-123",
+                        mock_bg,
+                        "pdf",
+                        x_docqa_session="my-session-123",
+                    )
+                )
+                assert result.media_type == "application/pdf"
+
+    def test_export_limits_messages(self) -> None:
+        """Export should limit messages to MAX_EXPORT_MESSAGES."""
+        from unittest.mock import patch, MagicMock
+        from app.routers.export import export_session, MAX_EXPORT_MESSAGES
+
+        mock_session = MagicMock(spec=QASession)
+        mock_session.session_id = "large-session"
+        mock_session.docs_snapshot_id = "snap_abc"
+        mock_session.created_at_utc = datetime.now(timezone.utc).isoformat()
+
+        # Create more messages than the limit
+        total_messages = MAX_EXPORT_MESSAGES + 100
+        mock_messages = []
+        for i in range(total_messages):
+            msg = MagicMock(spec=QAMessage)
+            msg.role = "user" if i % 2 == 0 else "assistant"
+            msg.content = f"Message {i}"
+            msg.citations_json = None
+            msg.evidence_json = None
+            msg.refusal_code = None
+            msg.created_at_utc = datetime.now(timezone.utc).isoformat()
+            mock_messages.append(msg)
+
+        mock_bg = self._mock_background_tasks()
+
+        # We need to verify truncation happens before PDF generation
+        # by patching generate_pdf_export to capture what it receives
+        captured_messages: list[Any] = []
+
+        def capture_pdf_call(session: Any, messages: Any) -> bytes:
+            captured_messages.extend(messages)
+            # Return valid PDF bytes (minimal)
+            return b"%PDF-1.4 minimal"
+
+        with patch("app.routers.export.get_qa_session", return_value=mock_session):
+            with patch("app.routers.export.get_session_messages", return_value=mock_messages):
+                with patch("app.routers.export.generate_pdf_export", side_effect=capture_pdf_call):
+                    import asyncio
+                    # Should succeed but with truncated messages
+                    asyncio.get_event_loop().run_until_complete(
+                        export_session(
+                            "large-session",
+                            mock_bg,
+                            "pdf",
+                            x_docqa_session="large-session",
+                        )
+                    )
+
+        # Verify messages were truncated to MAX_EXPORT_MESSAGES
+        assert len(captured_messages) == MAX_EXPORT_MESSAGES
+        assert len(captured_messages) < total_messages

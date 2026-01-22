@@ -957,6 +957,110 @@ Same images, Helm chart for:
 
 ---
 
+## Database Migrations (Alembic)
+
+The project uses **Alembic** for database schema migrations. This ensures reproducible schema changes across environments.
+
+### Directory Structure
+
+```
+alembic/
+├── alembic.ini          # Alembic configuration
+├── env.py               # Migration environment setup
+└── versions/            # Migration scripts
+    ├── 0001_create_tables.py
+    ├── 0002_add_page_char_offsets.py
+    └── 0003_add_qa_session_tables.py
+```
+
+### Common Commands
+
+```bash
+# Apply all pending migrations
+alembic upgrade head
+
+# Check current revision
+alembic current
+
+# Show migration history
+alembic history
+
+# Rollback one migration
+alembic downgrade -1
+
+# Rollback to specific revision
+alembic downgrade 0002_add_page_char_offsets
+
+# Create new migration (after modifying models in db.py)
+alembic revision -m "add_new_table"
+```
+
+### Migration Naming Convention
+
+```
+NNNN_description.py
+
+Examples:
+0001_create_tables.py
+0002_add_page_char_offsets.py
+0003_add_qa_session_tables.py
+```
+
+### Auto-create vs Alembic
+
+The app also calls `Base.metadata.create_all()` on startup via `init_db()`. This:
+- Creates missing tables automatically (useful for fresh databases)
+- Does NOT modify existing tables (won't add new columns)
+
+**Use Alembic** when:
+- Adding columns to existing tables
+- Modifying column types
+- Adding indexes
+- Any schema change to production databases
+
+### Migration Template
+
+```python
+"""description of change
+
+Revision ID: NNNN_description
+Revises: previous_revision
+Create Date: YYYY-MM-DD
+
+"""
+
+from alembic import op
+import sqlalchemy as sa
+
+revision = "NNNN_description"
+down_revision = "previous_revision"
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    # Forward migration
+    op.create_table(...)
+    op.add_column(...)
+
+
+def downgrade() -> None:
+    # Reverse migration (for rollback)
+    op.drop_column(...)
+    op.drop_table(...)
+```
+
+### Environment Variable
+
+Alembic reads `DATABASE_URL` from environment:
+
+```ini
+# alembic.ini
+sqlalchemy.url = ${DATABASE_URL}
+```
+
+---
+
 ## Migration Notes
 
 When adding new deployment tier or swapping providers:
