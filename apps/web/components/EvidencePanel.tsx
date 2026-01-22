@@ -1,5 +1,5 @@
 import React from "react";
-import { Message } from "@/types";
+import { Message, Citation } from "@/types";
 
 const MetricTooltip = ({ label, description }: { label: string; description: string }) => (
   <span className="flex items-center gap-2">
@@ -52,7 +52,12 @@ const renderHighlightedText = (text: string): React.ReactNode[] => {
   return parts.length ? parts : [sanitized];
 };
 
-export function EvidencePanel({ message }: { message: Message | null }) {
+interface EvidencePanelProps {
+  message: Message | null;
+  onCitationClick?: (citation: Citation) => void;
+}
+
+export function EvidencePanel({ message, onCitationClick }: EvidencePanelProps) {
   if (!message) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-gray-600 p-8 text-center border-l border-white/5 bg-white/[0.02]">
@@ -230,10 +235,20 @@ export function EvidencePanel({ message }: { message: Message | null }) {
           <h3 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-4">What We Found</h3>
           <div className="space-y-4">
             {citations?.map((citation, idx) => (
-              <div key={idx} className="group relative pl-4 border-l-2 border-white/10">
-                <div className="absolute -left-[5px] top-0 w-2 h-2 rounded-full bg-black border border-white/10"></div>
-                <div className="text-[10px] text-blue-400 mb-1 font-mono">
-                  {citation.doc_name} › Pg {citation.page_num}
+              <button
+                key={idx}
+                onClick={() => onCitationClick?.(citation)}
+                className="group relative pl-4 border-l-2 border-white/10 hover:border-blue-500 transition-colors text-left w-full cursor-pointer"
+                title="Click to view source document"
+              >
+                <div className="absolute -left-[5px] top-0 w-2 h-2 rounded-full bg-black border border-white/10 group-hover:border-blue-500 transition-colors"></div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] text-blue-400 font-mono">
+                    [{citation.citation_index}] {citation.doc_name} › Pg {citation.page_num}
+                  </span>
+                  <span className="text-[10px] text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                    View Source
+                  </span>
                 </div>
                 <p className="text-xs text-gray-300 leading-relaxed italic opacity-80">
                    {citation.highlighted_text ? (
@@ -242,7 +257,7 @@ export function EvidencePanel({ message }: { message: Message | null }) {
                       <span>"{citation.snippet}"</span>
                    )}
                 </p>
-              </div>
+              </button>
             ))}
             {!citations?.length && (
               <div className="text-xs text-gray-600 italic">
@@ -387,10 +402,20 @@ export function EvidencePanel({ message }: { message: Message | null }) {
         
         <div className="space-y-4">
             {citations?.map((citation, idx) => (
-                <div key={idx} className="group relative pl-4 border-l-2 border-white/10 hover:border-blue-500 transition-colors">
+                <button
+                    key={idx}
+                    onClick={() => onCitationClick?.(citation)}
+                    className="group relative pl-4 border-l-2 border-white/10 hover:border-blue-500 transition-colors text-left w-full cursor-pointer"
+                    title="Click to view source document"
+                >
                     <div className="absolute -left-[5px] top-0 w-2 h-2 rounded-full bg-black border border-white/10 group-hover:border-blue-500 transition-colors"></div>
-                    <div className="text-[10px] text-blue-400 mb-1 font-mono">
-                        {citation.doc_name} • Pg {citation.page_num}
+                    <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] text-blue-400 font-mono">
+                            [{citation.citation_index}] {citation.doc_name} • Pg {citation.page_num}
+                        </span>
+                        <span className="text-[10px] text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                            View Source
+                        </span>
                     </div>
                     <p className="text-xs text-gray-300 leading-relaxed italic opacity-80">
                         {citation.highlighted_text ? (
@@ -399,9 +424,9 @@ export function EvidencePanel({ message }: { message: Message | null }) {
                             <span>"{citation.snippet}"</span>
                         )}
                     </p>
-                </div>
+                </button>
             ))}
-            
+
             {!citations?.length && (
                 <div className="text-xs text-gray-600 italic">
                     No explicit citations available for this response.

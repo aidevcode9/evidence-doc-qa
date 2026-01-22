@@ -1,12 +1,12 @@
 # STATUS.md
 
-Last updated: 2026-01-21 (Phase 1 Complete)
+Last updated: 2026-01-21 (Phase 2 Started)
 
 ---
 
-## Current Phase: 1 — Core RAG
+## Current Phase: 2 — Citations UI
 
-**Goal:** Working Q&A with citations
+**Goal:** Clickable citations, document viewer, export
 **Target:** End of January 2026
 
 ---
@@ -21,13 +21,22 @@ Last updated: 2026-01-21 (Phase 1 Complete)
 
 | Task | FR | Depends On | Notes |
 |------|-----|------------|-------|
-| — | — | — | — |
+| Citation export (copy/download) | FR-032 | FR-030, FR-031 | Export citations to clipboard or file |
 
 ## Blocked
 
 | Task | FR | Waiting On | Since | Action |
 |------|-----|------------|-------|--------|
 | — | — | — | — | — |
+
+## Shipped (Phase 2)
+
+| Task | FR | PR | Date |
+|------|-----|-----|------|
+| **UI displays citations (doc, page, excerpt)** | FR-030 | — | 01-21 |
+| **Click citation → document viewer** | FR-031 | — | 01-21 |
+
+> ✅ **FR-030/FR-031 Complete:** Citations display in EvidencePanel. Clicking citation opens document viewer modal at cited page.
 
 ## Shipped (Phase 1)
 
@@ -40,33 +49,26 @@ Last updated: 2026-01-21 (Phase 1 Complete)
 | Chunking with page/char offsets | FR-013 | — | 01-18 |
 | Evidence-grounded answers + Confidence gating | FR-023, FR-024 | — | 01-18 |
 | Citation validation | FR-025 | — | 01-19 |
-| **OCR + Image support** | FR-010, FR-012, NFR-036 | — | 01-20 |
-| **ParserClient abstraction** | NFR-036 | — | 01-20 |
-| **Eval suite reorganization** | — | — | 01-20 |
-| **Type annotations (mypy --strict)** | NFR-040 | — | 01-21 |
-| **pytest-asyncio configuration** | — | — | 01-21 |
-| **Dev dependencies separation** | NFR-041 | — | 01-21 |
+| OCR + Image support | FR-010, FR-012, NFR-036 | — | 01-20 |
+| ParserClient abstraction | NFR-036 | — | 01-20 |
+| Eval suite reorganization | — | — | 01-20 |
+| Type annotations (mypy --strict) | NFR-040 | — | 01-21 |
+| pytest-asyncio configuration | — | — | 01-21 |
+| Dev dependencies separation | NFR-041 | — | 01-21 |
 
-> ✅ **FR-010/FR-012 Complete:** PDF + image upload with OCR support via Marker (default) or LlamaParse (cloud).
+> ✅ **Phase 1 Complete:** PDF + image upload with OCR support via Marker (default) or LlamaParse (cloud).
 
 ---
 
-## Phase 1 Progress
+## Phase 2 Progress
 
 | FR | Requirement | Status |
 |----|-------------|--------|
-| FR-010 | Upload PDFs/images | ✅ Shipped (PDF + PNG/JPG/TIFF) |
-| FR-012 | Text extraction + OCR | ✅ Shipped (Marker default, LlamaParse optional) |
-| FR-013 | Chunking with page/char offsets | ✅ Shipped |
-| FR-021 | Hybrid retrieval (BM25 + vector) | ✅ Shipped |
-| FR-023 | Evidence-grounded answers | ✅ Shipped |
-| FR-024 | Confidence refusal | ✅ Shipped |
-| FR-025 | Citation validation | ✅ Shipped |
-| NFR-036 | ParserClient abstraction | ✅ Shipped |
-| NFR-040 | Type annotations (mypy --strict) | ✅ Shipped |
-| NFR-041 | Dev dependencies separated | ✅ Shipped |
+| FR-030 | UI displays citations | ✅ Shipped |
+| FR-031 | Click citation → document viewer | ✅ Shipped |
+| FR-032 | Export citations | ⬜ Next |
 
-**Phase 1 Complete!** All core RAG features shipped.
+**Phase 2 In Progress:** 2/3 Citations UI features shipped.
 
 ---
 
@@ -85,6 +87,7 @@ Last updated: 2026-01-21 (Phase 1 Complete)
 | 01-17 | **pgvector target for Phase 2** | Azure AI Search works but latency concerns; pgvector simpler long-term |
 | 01-16 | Confidence threshold 0.70 | Per architecture review |
 | 01-15 | Azure stack for MVP | Fastest path to working demo |
+| 01-21 | **Iframe PDF viewer with page targeting** | Simple, reliable; native PDF support with #page= fragment; fallback to new tab |
 
 > **Current Stack:** Azure AI Search + Azure OpenAI + configurable parser
 > **Parser options:** `PARSER_PROVIDER=marker` (default, OCR), `pypdf` (digital only), `llamaparse` (cloud OCR)

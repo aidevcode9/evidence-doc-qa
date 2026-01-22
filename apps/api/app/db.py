@@ -150,6 +150,13 @@ def get_doc_name(doc_id: str) -> str | None:
         return row[0] if row else None
 
 
+def get_document(doc_id: str) -> Document | None:
+    """Get a document by ID."""
+    with session_scope() as session:
+        stmt = select(Document).where(Document.doc_id == doc_id)
+        return session.scalars(stmt).first()
+
+
 def load_chunks(docs_snapshot_id: str | None) -> list[Chunk]:
     with session_scope() as session:
         stmt = select(Chunk)

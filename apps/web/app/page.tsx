@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Message } from "@/types";
+import { Message, Citation } from "@/types";
 import { IngestionZone } from "@/components/IngestionZone";
 import { ChatInterface } from "@/components/ChatInterface";
 import { EvidencePanel } from "@/components/EvidencePanel";
+import { DocumentViewer } from "@/components/DocumentViewer";
 
 export default function DocQAPage() {
   const [docsSnapshotId, setDocsSnapshotId] = useState<string>("");
@@ -13,8 +14,17 @@ export default function DocQAPage() {
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<{ name: string; email: string } | null>(null);
+  const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+  const handleCitationClick = (citation: Citation) => {
+    setSelectedCitation(citation);
+  };
+
+  const handleCloseViewer = () => {
+    setSelectedCitation(null);
+  };
 
   useEffect(() => {
     const storedSession = localStorage.getItem("docqa_session");
@@ -137,9 +147,18 @@ export default function DocQAPage() {
 
         {/* Evidence Column */}
         <div className="flex-none w-full md:w-[400px] lg:w-[450px] bg-black/40 backdrop-blur-xl border-t md:border-t-0 border-white/10 md:border-l z-10 h-[40vh] md:h-full">
-            <EvidencePanel message={selectedMessage} />
+            <EvidencePanel message={selectedMessage} onCitationClick={handleCitationClick} />
         </div>
       </main>
+
+      {/* Document Viewer Modal (FR-031) */}
+      {selectedCitation && (
+        <DocumentViewer
+          citation={selectedCitation}
+          apiUrl={API_URL}
+          onClose={handleCloseViewer}
+        />
+      )}
     </div>
   );
 }

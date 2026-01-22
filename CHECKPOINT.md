@@ -93,6 +93,68 @@
 
 ---
 
+## Task 4: FR-030 — UI displays citations (Phase 2)
+- **FR/NFR:** FR-030
+- **Branch:** feat/ocr-image-support
+- **Status:** ✅ Complete (Already Implemented)
+
+### Analysis
+- FR-030 was already implemented in `EvidencePanel.tsx`
+- Component displays: doc_name, page_num, snippet for each citation
+- Citations shown in "Sources" section with proper formatting
+
+### Notes
+- No changes required — feature already existed
+
+---
+
+## Task 5: FR-031 — Click citation → document viewer (Phase 2)
+- **FR/NFR:** FR-031
+- **Branch:** feat/ocr-image-support
+- **Status:** ✅ Complete
+
+### Changes Made
+
+**Backend:**
+- `apps/api/app/db.py`: Added `get_document()` function
+- `apps/api/app/routers/docs.py`: Added two new endpoints:
+  - `GET /v1/docs/{doc_id}` — returns document metadata
+  - `GET /v1/docs/{doc_id}/view` — serves document file (FileResponse)
+- Proper media type detection for PDF/PNG/JPG/TIFF files
+
+**Frontend:**
+- `apps/web/components/DocumentViewer.tsx`: New modal component
+  - Displays document in iframe with page targeting (#page=N)
+  - Shows loading/error states
+  - "Open in New Tab" fallback for browser compatibility
+  - Displays citation details (doc name, page, snippet preview)
+- `apps/web/components/EvidencePanel.tsx`: Made citations clickable
+  - Added `onCitationClick` callback prop
+  - Citations now render as buttons with hover effects
+  - Shows "View Source" on hover
+- `apps/web/app/page.tsx`: Integrated DocumentViewer
+  - Added `selectedCitation` state
+  - Wired up `handleCitationClick` handler
+  - Renders DocumentViewer modal when citation selected
+
+**Tests:**
+- `tests/test_docs_api.py`: 6 new tests for document API endpoints
+  - Test metadata retrieval
+  - Test 404 handling
+  - Test file serving
+  - Test media type detection
+
+### Verification
+- [x] `ruff check apps/` — passed
+- [x] `mypy apps/api/app --strict` — passed (0 errors)
+- [x] `pytest tests/ -v` — 63/63 passed (6 new tests)
+
+### Notes
+- Used iframe with PDF page targeting (#page=N) for simplicity
+- Decision logged in STATUS.md: Iframe PDF viewer over complex PDF.js integration
+
+---
+
 ## Template (Copy for each task)
 
 ```markdown
