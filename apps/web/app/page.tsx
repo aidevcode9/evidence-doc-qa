@@ -27,10 +27,14 @@ export default function DocQAPage() {
   };
 
   useEffect(() => {
-    const storedSession = localStorage.getItem("docqa_session");
-    if (storedSession) {
-      setSessionId(storedSession);
+    // Generate or restore session ID for export functionality (FR-032)
+    let storedSession = localStorage.getItem("docqa_session");
+    if (!storedSession) {
+      storedSession = crypto.randomUUID();
+      localStorage.setItem("docqa_session", storedSession);
     }
+    setSessionId(storedSession);
+
     const storedUser = localStorage.getItem("docqa_user");
     if (storedUser) {
       try {
@@ -147,7 +151,12 @@ export default function DocQAPage() {
 
         {/* Evidence Column */}
         <div className="flex-none w-full md:w-[400px] lg:w-[450px] bg-black/40 backdrop-blur-xl border-t md:border-t-0 border-white/10 md:border-l z-10 h-[40vh] md:h-full">
-            <EvidencePanel message={selectedMessage} onCitationClick={handleCitationClick} />
+            <EvidencePanel
+              message={selectedMessage}
+              onCitationClick={handleCitationClick}
+              sessionId={sessionId}
+              apiUrl={API_URL}
+            />
         </div>
       </main>
 

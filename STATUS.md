@@ -1,10 +1,10 @@
 # STATUS.md
 
-Last updated: 2026-01-21 (Phase 2 Started)
+Last updated: 2026-01-21 (Phase 2 Complete)
 
 ---
 
-## Current Phase: 2 — Citations UI
+## Current Phase: 2 — Citations UI ✅ COMPLETE
 
 **Goal:** Clickable citations, document viewer, export
 **Target:** End of January 2026
@@ -15,13 +15,13 @@ Last updated: 2026-01-21 (Phase 2 Started)
 
 | Task | FR | Branch | Started | Notes |
 |------|-----|--------|---------|-------|
-| — | — | — | — | — |
+| — | — | — | — | Phase 2 complete |
 
 ## Next (Priority Order)
 
 | Task | FR | Depends On | Notes |
 |------|-----|------------|-------|
-| Citation export (copy/download) | FR-032 | FR-030, FR-031 | Export citations to clipboard or file |
+| Multi-tenancy | FR-001–004 | — | Phase 3 |
 
 ## Blocked
 
@@ -35,8 +35,9 @@ Last updated: 2026-01-21 (Phase 2 Started)
 |------|-----|-----|------|
 | **UI displays citations (doc, page, excerpt)** | FR-030 | — | 01-21 |
 | **Click citation → document viewer** | FR-031 | — | 01-21 |
+| **Export Q&A with citations (PDF/DOCX)** | FR-032 | — | 01-21 |
 
-> ✅ **FR-030/FR-031 Complete:** Citations display in EvidencePanel. Clicking citation opens document viewer modal at cited page.
+> ✅ **Phase 2 Complete:** All Citations UI features shipped. Session-based Q&A storage + PDF/DOCX export with citations.
 
 ## Shipped (Phase 1)
 
@@ -66,9 +67,9 @@ Last updated: 2026-01-21 (Phase 2 Started)
 |----|-------------|--------|
 | FR-030 | UI displays citations | ✅ Shipped |
 | FR-031 | Click citation → document viewer | ✅ Shipped |
-| FR-032 | Export citations | ⬜ Next |
+| FR-032 | Export citations (PDF/DOCX) | ✅ Shipped |
 
-**Phase 2 In Progress:** 2/3 Citations UI features shipped.
+**Phase 2 Complete:** 3/3 Citations UI features shipped.
 
 ---
 
@@ -88,6 +89,7 @@ Last updated: 2026-01-21 (Phase 2 Started)
 | 01-16 | Confidence threshold 0.70 | Per architecture review |
 | 01-15 | Azure stack for MVP | Fastest path to working demo |
 | 01-21 | **Iframe PDF viewer with page targeting** | Simple, reliable; native PDF support with #page= fragment; fallback to new tab |
+| 01-21 | **Session-based Q&A storage for export** | qa_sessions + qa_messages tables; messages stored automatically; enables PDF/DOCX export |
 
 > **Current Stack:** Azure AI Search + Azure OpenAI + configurable parser
 > **Parser options:** `PARSER_PROVIDER=marker` (default, OCR), `pypdf` (digital only), `llamaparse` (cloud OCR)

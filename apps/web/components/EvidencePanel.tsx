@@ -55,9 +55,45 @@ const renderHighlightedText = (text: string): React.ReactNode[] => {
 interface EvidencePanelProps {
   message: Message | null;
   onCitationClick?: (citation: Citation) => void;
+  sessionId?: string | null;
+  apiUrl?: string;
 }
 
-export function EvidencePanel({ message, onCitationClick }: EvidencePanelProps) {
+const ExportButtons = ({ sessionId, apiUrl }: { sessionId?: string | null; apiUrl?: string }) => {
+  if (!sessionId || !apiUrl) return null;
+
+  const handleExport = (format: "pdf" | "docx") => {
+    const url = `${apiUrl}/v1/sessions/${sessionId}/export?format=${format}`;
+    window.open(url, "_blank");
+  };
+
+  return (
+    <div className="flex gap-2 mt-4">
+      <button
+        onClick={() => handleExport("pdf")}
+        className="flex-1 px-3 py-2 bg-blue-600/20 border border-blue-500/30 hover:bg-blue-600/30 text-blue-400 text-xs font-medium rounded transition-colors"
+        title="Export Q&A session as PDF"
+      >
+        <svg className="w-3.5 h-3.5 inline-block mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        Export PDF
+      </button>
+      <button
+        onClick={() => handleExport("docx")}
+        className="flex-1 px-3 py-2 bg-green-600/20 border border-green-500/30 hover:bg-green-600/30 text-green-400 text-xs font-medium rounded transition-colors"
+        title="Export Q&A session as DOCX"
+      >
+        <svg className="w-3.5 h-3.5 inline-block mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        Export DOCX
+      </button>
+    </div>
+  );
+};
+
+export function EvidencePanel({ message, onCitationClick, sessionId, apiUrl }: EvidencePanelProps) {
   if (!message) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-gray-600 p-8 text-center border-l border-white/5 bg-white/[0.02]">
@@ -498,6 +534,14 @@ export function EvidencePanel({ message, onCitationClick }: EvidencePanelProps) 
                 </div>
               )}
           </div>
+      )}
+
+      {/* Export Buttons (FR-032) */}
+      {sessionId && apiUrl && (
+        <div className="p-4 border-t border-white/5 bg-black/30">
+          <div className="text-[10px] uppercase font-bold text-gray-600 mb-2">Export Session</div>
+          <ExportButtons sessionId={sessionId} apiUrl={apiUrl} />
+        </div>
       )}
 
       {/* System Rigor / Invariants */}

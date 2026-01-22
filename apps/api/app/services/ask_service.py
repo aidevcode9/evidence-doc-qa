@@ -1,3 +1,4 @@
+import json
 import time
 import uuid
 from typing import Any
@@ -5,6 +6,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from app import evidence, otel, policy, retrieval, verification, ingestion
+from app.db import QAMessage, get_or_create_session, insert_qa_message
 from app.config import (
     MODEL_ID,
     PROMPT_VERSION,
@@ -85,6 +87,8 @@ def execute_ask(
             tokens_out=tokens_out,
             cost_est=cost_est,
             trace_metadata=trace_metadata,
+            session_id=session_id,
+            question=question,
         )
 
     with otel.span("retrieval", docs_snapshot_id=docs_snapshot_id) as retrieval_span:
@@ -176,6 +180,8 @@ def execute_ask(
             cost_est=cost_est,
             debug_candidates=debug_candidates,
             trace_metadata=trace_metadata,
+            session_id=session_id,
+            question=question,
         )
 
     # Filter by confidence
@@ -205,6 +211,8 @@ def execute_ask(
             cost_est=cost_est,
             debug_candidates=debug_candidates,
             trace_metadata=trace_metadata,
+            session_id=session_id,
+            question=question,
         )
 
     verified_chunk = None
@@ -300,6 +308,8 @@ def execute_ask(
                     tokens_out=tokens_out,
                     cost_est=cost_est,
                     trace_metadata=trace_metadata,
+                    session_id=session_id,
+                    question=question,
                 )
 
             if STRICT_EVIDENCE and not ALLOW_UNVERIFIED:
@@ -317,6 +327,8 @@ def execute_ask(
                     tokens_out=tokens_out,
                     cost_est=cost_est,
                     trace_metadata=trace_metadata,
+                    session_id=session_id,
+                    question=question,
                 )
             verified_chunk = candidates[0]
     else:
@@ -335,6 +347,8 @@ def execute_ask(
                 tokens_out=tokens_out,
                 cost_est=cost_est,
                 trace_metadata=trace_metadata,
+                session_id=session_id,
+                question=question,
             )
         verified_chunk = candidates[0]
 
@@ -503,6 +517,8 @@ def execute_ask(
             citations=citations,
             debug_candidates=debug_candidates,
             trace_metadata=trace_metadata,
+            session_id=session_id,
+            question=question,
         )
 
     # Build answer with [N] citation markers (FR-023)
@@ -533,6 +549,21 @@ def execute_ask(
         cost_est=cost_est,
         trace_metadata=trace_metadata,
     )
+
+    # Store Q&A messages for export (FR-032)
+    if session_id:
+        _store_qa_messages(
+            session_id=session_id,
+            docs_snapshot_id=docs_snapshot_id,
+            question=question,
+            request_id=request_id,
+            answer_text=answer_text,
+            citations=citations,
+            evidence=evidence_support,
+            refusal_code=None,
+            version_snapshot=version_snapshot,
+        )
+
     logger.info(f"Success [{request_id}]: Response returned with {len(citations)} citation(s) from {primary_citation.doc_name}")
     return response
 
@@ -596,6 +627,8 @@ def _emit_refusal(
     citations: list[Citation] | None = None,
     debug_candidates: list[DebugCandidate] | None = None,
     trace_metadata: TraceMetadata | None = None,
+    session_id: str | None = None,
+    question: str | None = None,
 ) -> AskResponse:
     response = AskResponse(
         request_id=request_id,
@@ -621,4 +654,78 @@ def _emit_refusal(
         cost_est=cost_est,
         trace_metadata=trace_metadata,
     )
+
+    # Store Q&A messages for export (FR-032) - even for refusals
+    if session_id and question:
+        _store_qa_messages(
+            session_id=session_id,
+            docs_snapshot_id=docs_snapshot_id,
+            question=question,
+            request_id=request_id,
+            answer_text=reason,
+            citations=citations,
+            evidence=evidence,
+            refusal_code=refusal_code,
+            version_snapshot=version_snapshot,
+        )
+
     return response
+
+
+def _store_qa_messages(
+    *,
+    session_id: str,
+    docs_snapshot_id: str,
+    question: str,
+    request_id: str,
+    answer_text: str | None,
+    citations: list[Citation] | None,
+    evidence: EvidenceSupport | None,
+    refusal_code: RefusalCode | None,
+    version_snapshot: VersionSnapshot,
+) -> None:
+    """Store user question and assistant response as QA messages (FR-032)."""
+    try:
+        # Ensure session exists
+        get_or_create_session(session_id, docs_snapshot_id)
+
+        timestamp = ingestion.utc_now()
+
+        # Store user message
+        user_message = QAMessage(
+            message_id=str(uuid.uuid4()),
+            session_id=session_id,
+            role="user",
+            content=question,
+            citations_json=None,
+            evidence_json=None,
+            refusal_code=None,
+            version_snapshot_json=None,
+            created_at_utc=timestamp,
+        )
+        insert_qa_message(user_message)
+
+        # Store assistant response
+        assistant_message = QAMessage(
+            message_id=request_id,
+            session_id=session_id,
+            role="assistant",
+            content=answer_text or "",
+            citations_json=(
+                json.dumps([c.model_dump() for c in citations])
+                if citations
+                else None
+            ),
+            evidence_json=(
+                json.dumps(evidence.model_dump())
+                if evidence
+                else None
+            ),
+            refusal_code=str(refusal_code.value) if refusal_code else None,
+            version_snapshot_json=json.dumps(version_snapshot),
+            created_at_utc=timestamp,
+        )
+        insert_qa_message(assistant_message)
+    except Exception as e:
+        # Don't fail the request if message storage fails
+        logger.warning(f"Failed to store QA messages: {e}")

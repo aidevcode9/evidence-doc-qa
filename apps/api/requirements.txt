@@ -17,3 +17,7 @@ azure-monitor-opentelemetry-exporter>=1.0.0b20
 # Document Parsing (FR-010, FR-012, NFR-036)
 marker-pdf>=1.0.0
 llama-parse>=0.4.0
+
+# Q&A Export (FR-032)
+python-docx>=1.1.0
+reportlab>=4.0.0
