@@ -7,9 +7,10 @@ import os
 import tempfile
 from typing import Literal
 
-from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
 from fastapi.responses import FileResponse
 
+from app.context import RequestContext, get_request_context
 from app.db import get_qa_session, get_session_messages
 from app.services.export_service import generate_pdf_export, generate_docx_export
 
@@ -32,13 +33,15 @@ def _cleanup_temp_file(path: str) -> None:
 async def export_session(
     session_id: str,
     background_tasks: BackgroundTasks,
+    context: RequestContext = Depends(get_request_context),
     format: Literal["pdf", "docx"] = Query("pdf", description="Export format"),
     x_docqa_session: str | None = Header(default=None),
 ) -> FileResponse:
-    """Export Q&A session to PDF or DOCX.
+    """Export Q&A session to PDF or DOCX with tenant isolation (FR-001, FR-032).
 
     Args:
         session_id: The session ID to export
+        context: Request context with tenant_id for isolation
         format: Export format (pdf or docx)
         x_docqa_session: Session header for ownership validation
 
@@ -63,11 +66,13 @@ async def export_session(
             detail="Session mismatch. You can only export your own sessions.",
         )
 
-    session = get_qa_session(session_id)
+    # Get session with tenant isolation (FR-001)
+    session = get_qa_session(session_id, tenant_id=context.tenant_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    messages = get_session_messages(session_id)
+    # Get messages with tenant isolation (FR-001)
+    messages = get_session_messages(session_id, tenant_id=context.tenant_id)
     if not messages:
         raise HTTPException(status_code=400, detail="Session has no messages")
 

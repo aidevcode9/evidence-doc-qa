@@ -36,6 +36,9 @@ VersionSnapshot = dict[str, str]
 def execute_ask(
     payload: AskRequest,
     session_id: str | None = None,
+    *,
+    tenant_id: str,
+    matter_id: str,
 ) -> AskResponse:
     start_time = time.perf_counter()
     question = payload.question.strip()
@@ -43,7 +46,7 @@ def execute_ask(
         raise HTTPException(status_code=400, detail="Question is required.")
 
     request_id = str(uuid.uuid4())
-    docs_snapshot_id = payload.docs_snapshot_id or get_latest_docs_snapshot_id() or "none"
+    docs_snapshot_id = payload.docs_snapshot_id or get_latest_docs_snapshot_id(tenant_id=tenant_id) or "none"
     question_len = len(question)
     question_hash = rag.hash_text(question) if question else None
     
@@ -89,12 +92,16 @@ def execute_ask(
             trace_metadata=trace_metadata,
             session_id=session_id,
             question=question,
+            tenant_id=tenant_id,
+            matter_id=matter_id,
         )
 
     with otel.span("retrieval", docs_snapshot_id=docs_snapshot_id) as retrieval_span:
         search_result = retrieval.hybrid_search(
             question,
             docs_snapshot_id,
+            tenant_id=tenant_id,
+            matter_id=matter_id,
             return_usage=True,
         )
         # hybrid_search with return_usage=True returns tuple
@@ -162,7 +169,7 @@ def execute_ask(
     if not results or rag.score_value(results[0], ret_score_key) == 0.0:
         logger.warning(f"Retrieval Fail [{request_id}]: No evidence found")
         debug_candidates = (
-            rag.build_debug_candidates(question, results, reason_override="NO_SUPPORTING_EVIDENCE")
+            rag.build_debug_candidates(question, results, tenant_id=tenant_id, reason_override="NO_SUPPORTING_EVIDENCE")
             if results
             else None
         )
@@ -182,6 +189,8 @@ def execute_ask(
             trace_metadata=trace_metadata,
             session_id=session_id,
             question=question,
+            tenant_id=tenant_id,
+            matter_id=matter_id,
         )
 
     # Filter by confidence
@@ -195,6 +204,7 @@ def execute_ask(
         debug_candidates = rag.build_debug_candidates(
             question,
             results,
+            tenant_id=tenant_id,
             reason_override="BELOW_CONFIDENCE_THRESHOLD",
         )
         return _emit_refusal(
@@ -213,6 +223,8 @@ def execute_ask(
             trace_metadata=trace_metadata,
             session_id=session_id,
             question=question,
+            tenant_id=tenant_id,
+            matter_id=matter_id,
         )
 
     verified_chunk = None
@@ -310,6 +322,8 @@ def execute_ask(
                     trace_metadata=trace_metadata,
                     session_id=session_id,
                     question=question,
+                    tenant_id=tenant_id,
+                    matter_id=matter_id,
                 )
 
             if STRICT_EVIDENCE and not ALLOW_UNVERIFIED:
@@ -329,6 +343,8 @@ def execute_ask(
                     trace_metadata=trace_metadata,
                     session_id=session_id,
                     question=question,
+                    tenant_id=tenant_id,
+                    matter_id=matter_id,
                 )
             verified_chunk = candidates[0]
     else:
@@ -349,6 +365,8 @@ def execute_ask(
                 trace_metadata=trace_metadata,
                 session_id=session_id,
                 question=question,
+                tenant_id=tenant_id,
+                matter_id=matter_id,
             )
         verified_chunk = candidates[0]
 
@@ -431,7 +449,7 @@ def execute_ask(
         if not chunk_span:
             chunk_span = rag.snippet_for(chunk["chunk_text"])
 
-        doc_name = chunk.get("doc_name") or rag.doc_name_for(chunk["doc_id"])
+        doc_name = chunk.get("doc_name") or rag.doc_name_for(chunk["doc_id"], tenant_id)
         page = chunk["page_num"]
         chunk_score = rag.score_value(chunk, ret_score_key)
 
@@ -490,6 +508,7 @@ def execute_ask(
     debug_candidates = rag.build_debug_candidates(
         question,
         candidates,
+        tenant_id=tenant_id,
         verification_results=verification_results,
         verification_reasons=verification_reasons,
     )
@@ -519,6 +538,8 @@ def execute_ask(
             trace_metadata=trace_metadata,
             session_id=session_id,
             question=question,
+            tenant_id=tenant_id,
+            matter_id=matter_id,
         )
 
     # Build answer with [N] citation markers (FR-023)
@@ -555,6 +576,8 @@ def execute_ask(
         _store_qa_messages(
             session_id=session_id,
             docs_snapshot_id=docs_snapshot_id,
+            tenant_id=tenant_id,
+            matter_id=matter_id,
             question=question,
             request_id=request_id,
             answer_text=answer_text,
@@ -629,6 +652,8 @@ def _emit_refusal(
     trace_metadata: TraceMetadata | None = None,
     session_id: str | None = None,
     question: str | None = None,
+    tenant_id: str | None = None,
+    matter_id: str | None = None,
 ) -> AskResponse:
     response = AskResponse(
         request_id=request_id,
@@ -656,10 +681,12 @@ def _emit_refusal(
     )
 
     # Store Q&A messages for export (FR-032) - even for refusals
-    if session_id and question:
+    if session_id and question and tenant_id and matter_id:
         _store_qa_messages(
             session_id=session_id,
             docs_snapshot_id=docs_snapshot_id,
+            tenant_id=tenant_id,
+            matter_id=matter_id,
             question=question,
             request_id=request_id,
             answer_text=reason,
@@ -676,6 +703,8 @@ def _store_qa_messages(
     *,
     session_id: str,
     docs_snapshot_id: str,
+    tenant_id: str,
+    matter_id: str,
     question: str,
     request_id: str,
     answer_text: str | None,
@@ -684,17 +713,33 @@ def _store_qa_messages(
     refusal_code: RefusalCode | None,
     version_snapshot: VersionSnapshot,
 ) -> None:
-    """Store user question and assistant response as QA messages (FR-032)."""
+    """Store user question and assistant response as QA messages (FR-032).
+
+    Args:
+        session_id: QA session ID
+        docs_snapshot_id: Document snapshot ID
+        tenant_id: Tenant ID for isolation (FR-001)
+        matter_id: Matter ID for isolation (FR-002)
+        question: User question
+        request_id: Request ID for assistant message
+        answer_text: Assistant response text
+        citations: List of citations
+        evidence: Evidence support metadata
+        refusal_code: Refusal code if request was refused
+        version_snapshot: Version snapshot metadata
+    """
     try:
-        # Ensure session exists
-        get_or_create_session(session_id, docs_snapshot_id)
+        # Ensure session exists with tenant/matter isolation
+        get_or_create_session(session_id, docs_snapshot_id, tenant_id, matter_id)
 
         timestamp = ingestion.utc_now()
 
-        # Store user message
+        # Store user message with tenant/matter isolation (FR-001, FR-002)
         user_message = QAMessage(
             message_id=str(uuid.uuid4()),
             session_id=session_id,
+            tenant_id=tenant_id,
+            matter_id=matter_id,
             role="user",
             content=question,
             citations_json=None,
@@ -705,10 +750,12 @@ def _store_qa_messages(
         )
         insert_qa_message(user_message)
 
-        # Store assistant response
+        # Store assistant response with tenant/matter isolation (FR-001, FR-002)
         assistant_message = QAMessage(
             message_id=request_id,
             session_id=session_id,
+            tenant_id=tenant_id,
+            matter_id=matter_id,
             role="assistant",
             content=answer_text or "",
             citations_json=(

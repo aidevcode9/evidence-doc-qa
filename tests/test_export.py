@@ -13,7 +13,13 @@ import pytest
 # Add the app to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "apps" / "api"))
 
+from app.context import RequestContext
 from app.db import QAMessage, QASession
+
+
+def make_context(tenant_id: str = "tenant-1", matter_id: str = "matter-1") -> RequestContext:
+    """Create a test request context."""
+    return RequestContext(tenant_id=tenant_id, matter_id=matter_id)
 
 
 class TestGeneratePdfExport:
@@ -365,6 +371,7 @@ class TestExportEndpoint:
         mock_messages[1].created_at_utc = datetime.now(timezone.utc).isoformat()
 
         mock_bg = self._mock_background_tasks()
+        context = make_context()
 
         with patch("app.routers.export.get_qa_session", return_value=mock_session):
             with patch("app.routers.export.get_session_messages", return_value=mock_messages):
@@ -373,7 +380,8 @@ class TestExportEndpoint:
                     export_session(
                         "test-session-123",
                         mock_bg,
-                        "pdf",
+                        context=context,
+                        format="pdf",
                         x_docqa_session="test-session-123",
                     )
                 )
@@ -413,6 +421,7 @@ class TestExportEndpoint:
         mock_messages[1].created_at_utc = datetime.now(timezone.utc).isoformat()
 
         mock_bg = self._mock_background_tasks()
+        context = make_context()
 
         with patch("app.routers.export.get_qa_session", return_value=mock_session):
             with patch("app.routers.export.get_session_messages", return_value=mock_messages):
@@ -421,7 +430,8 @@ class TestExportEndpoint:
                     export_session(
                         "test-session-456",
                         mock_bg,
-                        "docx",
+                        context=context,
+                        format="docx",
                         x_docqa_session="test-session-456",
                     )
                 )
@@ -437,6 +447,7 @@ class TestExportEndpoint:
         from fastapi import HTTPException
 
         mock_bg = self._mock_background_tasks()
+        context = make_context()
 
         with patch("app.routers.export.get_qa_session", return_value=None):
             import asyncio
@@ -445,7 +456,8 @@ class TestExportEndpoint:
                     export_session(
                         "nonexistent-session",
                         mock_bg,
-                        "pdf",
+                        context=context,
+                        format="pdf",
                         x_docqa_session="nonexistent-session",
                     )
                 )
@@ -464,6 +476,7 @@ class TestExportEndpoint:
         mock_session.created_at_utc = datetime.now(timezone.utc).isoformat()
 
         mock_bg = self._mock_background_tasks()
+        context = make_context()
 
         with patch("app.routers.export.get_qa_session", return_value=mock_session):
             with patch("app.routers.export.get_session_messages", return_value=[]):
@@ -473,7 +486,8 @@ class TestExportEndpoint:
                         export_session(
                             "empty-session",
                             mock_bg,
-                            "pdf",
+                            context=context,
+                            format="pdf",
                             x_docqa_session="empty-session",
                         )
                     )
@@ -492,6 +506,7 @@ class TestExportEndpoint:
         mock_session.created_at_utc = datetime.now(timezone.utc).isoformat()
 
         mock_bg = self._mock_background_tasks()
+        context = make_context()
 
         with patch("app.routers.export.get_qa_session", return_value=mock_session):
             import asyncio
@@ -501,7 +516,8 @@ class TestExportEndpoint:
                     export_session(
                         "real-session-123",
                         mock_bg,
-                        "pdf",
+                        context=context,
+                        format="pdf",
                         x_docqa_session=None,
                     )
                 )
@@ -520,6 +536,7 @@ class TestExportEndpoint:
         mock_session.created_at_utc = datetime.now(timezone.utc).isoformat()
 
         mock_bg = self._mock_background_tasks()
+        context = make_context()
 
         with patch("app.routers.export.get_qa_session", return_value=mock_session):
             import asyncio
@@ -529,7 +546,8 @@ class TestExportEndpoint:
                     export_session(
                         "real-session-123",
                         mock_bg,
-                        "pdf",
+                        context=context,
+                        format="pdf",
                         x_docqa_session="wrong-session",
                     )
                 )
@@ -565,6 +583,7 @@ class TestExportEndpoint:
         mock_messages[1].created_at_utc = datetime.now(timezone.utc).isoformat()
 
         mock_bg = self._mock_background_tasks()
+        context = make_context()
 
         with patch("app.routers.export.get_qa_session", return_value=mock_session):
             with patch("app.routers.export.get_session_messages", return_value=mock_messages):
@@ -573,7 +592,8 @@ class TestExportEndpoint:
                     export_session(
                         "my-session-123",
                         mock_bg,
-                        "pdf",
+                        context=context,
+                        format="pdf",
                         x_docqa_session="my-session-123",
                     )
                 )
@@ -603,6 +623,7 @@ class TestExportEndpoint:
             mock_messages.append(msg)
 
         mock_bg = self._mock_background_tasks()
+        context = make_context()
 
         # We need to verify truncation happens before PDF generation
         # by patching generate_pdf_export to capture what it receives
@@ -622,7 +643,8 @@ class TestExportEndpoint:
                         export_session(
                             "large-session",
                             mock_bg,
-                            "pdf",
+                            context=context,
+                            format="pdf",
                             x_docqa_session="large-session",
                         )
                     )

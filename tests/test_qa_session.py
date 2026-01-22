@@ -10,6 +10,10 @@ import pytest
 # Add the app to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "apps" / "api"))
 
+# Default tenant/matter IDs for tests
+TEST_TENANT_ID = "tenant-1"
+TEST_MATTER_ID = "matter-1"
+
 
 class TestQASessionModel:
     """Tests for QASession database model."""
@@ -26,10 +30,14 @@ class TestQASessionModel:
             result = create_qa_session(
                 session_id="test-session-123",
                 docs_snapshot_id="snap_abc",
+                tenant_id=TEST_TENANT_ID,
+                matter_id=TEST_MATTER_ID,
             )
 
             assert result.session_id == "test-session-123"
             assert result.docs_snapshot_id == "snap_abc"
+            assert result.tenant_id == TEST_TENANT_ID
+            assert result.matter_id == TEST_MATTER_ID
             mock_session.add.assert_called_once()
 
     def test_get_session_returns_session(self) -> None:
@@ -46,7 +54,7 @@ class TestQASessionModel:
             mock_scope.return_value.__exit__ = MagicMock(return_value=False)
             mock_db_session.scalars.return_value.first.return_value = mock_session_obj
 
-            result = get_qa_session("test-session-123")
+            result = get_qa_session("test-session-123", tenant_id=TEST_TENANT_ID)
 
             assert result is not None
             assert result.session_id == "test-session-123"
@@ -61,7 +69,7 @@ class TestQASessionModel:
             mock_scope.return_value.__exit__ = MagicMock(return_value=False)
             mock_db_session.scalars.return_value.first.return_value = None
 
-            result = get_qa_session("nonexistent")
+            result = get_qa_session("nonexistent", tenant_id=TEST_TENANT_ID)
 
             assert result is None
 
@@ -76,6 +84,8 @@ class TestQAMessageModel:
         message = QAMessage(
             message_id="msg-123",
             session_id="session-abc",
+            tenant_id=TEST_TENANT_ID,
+            matter_id=TEST_MATTER_ID,
             role="user",
             content="What are the payment terms?",
             citations_json=None,
@@ -109,7 +119,7 @@ class TestQAMessageModel:
             mock_scope.return_value.__exit__ = MagicMock(return_value=False)
             mock_db_session.scalars.return_value.all.return_value = mock_messages
 
-            result = get_session_messages("session-abc")
+            result = get_session_messages("session-abc", tenant_id=TEST_TENANT_ID)
 
             assert len(result) == 2
             assert result[0].message_id == "msg-1"
@@ -129,6 +139,8 @@ class TestQAMessageModel:
         message = QAMessage(
             message_id="msg-123",
             session_id="session-abc",
+            tenant_id=TEST_TENANT_ID,
+            matter_id=TEST_MATTER_ID,
             role="assistant",
             content="The payment terms are...",
             citations_json=json.dumps(citations_data),
@@ -159,6 +171,8 @@ class TestQAMessageModel:
         message = QAMessage(
             message_id="msg-123",
             session_id="session-abc",
+            tenant_id=TEST_TENANT_ID,
+            matter_id=TEST_MATTER_ID,
             role="assistant",
             content="The payment terms are...",
             citations_json=None,
@@ -185,7 +199,12 @@ class TestGetOrCreateSession:
         mock_session.session_id = "existing-session"
 
         with patch("app.db.get_qa_session", return_value=mock_session):
-            result = get_or_create_session("existing-session", "snap_abc")
+            result = get_or_create_session(
+                "existing-session",
+                "snap_abc",
+                tenant_id=TEST_TENANT_ID,
+                matter_id=TEST_MATTER_ID,
+            )
 
             assert result.session_id == "existing-session"
 
@@ -199,7 +218,12 @@ class TestGetOrCreateSession:
                 mock_new.session_id = "new-session"
                 mock_create.return_value = mock_new
 
-                result = get_or_create_session("new-session", "snap_abc")
+                result = get_or_create_session(
+                    "new-session",
+                    "snap_abc",
+                    tenant_id=TEST_TENANT_ID,
+                    matter_id=TEST_MATTER_ID,
+                )
 
                 assert result.session_id == "new-session"
                 mock_create.assert_called_once()
@@ -213,5 +237,10 @@ class TestGetOrCreateSession:
         with patch("app.db.get_qa_session", side_effect=[None, MagicMock(session_id="race-session")]):
             with patch("app.db.create_qa_session", side_effect=IntegrityError("", {}, Exception())):
                 # Should recover by fetching the existing session
-                result = get_or_create_session("race-session", "snap_abc")
+                result = get_or_create_session(
+                    "race-session",
+                    "snap_abc",
+                    tenant_id=TEST_TENANT_ID,
+                    matter_id=TEST_MATTER_ID,
+                )
                 assert result.session_id == "race-session"

@@ -1,12 +1,12 @@
 # STATUS.md
 
-Last updated: 2026-01-21 (Phase 2 Complete + Security Hardening)
+Last updated: 2026-01-21 (Phase 3 Started)
 
 ---
 
-## Current Phase: 2 — Citations UI ✅ COMPLETE
+## Current Phase: 3 — Multi-tenancy 🏗️ IN PROGRESS
 
-**Goal:** Clickable citations, document viewer, export
+**Goal:** Tenant + matter isolation across all data
 **Target:** End of January 2026
 
 ---
@@ -15,13 +15,30 @@ Last updated: 2026-01-21 (Phase 2 Complete + Security Hardening)
 
 | Task | FR | Branch | Started | Notes |
 |------|-----|--------|---------|-------|
-| — | — | — | — | Phase 2 complete |
+| **Tenant/Matter isolation enforcement** | FR-001, FR-002 | fix/tenant-matter-isolation-enforcement | 01-21 | 🔴 CRITICAL: Schema done, enforcement missing |
 
-## Next (Priority Order)
+## Next (Phase 3 continued)
 
 | Task | FR | Depends On | Notes |
 |------|-----|------------|-------|
-| Multi-tenancy | FR-001–004 | — | Phase 3 |
+| RBAC with roles | FR-003 | FR-001/FR-002 complete | After isolation enforcement |
+| Matter-level permissions | FR-004 | FR-003 | Depends on RBAC |
+
+## Next (Phase 4)
+
+| Task | FR | Depends On | Notes |
+|------|-----|------------|-------|
+| Provider Abstraction | NFR-032, 034, 035 | Phase 3 | Phase 4 |
+
+## Done (This Week)
+
+| Task | FR | Date |
+|------|-----|------|
+| **Add tenant_id to all models** | FR-001 | 01-21 |
+| **Add matter_id to all models** | FR-002 | 01-21 |
+| **Update load_chunks with tenant/matter filters** | FR-001, FR-002 | 01-21 |
+| **Update load_index_records with tenant/matter filters** | FR-001, FR-002 | 01-21 |
+| **Alembic migration 0004 for tenant/matter isolation** | FR-001, FR-002 | 01-21 |
 
 ## Blocked
 
@@ -95,6 +112,7 @@ Last updated: 2026-01-21 (Phase 2 Complete + Security Hardening)
 | 01-21 | **Session-based Q&A storage for export** | qa_sessions + qa_messages tables; messages stored automatically; enables PDF/DOCX export |
 | 01-21 | **IDOR prevention via session header** | X-DocQA-Session header required for export; prevents cross-session data access |
 | 01-21 | **Alembic for schema migrations** | Standard migration tooling; documented in ARCHITECTURE.md; `0003_add_qa_session_tables.py` |
+| 01-21 | **Tenant/Matter isolation columns** | FR-001/FR-002: All 6 models now have tenant_id + matter_id; indexed; migration `0004` |
 
 > **Current Stack:** Azure AI Search + Azure OpenAI + configurable parser
 > **Parser options:** `PARSER_PROVIDER=marker` (default, OCR), `pypdf` (digital only), `llamaparse` (cloud OCR)
