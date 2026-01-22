@@ -32,22 +32,36 @@ _BM25_CACHE: dict[str, BM25Stats] = {}
 def hybrid_search(
     question: str,
     docs_snapshot_id: str | None,
+    tenant_id: str,
+    matter_id: str,
     *,
     return_usage: bool = False,
 ) -> list[ChunkRecord] | tuple[list[ChunkRecord], UsageInfo]:
+    """Hybrid search with REQUIRED tenant/matter isolation (FR-001, FR-002).
+
+    Args:
+        question: Search query
+        docs_snapshot_id: Optional document snapshot filter
+        tenant_id: Tenant ID (REQUIRED for FR-001 isolation)
+        matter_id: Matter ID (REQUIRED for FR-002 isolation)
+        return_usage: Whether to return embedding usage info
+
+    Returns:
+        List of matching chunks, optionally with usage info
+    """
     embeddings, embedding_usage = embed_texts_with_usage([question])
     query_embedding = embeddings[0]
     if _azure_enabled():
-        logger.info(f"Retrieval: Routing to Azure AI Search (Snapshot: {docs_snapshot_id})")
-        results = _azure_search(question, docs_snapshot_id, query_embedding)
+        logger.info(f"Retrieval: Routing to Azure AI Search (Snapshot: {docs_snapshot_id}, Tenant: {tenant_id})")
+        results = _azure_search(question, docs_snapshot_id, query_embedding, tenant_id, matter_id)
         if results:
             return (results, embedding_usage) if return_usage else results
         logger.info("Retrieval: Azure returned zero hits. Falling back to local index.")
 
-    logger.info(f"Retrieval: Using Local Hybrid Logic (Snapshot: {docs_snapshot_id})")
-    records = _load_index_records(docs_snapshot_id)
+    logger.info(f"Retrieval: Using Local Hybrid Logic (Snapshot: {docs_snapshot_id}, Tenant: {tenant_id})")
+    records = _load_index_records(docs_snapshot_id, tenant_id, matter_id)
     if not records:
-        fallback = _fallback_overlap(question, docs_snapshot_id)
+        fallback = _fallback_overlap(question, docs_snapshot_id, tenant_id, matter_id)
         return (fallback, embedding_usage) if return_usage else fallback
 
     query_tokens = _tokenize(question)
@@ -99,7 +113,21 @@ def _azure_search(
     question: str,
     docs_snapshot_id: str | None,
     query_embedding: list[float],
+    tenant_id: str,
+    matter_id: str,
 ) -> list[ChunkRecord]:
+    """Azure AI Search with REQUIRED tenant/matter filters (FR-001, FR-002).
+
+    Args:
+        question: Search query
+        docs_snapshot_id: Optional document snapshot filter
+        query_embedding: Query embedding vector
+        tenant_id: Tenant ID (REQUIRED for FR-001 isolation)
+        matter_id: Matter ID (REQUIRED for FR-002 isolation)
+
+    Returns:
+        List of matching chunks from Azure Search
+    """
     vector_len = len(query_embedding)
     base_payload: dict[str, Any] = {
         "search": question,
@@ -120,11 +148,18 @@ def _azure_search(
         "captions": "extractive|highlight-true",
         "answers": "extractive|count-3",
     }
-    filter_state = "none"
+
+    # Build filter with REQUIRED tenant/matter isolation (FR-001, FR-002)
+    filters: list[str] = []
+    filters.append(f"tenant_id eq '{tenant_id}'")
+    filters.append(f"matter_id eq '{matter_id}'")
     if docs_snapshot_id and docs_snapshot_id != "none":
-        base_payload["filter"] = f"docs_snapshot_id eq '{docs_snapshot_id}'"
-        semantic_payload["filter"] = base_payload["filter"]
-        filter_state = docs_snapshot_id
+        filters.append(f"docs_snapshot_id eq '{docs_snapshot_id}'")
+
+    filter_string = " and ".join(filters)
+    base_payload["filter"] = filter_string
+    semantic_payload["filter"] = filter_string
+    filter_state = f"tenant={tenant_id},matter={matter_id},snapshot={docs_snapshot_id or 'none'}"
 
     url = f"{AZURE_SEARCH_ENDPOINT.rstrip('/')}/indexes/{AZURE_SEARCH_INDEX}/docs/search?api-version={AZURE_SEARCH_API_VERSION}"
     semantic_requested = bool(AZURE_SEMANTIC_ENABLED)
@@ -311,8 +346,13 @@ def _apply_rank_scores(
         entry[f"{key}_rank"] = idx
 
 
-def _load_index_records(docs_snapshot_id: str | None) -> list[ChunkRecord]:
-    rows = load_index_records(docs_snapshot_id)
+def _load_index_records(
+    docs_snapshot_id: str | None,
+    tenant_id: str,
+    matter_id: str,
+) -> list[ChunkRecord]:
+    """Load index records with REQUIRED tenant/matter isolation (FR-001, FR-002)."""
+    rows = load_index_records(docs_snapshot_id, tenant_id, matter_id)
     records: list[ChunkRecord] = []
     for row in rows:
         rec: ChunkRecord = {
@@ -333,10 +373,14 @@ def _load_index_records(docs_snapshot_id: str | None) -> list[ChunkRecord]:
 
 
 def _fallback_overlap(
-    question: str, docs_snapshot_id: str | None
+    question: str,
+    docs_snapshot_id: str | None,
+    tenant_id: str,
+    matter_id: str,
 ) -> list[ChunkRecord]:
+    """Fallback overlap search with REQUIRED tenant/matter isolation (FR-001, FR-002)."""
     query_tokens = _tokenize(question)
-    rows = load_chunks(docs_snapshot_id)
+    rows = load_chunks(docs_snapshot_id, tenant_id, matter_id)
     scored: list[ChunkRecord] = []
     for row in rows:
         score = _overlap_score(query_tokens, row.chunk_text)

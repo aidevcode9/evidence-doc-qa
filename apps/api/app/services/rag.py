@@ -52,14 +52,24 @@ def snippet_for(chunk_text: str, limit: int = 200) -> str:
     return chunk_text[:limit].strip()
 
 
-def doc_name_for(doc_id: str) -> str:
-    return get_doc_name(doc_id) or "unknown"
+def doc_name_for(doc_id: str, tenant_id: str) -> str:
+    """Get document name with tenant isolation (FR-001).
+
+    Args:
+        doc_id: Document ID
+        tenant_id: Tenant ID (REQUIRED for FR-001 isolation)
+
+    Returns:
+        Document name or "unknown" if not found
+    """
+    return get_doc_name(doc_id, tenant_id) or "unknown"
 
 
 def build_debug_candidates(
     question: str,
     chunks: list[ChunkDict],
     *,
+    tenant_id: str,
     verification_results: dict[str, tuple[str, str | None]] | None = None,
     verification_reasons: dict[str, str] | None = None,
     reason_override: str | None = None,
@@ -91,7 +101,7 @@ def build_debug_candidates(
         debug_candidates.append(
             DebugCandidate(
                 doc_id=chunk["doc_id"],
-                doc_name=chunk.get("doc_name") or doc_name_for(chunk["doc_id"]),
+                doc_name=chunk.get("doc_name") or doc_name_for(chunk["doc_id"], tenant_id),
                 page_num=chunk["page_num"],
                 page_end=chunk.get("page_end", chunk["page_num"]),
                 char_start=chunk.get("char_start", 0),

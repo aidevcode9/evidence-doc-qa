@@ -155,6 +155,53 @@
 
 ---
 
+## Task 6: FR-001 & FR-002 — Tenant + Matter Isolation (Phase 3)
+- **FR/NFR:** FR-001, FR-002
+- **Branch:** feat/citation-export
+- **Status:** ✅ Complete
+
+### TDD Cycle
+- [x] RED: 19 tests written for tenant_id and matter_id columns + query filters
+- [x] GREEN: Added tenant_id/matter_id to all 6 models; updated load_chunks/load_index_records
+- [x] REFACTOR: Cleaned up, added indexes
+
+### Changes Made
+
+**Database Models (`apps/api/app/db.py`):**
+- Added `tenant_id: Mapped[str]` and `matter_id: Mapped[str]` to all 6 models:
+  - Document
+  - Chunk
+  - IndexRecord
+  - Telemetry
+  - QASession
+  - QAMessage
+- All columns are NOT NULL with indexes for query performance
+- Updated `load_chunks()` to accept optional `tenant_id` and `matter_id` filters
+- Updated `load_index_records()` to accept optional `tenant_id` and `matter_id` filters
+
+**Tests (`tests/test_multitenancy.py`):**
+- 19 new tests covering:
+  - Presence of tenant_id/matter_id on all models (12 tests)
+  - Function signatures accept tenant_id/matter_id parameters (4 tests)
+  - Query functions apply filters correctly (3 tests)
+
+**Migration (`alembic/versions/0004_add_tenant_matter_isolation.py`):**
+- Adds tenant_id and matter_id columns to all 6 tables
+- Sets default values for existing data during migration
+- Creates indexes for efficient filtering
+
+### Verification
+- [x] `ruff check apps/api/app/db.py tests/test_multitenancy.py` — passed
+- [x] `mypy apps/api/app --strict` — passed
+- [x] `pytest tests/ -v` — 107/107 passed
+
+### Notes
+- FR-001/FR-002 add the schema foundation for multi-tenancy
+- FR-003/FR-004 (RBAC + matter permissions) are next
+- Default tenant/matter IDs used for migration of existing data
+
+---
+
 ## Template (Copy for each task)
 
 ```markdown

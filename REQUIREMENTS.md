@@ -8,6 +8,7 @@
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v1.6 | Jan 2026 | Added FR-001/FR-002 implementation checklist from security review — query enforcement, retrieval layer, API layer |
 | v1.5 | Jan 2026 | Added Document Parsing NFRs (NFR-036 to NFR-039) — OCR, table extraction, Marker LLM mode |
 | v1.4 | Jan 2026 | Added Code Quality NFRs (NFR-040, NFR-041) |
 | v1.3 | Jan 2026 | Added LLM synthesis and cross-doc aggregation FRs (FR-026, FR-027) |
@@ -42,6 +43,42 @@
 | FR-002 | Multi-matter support; artifacts partitioned by matter_id | Docs, chunks, vectors, chats, logs all have matter_id; no cross-matter queries |
 | FR-003 | RBAC with roles: Admin, Attorney, Paralegal, Viewer | Role checked on every API call; permissions enforced |
 | FR-004 | Matter-level permissions: users granted/removed per matter | User can only access matters they're assigned to |
+
+#### FR-001/FR-002 Implementation Checklist (Security Review Findings)
+
+Schema (✅ Complete):
+- [x] All 6 models have tenant_id column (Document, Chunk, IndexRecord, Telemetry, QASession, QAMessage)
+- [x] All 6 models have matter_id column
+- [x] Alembic migration 0004 adds columns with NOT NULL + indexes
+
+Query Enforcement (✅ Complete):
+- [x] `load_index_records()` — tenant_id/matter_id REQUIRED (not optional)
+- [x] `load_chunks()` — tenant_id/matter_id REQUIRED (not optional)
+- [x] `get_document()` — add tenant_id parameter, filter by it
+- [x] `get_doc_name()` — add tenant_id parameter, filter by it
+- [x] `get_latest_docs_snapshot_id()` — add tenant_id parameter, filter by it
+- [x] `get_session_messages()` — add tenant_id parameter, filter by it
+- [x] `load_telemetry()` — add tenant_id parameter, filter by it
+- [x] `create_qa_session()` — REQUIRE tenant_id and matter_id parameters
+- [x] `get_qa_session()` — add tenant_id parameter, filter by it
+
+Retrieval Layer (✅ Complete):
+- [x] `retrieval.py:_load_index_records()` — pass tenant_id/matter_id to db.load_index_records()
+- [x] `retrieval.py:_fallback_overlap()` — pass tenant_id/matter_id to db.load_chunks()
+- [x] `retrieval.py:hybrid_search()` — accept tenant_id/matter_id parameters
+- [x] `retrieval.py:_azure_search()` — add tenant_id filter to Azure Search query
+
+API Layer (✅ Complete):
+- [x] `routers/docs.py:get_doc_metadata()` — extract tenant from context, pass to get_document()
+- [x] `routers/docs.py:view_doc()` — extract tenant from context, pass to get_document()
+- [x] `services/ask_service.py` — pass tenant_id/matter_id through entire call chain
+- [x] `services/ask_service.py:_store_qa_messages()` — set tenant_id/matter_id on QAMessage
+
+Tests Required (✅ Complete):
+- [x] Test: Query with tenant_id=A cannot see tenant_id=B documents
+- [x] Test: Query with matter_id=X cannot see matter_id=Y documents
+- [x] Test: Document API rejects cross-tenant access
+- [x] Test: QASession/QAMessage isolated by tenant
 
 ### 4.2 Document Ingestion & Normalization
 

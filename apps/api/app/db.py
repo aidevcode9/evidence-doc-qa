@@ -18,6 +18,8 @@ class Document(Base):
     __tablename__ = "documents"
 
     doc_id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    matter_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     doc_sha256: Mapped[str] = mapped_column(String, nullable=False)
     doc_name: Mapped[str] = mapped_column(String, nullable=False)
     storage_path: Mapped[str] = mapped_column(String, nullable=False)
@@ -29,6 +31,8 @@ class Chunk(Base):
     __tablename__ = "chunks"
 
     chunk_id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    matter_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     docs_snapshot_id: Mapped[str] = mapped_column(String, nullable=False)
     doc_id: Mapped[str] = mapped_column(String, nullable=False)
     doc_sha256: Mapped[str] = mapped_column(String, nullable=False)
@@ -45,6 +49,8 @@ class IndexRecord(Base):
     __tablename__ = "index_records"
 
     chunk_id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    matter_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     docs_snapshot_id: Mapped[str] = mapped_column(String, nullable=False)
     doc_id: Mapped[str] = mapped_column(String, nullable=False)
     doc_name: Mapped[str] = mapped_column(String, nullable=False)
@@ -64,6 +70,8 @@ class Telemetry(Base):
     __tablename__ = "telemetry"
 
     request_id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    matter_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     docs_snapshot_id: Mapped[str] = mapped_column(String, nullable=False)
     prompt_version: Mapped[str] = mapped_column(String, nullable=False)
     retrieval_version: Mapped[str] = mapped_column(String, nullable=False)
@@ -86,9 +94,10 @@ class QASession(Base):
     __tablename__ = "qa_sessions"
 
     session_id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    matter_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     docs_snapshot_id: Mapped[str] = mapped_column(String, nullable=False)
     created_at_utc: Mapped[str] = mapped_column(String, nullable=False)
-    # Future: tenant_id, matter_id, user_id (Phase 3 multi-tenancy)
 
 
 class QAMessage(Base):
@@ -97,6 +106,8 @@ class QAMessage(Base):
     __tablename__ = "qa_messages"
 
     message_id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    matter_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     session_id: Mapped[str] = mapped_column(String, nullable=False)
     role: Mapped[str] = mapped_column(String, nullable=False)  # "user" | "assistant"
     content: Mapped[str] = mapped_column(Text, nullable=False)
@@ -163,44 +174,127 @@ def insert_telemetry(record: Telemetry) -> None:
         session.add(record)
 
 
-def get_latest_docs_snapshot_id() -> str | None:
+def get_latest_docs_snapshot_id(tenant_id: str) -> str | None:
+    """Get the most recent docs_snapshot_id for a tenant (FR-001 isolation).
+
+    Args:
+        tenant_id: Tenant ID to filter by (required for isolation)
+
+    Returns:
+        The most recent docs_snapshot_id or None if no documents exist
+    """
     with session_scope() as session:
-        stmt = select(Document.docs_snapshot_id).order_by(Document.ingested_at_utc.desc())
+        stmt = (
+            select(Document.docs_snapshot_id)
+            .where(Document.tenant_id == tenant_id)
+            .order_by(Document.ingested_at_utc.desc())
+        )
         row = session.execute(stmt).first()
         return row[0] if row else None
 
 
-def get_doc_name(doc_id: str) -> str | None:
+def get_doc_name(doc_id: str, tenant_id: str) -> str | None:
+    """Get document name by ID with tenant isolation (FR-001).
+
+    Args:
+        doc_id: Document ID
+        tenant_id: Tenant ID to filter by (required for isolation)
+
+    Returns:
+        Document name or None if not found or wrong tenant
+    """
     with session_scope() as session:
-        stmt = select(Document.doc_name).where(Document.doc_id == doc_id)
+        stmt = select(Document.doc_name).where(
+            Document.doc_id == doc_id,
+            Document.tenant_id == tenant_id,
+        )
         row = session.execute(stmt).first()
         return row[0] if row else None
 
 
-def get_document(doc_id: str) -> Document | None:
-    """Get a document by ID."""
+def get_document(doc_id: str, tenant_id: str) -> Document | None:
+    """Get a document by ID with tenant isolation (FR-001).
+
+    Args:
+        doc_id: Document ID
+        tenant_id: Tenant ID to filter by (required for isolation)
+
+    Returns:
+        Document or None if not found or wrong tenant
+    """
     with session_scope() as session:
-        stmt = select(Document).where(Document.doc_id == doc_id)
+        stmt = select(Document).where(
+            Document.doc_id == doc_id,
+            Document.tenant_id == tenant_id,
+        )
         return session.scalars(stmt).first()
 
 
-def load_chunks(docs_snapshot_id: str | None) -> list[Chunk]:
+def load_chunks(
+    docs_snapshot_id: str | None,
+    tenant_id: str,
+    matter_id: str,
+) -> list[Chunk]:
+    """Load chunks with REQUIRED tenant/matter isolation (FR-001, FR-002).
+
+    Args:
+        docs_snapshot_id: Filter by document snapshot ID (optional)
+        tenant_id: Tenant ID (REQUIRED for FR-001 isolation)
+        matter_id: Matter ID (REQUIRED for FR-002 isolation)
+
+    Returns:
+        List of chunks matching the filters
+    """
     with session_scope() as session:
-        stmt = select(Chunk)
+        stmt = select(Chunk).where(
+            Chunk.tenant_id == tenant_id,
+            Chunk.matter_id == matter_id,
+        )
         if docs_snapshot_id:
             stmt = stmt.where(Chunk.docs_snapshot_id == docs_snapshot_id)
         return list(session.scalars(stmt).all())
 
 
-def load_index_records(docs_snapshot_id: str | None) -> list[IndexRecord]:
+def load_index_records(
+    docs_snapshot_id: str | None,
+    tenant_id: str,
+    matter_id: str,
+) -> list[IndexRecord]:
+    """Load index records with REQUIRED tenant/matter isolation (FR-001, FR-002).
+
+    Args:
+        docs_snapshot_id: Filter by document snapshot ID (optional)
+        tenant_id: Tenant ID (REQUIRED for FR-001 isolation)
+        matter_id: Matter ID (REQUIRED for FR-002 isolation)
+
+    Returns:
+        List of index records matching the filters
+    """
     with session_scope() as session:
-        stmt = select(IndexRecord)
+        stmt = select(IndexRecord).where(
+            IndexRecord.tenant_id == tenant_id,
+            IndexRecord.matter_id == matter_id,
+        )
         if docs_snapshot_id:
             stmt = stmt.where(IndexRecord.docs_snapshot_id == docs_snapshot_id)
         return list(session.scalars(stmt).all())
 
 
-def load_telemetry(hours: int = 24, limit: int = 500) -> list[Telemetry]:
+def load_telemetry(
+    hours: int = 24,
+    limit: int = 500,
+    tenant_id: str | None = None,
+) -> list[Telemetry]:
+    """Load telemetry records with optional tenant filter.
+
+    Args:
+        hours: Number of hours of history to load
+        limit: Maximum number of records to return
+        tenant_id: Optional tenant ID filter (for non-admin use)
+
+    Returns:
+        List of telemetry records
+    """
     with session_scope() as session:
         cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
         stmt = (
@@ -209,6 +303,8 @@ def load_telemetry(hours: int = 24, limit: int = 500) -> list[Telemetry]:
             .order_by(Telemetry.timestamp_utc.desc())
             .limit(limit)
         )
+        if tenant_id:
+            stmt = stmt.where(Telemetry.tenant_id == tenant_id)
         rows = list(session.scalars(stmt).all())
         return rows
 
@@ -216,10 +312,27 @@ def load_telemetry(hours: int = 24, limit: int = 500) -> list[Telemetry]:
 # QA Session CRUD functions (FR-032)
 
 
-def create_qa_session(session_id: str, docs_snapshot_id: str) -> QASession:
-    """Create a new QA session."""
+def create_qa_session(
+    session_id: str,
+    docs_snapshot_id: str,
+    tenant_id: str,
+    matter_id: str,
+) -> QASession:
+    """Create a new QA session with tenant/matter isolation (FR-001, FR-002).
+
+    Args:
+        session_id: Unique session identifier
+        docs_snapshot_id: Document snapshot ID for this session
+        tenant_id: Tenant ID (REQUIRED for FR-001 isolation)
+        matter_id: Matter ID (REQUIRED for FR-002 isolation)
+
+    Returns:
+        The created QASession
+    """
     qa_session = QASession(
         session_id=session_id,
+        tenant_id=tenant_id,
+        matter_id=matter_id,
         docs_snapshot_id=docs_snapshot_id,
         created_at_utc=datetime.now(timezone.utc).isoformat(),
     )
@@ -228,31 +341,56 @@ def create_qa_session(session_id: str, docs_snapshot_id: str) -> QASession:
     return qa_session
 
 
-def get_qa_session(session_id: str) -> QASession | None:
-    """Get a QA session by ID."""
+def get_qa_session(session_id: str, tenant_id: str) -> QASession | None:
+    """Get a QA session by ID with tenant isolation (FR-001).
+
+    Args:
+        session_id: Session ID to look up
+        tenant_id: Tenant ID (REQUIRED for FR-001 isolation)
+
+    Returns:
+        QASession or None if not found or wrong tenant
+    """
     with session_scope() as session:
-        stmt = select(QASession).where(QASession.session_id == session_id)
+        stmt = select(QASession).where(
+            QASession.session_id == session_id,
+            QASession.tenant_id == tenant_id,
+        )
         return session.scalars(stmt).first()
 
 
-def get_or_create_session(session_id: str, docs_snapshot_id: str) -> QASession:
-    """Get existing session or create a new one.
+def get_or_create_session(
+    session_id: str,
+    docs_snapshot_id: str,
+    tenant_id: str,
+    matter_id: str,
+) -> QASession:
+    """Get existing session or create a new one with tenant/matter isolation.
 
     Handles race conditions where two requests try to create the same session
     simultaneously by catching IntegrityError and retrying the get.
+
+    Args:
+        session_id: Session ID
+        docs_snapshot_id: Document snapshot ID
+        tenant_id: Tenant ID (REQUIRED for FR-001 isolation)
+        matter_id: Matter ID (REQUIRED for FR-002 isolation)
+
+    Returns:
+        The existing or newly created QASession
     """
     from sqlalchemy.exc import IntegrityError
 
-    existing = get_qa_session(session_id)
+    existing = get_qa_session(session_id, tenant_id)
     if existing:
         return existing
 
     try:
-        return create_qa_session(session_id, docs_snapshot_id)
+        return create_qa_session(session_id, docs_snapshot_id, tenant_id, matter_id)
     except IntegrityError:
         # Race condition: another request created the session first
         # Fetch the existing session that was created by the other request
-        existing = get_qa_session(session_id)
+        existing = get_qa_session(session_id, tenant_id)
         if existing:
             return existing
         # Should not happen, but re-raise if session still not found
@@ -265,12 +403,23 @@ def insert_qa_message(message: QAMessage) -> None:
         session.add(message)
 
 
-def get_session_messages(session_id: str) -> list[QAMessage]:
-    """Get all messages for a session, ordered by creation time."""
+def get_session_messages(session_id: str, tenant_id: str) -> list[QAMessage]:
+    """Get all messages for a session with tenant isolation (FR-001).
+
+    Args:
+        session_id: Session ID to get messages for
+        tenant_id: Tenant ID (REQUIRED for FR-001 isolation)
+
+    Returns:
+        List of QAMessages ordered by creation time
+    """
     with session_scope() as session:
         stmt = (
             select(QAMessage)
-            .where(QAMessage.session_id == session_id)
+            .where(
+                QAMessage.session_id == session_id,
+                QAMessage.tenant_id == tenant_id,
+            )
             .order_by(QAMessage.created_at_utc.asc())
         )
         return list(session.scalars(stmt).all())

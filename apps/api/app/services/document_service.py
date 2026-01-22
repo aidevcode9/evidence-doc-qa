@@ -16,7 +16,12 @@ if TYPE_CHECKING:
 ChunkRowTuple = tuple[str, str, str, str, int, int, int, int, int, str, str]
 
 
-async def process_document_upload(file: UploadFile) -> dict[str, Any]:
+async def process_document_upload(
+    file: UploadFile,
+    *,
+    tenant_id: str,
+    matter_id: str,
+) -> dict[str, Any]:
     """Process an uploaded document.
 
     Handles PDF and image uploads (FR-010). Uses the configured parser
@@ -24,6 +29,8 @@ async def process_document_upload(file: UploadFile) -> dict[str, Any]:
 
     Args:
         file: Uploaded file from FastAPI.
+        tenant_id: Tenant ID for isolation (FR-001).
+        matter_id: Matter ID for isolation (FR-002).
 
     Returns:
         Dict with doc_id, doc_sha256, docs_snapshot_id, and optional warnings.
@@ -95,6 +102,7 @@ async def process_document_upload(file: UploadFile) -> dict[str, Any]:
         )
 
     # Tuple structure (FR-013): (chunk_id, snap_id, doc_id, sha256, page_num, page_end, chunk_idx, char_start, char_end, text, mode)
+    # Set tenant_id and matter_id for isolation (FR-001, FR-002)
     insert_chunks(
         Chunk(
             chunk_id=row[0],
@@ -108,9 +116,12 @@ async def process_document_upload(file: UploadFile) -> dict[str, Any]:
             char_end=row[8],
             chunk_text=row[9],
             parse_mode=row[10],
+            tenant_id=tenant_id,
+            matter_id=matter_id,
         )
         for row in chunk_rows
     )
+    # Set tenant_id and matter_id for isolation (FR-001, FR-002)
     insert_document(
         Document(
             doc_id=doc_id,
@@ -119,6 +130,8 @@ async def process_document_upload(file: UploadFile) -> dict[str, Any]:
             storage_path=storage_path,
             ingested_at_utc=ingestion.utc_now(),
             docs_snapshot_id=docs_snapshot_id,
+            tenant_id=tenant_id,
+            matter_id=matter_id,
         )
     )
 
