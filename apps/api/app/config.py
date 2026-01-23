@@ -97,6 +97,9 @@ METRICS_ADMIN_TOKEN = _getenv(
     "METRICS_ADMIN_TOKEN", _getenv("DOCQA_METRICS_ADMIN_TOKEN", "")
 )
 
+# Query limits (security - prevents token overflow attacks)
+MAX_QUERY_LENGTH = int(_getenv("DOCQA_MAX_QUERY_LENGTH", "4000"))  # ~1000 tokens
+
 # OpenTelemetry
 OTEL_ENABLED = _is_truthy(_getenv("DOCQA_OTEL_ENABLED", "0"))
 OTEL_SERVICE_NAME = _getenv("OTEL_SERVICE_NAME", "docqa-api")

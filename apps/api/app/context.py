@@ -12,10 +12,33 @@ MVP Implementation:
 
 from __future__ import annotations
 
+import re
+
 from fastapi import Header, HTTPException
 
 from app.db import user_has_matter_access
 from app.rbac import Role
+
+# UUID pattern: alphanumeric with optional hyphens (standard UUID format)
+# Prevents filter injection attacks in Azure Search queries
+_UUID_PATTERN = re.compile(r"^[a-zA-Z0-9][-a-zA-Z0-9]{0,63}$")
+
+
+def _is_valid_identifier(value: str) -> bool:
+    """Validate that a value is a safe identifier (alphanumeric with hyphens).
+
+    This prevents filter injection attacks when IDs are interpolated into
+    Azure Search filter strings.
+
+    Args:
+        value: The identifier to validate
+
+    Returns:
+        True if the value is safe to use in filters, False otherwise
+    """
+    if not value or len(value) > 64:
+        return False
+    return _UUID_PATTERN.match(value) is not None
 
 
 class RequestContext:
@@ -99,6 +122,23 @@ def get_request_context(
     tenant_id = x_tenant_id.strip()
     matter_id = x_matter_id.strip()
     user_id = x_user_id.strip()
+
+    # Validate identifier format to prevent filter injection (SECURITY)
+    if not _is_valid_identifier(tenant_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid tenant_id format: must be alphanumeric with optional hyphens (max 64 chars)",
+        )
+    if not _is_valid_identifier(matter_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid matter_id format: must be alphanumeric with optional hyphens (max 64 chars)",
+        )
+    if not _is_valid_identifier(user_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid user_id format: must be alphanumeric with optional hyphens (max 64 chars)",
+        )
 
     # Validate matter access (FR-004)
     if not user_has_matter_access(

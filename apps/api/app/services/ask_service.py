@@ -22,6 +22,7 @@ from app.config import (
     AZURE_SEARCH_SCORE_MIN,
     AZURE_RERANK_MIN,
     INDEX_VERSION,
+    MAX_QUERY_LENGTH,
 )
 from app.db import get_latest_docs_snapshot_id
 from app.schemas import AskRequest, AskResponse, Citation, DebugCandidate, EvidenceSupport, RefusalCode
@@ -44,6 +45,13 @@ def execute_ask(
     question = payload.question.strip()
     if not question:
         raise HTTPException(status_code=400, detail="Question is required.")
+
+    # Security: Prevent token overflow attacks (HIGH severity fix)
+    if len(question) > MAX_QUERY_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Question too long: {len(question)} characters exceeds limit of {MAX_QUERY_LENGTH}",
+        )
 
     request_id = str(uuid.uuid4())
     docs_snapshot_id = payload.docs_snapshot_id or get_latest_docs_snapshot_id(tenant_id=tenant_id) or "none"

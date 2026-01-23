@@ -7,6 +7,8 @@ from app.config import (
     DATA_DIR,
     RAW_DIR,
     ALLOWED_ORIGINS,
+    ALLOW_UNVERIFIED,
+    STRICT_EVIDENCE,
 )
 from app.db import init_db
 from app.indexing import ensure_index
@@ -37,6 +39,18 @@ app.include_router(export.router)
 
 @app.on_event("startup")
 def startup_event() -> None:
+    # Security warnings for production (HIGH severity)
+    if ALLOW_UNVERIFIED:
+        logger.warning(
+            "SECURITY WARNING: ALLOW_UNVERIFIED=True - unverified chunks may be returned. "
+            "This should be disabled in production environments."
+        )
+    if not STRICT_EVIDENCE:
+        logger.warning(
+            "SECURITY WARNING: STRICT_EVIDENCE=False - weak evidence may be returned. "
+            "This should be enabled in production environments."
+        )
+
     # Initialize DB
     try:
         init_db()
