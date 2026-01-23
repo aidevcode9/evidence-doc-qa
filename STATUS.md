@@ -4,10 +4,10 @@ Last updated: 2026-01-22
 
 ---
 
-## Current Phase: 3 — Multi-tenancy 🏗️ IN PROGRESS
+## Current Phase: 3 — Multi-tenancy ✅ COMPLETE
 
 **Goal:** Tenant + matter isolation across all data
-**Target:** End of January 2026
+**Completed:** 2026-01-22
 
 ---
 
@@ -21,7 +21,7 @@ Last updated: 2026-01-22
 
 | Task | FR | Depends On | Notes |
 |------|-----|------------|-------|
-| Matter-level permissions | FR-004 | FR-003 | Depends on RBAC |
+| — | — | — | Phase 3 complete |
 
 ## Next (Phase 4)
 
@@ -33,6 +33,11 @@ Last updated: 2026-01-22
 
 | Task | FR | Date |
 |------|-----|------|
+| **Matter-level permissions** | FR-004 | 01-22 |
+| **MatterAssignment model + migration 0006** | FR-004 | 01-22 |
+| **user_has_matter_access() function** | FR-004 | 01-22 |
+| **Context validates matter access** | FR-004 | 01-22 |
+| **Admin bypasses matter permission check** | FR-004 | 01-22 |
 | **RBAC with roles** | FR-003 | 01-22 |
 | **Role enum + permissions** | FR-003 | 01-22 |
 | **User model + migration 0005** | FR-003 | 01-22 |
@@ -100,6 +105,19 @@ Last updated: 2026-01-22
 
 ---
 
+## Phase 3 Progress
+
+| FR | Requirement | Status |
+|----|-------------|--------|
+| FR-001 | Multi-tenant support (tenant_id) | ✅ Shipped |
+| FR-002 | Multi-matter support (matter_id) | ✅ Shipped |
+| FR-003 | RBAC with roles | ✅ Shipped |
+| FR-004 | Matter-level permissions | ✅ Shipped |
+
+**Phase 3 Complete:** 4/4 Multi-tenancy features shipped.
+
+---
+
 ## Decisions
 
 | Date | Decision | Rationale |
@@ -121,6 +139,7 @@ Last updated: 2026-01-22
 | 01-21 | **Alembic for schema migrations** | Standard migration tooling; documented in ARCHITECTURE.md; `0003_add_qa_session_tables.py` |
 | 01-21 | **Tenant/Matter isolation columns** | FR-001/FR-002: All 6 models now have tenant_id + matter_id; indexed; migration `0004` |
 | 01-22 | **Header-based tenant context (MVP)** | X-Tenant-Id/X-Matter-Id headers; JWT extraction planned for Phase 4 |
+| 01-22 | **Matter-level permissions via MatterAssignment** | Users must be explicitly assigned to matters; admin bypasses check (FR-004) |
 
 > **Current Stack:** Azure AI Search + Azure OpenAI + configurable parser
 > **Parser options:** `PARSER_PROVIDER=marker` (default, OCR), `pypdf` (digital only), `llamaparse` (cloud OCR)

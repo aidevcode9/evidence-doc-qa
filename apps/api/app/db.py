@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import contextlib
 from datetime import datetime, timedelta, timezone
-from typing import Generator, Iterable
+from typing import TYPE_CHECKING, Generator, Iterable
 
 from sqlalchemy import Boolean, Float, Integer, String, Text, create_engine, select, text
+
+if TYPE_CHECKING:
+    from app.rbac import Role
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 from sqlalchemy.pool import NullPool
@@ -129,6 +132,24 @@ class User(Base):
     role: Mapped[str] = mapped_column(String, nullable=False)  # admin, attorney, paralegal, viewer
     display_name: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at_utc: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class MatterAssignment(Base):
+    """Matter-level permission assignment (FR-004).
+
+    Links users to matters they can access within a tenant.
+    Users can only access matters they are explicitly assigned to,
+    except admins who can access all matters in their tenant.
+    """
+
+    __tablename__ = "matter_assignments"
+
+    assignment_id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    matter_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    granted_by: Mapped[str] = mapped_column(String, nullable=False)
+    granted_at_utc: Mapped[str] = mapped_column(String, nullable=False)
 
 
 def init_db() -> None:
@@ -436,3 +457,120 @@ def get_session_messages(session_id: str, tenant_id: str) -> list[QAMessage]:
             .order_by(QAMessage.created_at_utc.asc())
         )
         return list(session.scalars(stmt).all())
+
+
+# Matter Assignment CRUD functions (FR-004)
+
+
+def user_has_matter_access(
+    user_id: str,
+    tenant_id: str,
+    matter_id: str,
+    user_role: "Role | None" = None,
+) -> bool:
+    """Check if user has access to a specific matter (FR-004).
+
+    Admins bypass this check and have access to all matters in their tenant.
+    Other users must have an explicit MatterAssignment record.
+
+    Args:
+        user_id: User ID to check
+        tenant_id: Tenant ID (required for isolation)
+        matter_id: Matter ID to check access for
+        user_role: Optional role to check for admin bypass
+
+    Returns:
+        True if user has access, False otherwise
+    """
+    from app.rbac import Role
+
+    # Admin bypass: admins can access all matters in their tenant
+    if user_role == Role.ADMIN:
+        return True
+
+    with session_scope() as session:
+        stmt = select(MatterAssignment).where(
+            MatterAssignment.user_id == user_id,
+            MatterAssignment.tenant_id == tenant_id,
+            MatterAssignment.matter_id == matter_id,
+        )
+        assignment = session.scalars(stmt).first()
+        return assignment is not None
+
+
+def grant_matter_access(
+    user_id: str,
+    tenant_id: str,
+    matter_id: str,
+    granted_by: str,
+) -> MatterAssignment:
+    """Grant a user access to a matter (FR-004).
+
+    Args:
+        user_id: User to grant access to
+        tenant_id: Tenant ID
+        matter_id: Matter to grant access to
+        granted_by: User ID of the admin granting access
+
+    Returns:
+        The created MatterAssignment
+    """
+    import uuid
+
+    assignment = MatterAssignment(
+        assignment_id=str(uuid.uuid4()),
+        user_id=user_id,
+        tenant_id=tenant_id,
+        matter_id=matter_id,
+        granted_by=granted_by,
+        granted_at_utc=datetime.now(timezone.utc).isoformat(),
+    )
+    with session_scope() as session:
+        session.add(assignment)
+    return assignment
+
+
+def revoke_matter_access(
+    user_id: str,
+    tenant_id: str,
+    matter_id: str,
+) -> bool:
+    """Revoke a user's access to a matter (FR-004).
+
+    Args:
+        user_id: User to revoke access from
+        tenant_id: Tenant ID
+        matter_id: Matter to revoke access to
+
+    Returns:
+        True if an assignment was deleted, False if none existed
+    """
+    from sqlalchemy import delete
+
+    with session_scope() as session:
+        stmt = delete(MatterAssignment).where(
+            MatterAssignment.user_id == user_id,
+            MatterAssignment.tenant_id == tenant_id,
+            MatterAssignment.matter_id == matter_id,
+        )
+        result = session.execute(stmt)
+        return bool(result.rowcount and result.rowcount > 0)
+
+
+def get_user_matters(user_id: str, tenant_id: str) -> list[str]:
+    """Get all matters a user has access to (FR-004).
+
+    Args:
+        user_id: User ID
+        tenant_id: Tenant ID
+
+    Returns:
+        List of matter IDs the user can access
+    """
+    with session_scope() as session:
+        stmt = select(MatterAssignment.matter_id).where(
+            MatterAssignment.user_id == user_id,
+            MatterAssignment.tenant_id == tenant_id,
+        )
+        rows = session.execute(stmt).all()
+        return [row[0] for row in rows]

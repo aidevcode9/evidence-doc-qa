@@ -1,11 +1,12 @@
-"""Request context for tenant, matter, and user isolation (FR-001, FR-002, FR-003).
+"""Request context for tenant, matter, and user isolation (FR-001, FR-002, FR-003, FR-004).
 
 This module provides FastAPI dependencies to extract tenant_id, matter_id,
 user_id, and user_role from request headers. These are required for
-multi-tenant data isolation and RBAC.
+multi-tenant data isolation, RBAC, and matter-level permissions.
 
 MVP Implementation:
 - Extracts from X-Tenant-Id, X-Matter-Id, X-User-Id, X-User-Role headers
+- Validates user has access to the requested matter (FR-004)
 - Future: Extract from JWT token after auth service is implemented (Phase 4)
 """
 
@@ -13,6 +14,7 @@ from __future__ import annotations
 
 from fastapi import Header, HTTPException
 
+from app.db import user_has_matter_access
 from app.rbac import Role
 
 
@@ -94,9 +96,25 @@ def get_request_context(
             detail=f"Invalid role: {x_user_role}. Must be one of {valid_roles}",
         )
 
+    tenant_id = x_tenant_id.strip()
+    matter_id = x_matter_id.strip()
+    user_id = x_user_id.strip()
+
+    # Validate matter access (FR-004)
+    if not user_has_matter_access(
+        user_id=user_id,
+        tenant_id=tenant_id,
+        matter_id=matter_id,
+        user_role=role,
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Access denied: user does not have access to matter {matter_id}",
+        )
+
     return RequestContext(
-        tenant_id=x_tenant_id.strip(),
-        matter_id=x_matter_id.strip(),
-        user_id=x_user_id.strip(),
+        tenant_id=tenant_id,
+        matter_id=matter_id,
+        user_id=user_id,
         user_role=role,
     )
