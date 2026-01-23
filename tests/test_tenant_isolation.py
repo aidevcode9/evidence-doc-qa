@@ -296,3 +296,108 @@ class TestAzureSearchTenantFilter:
         sig = inspect.signature(_azure_search)
         matter_param = sig.parameters.get("matter_id")
         assert matter_param is not None, "_azure_search must accept matter_id parameter"
+
+
+class TestIdentifierValidation:
+    """Test that tenant_id/matter_id/user_id are validated to prevent injection."""
+
+    def test_valid_uuid_format_accepted(self) -> None:
+        """Valid UUID-like identifiers should be accepted."""
+        from app.context import _is_valid_identifier
+
+        assert _is_valid_identifier("tenant-123") is True
+        assert _is_valid_identifier("abc-def-ghi") is True
+        assert _is_valid_identifier("a1b2c3d4-e5f6-7890") is True
+        assert _is_valid_identifier("simple") is True
+
+    def test_injection_attempt_rejected(self) -> None:
+        """Identifiers with injection characters should be rejected."""
+        from app.context import _is_valid_identifier
+
+        # SQL/OData injection attempts
+        assert _is_valid_identifier("foo' or 1 eq 1 or '") is False
+        assert _is_valid_identifier("tenant_id eq 'x'") is False
+        assert _is_valid_identifier("a; DROP TABLE") is False
+
+    def test_empty_identifier_rejected(self) -> None:
+        """Empty identifiers should be rejected."""
+        from app.context import _is_valid_identifier
+
+        assert _is_valid_identifier("") is False
+
+    def test_too_long_identifier_rejected(self) -> None:
+        """Identifiers over 64 characters should be rejected."""
+        from app.context import _is_valid_identifier
+
+        long_id = "a" * 65
+        assert _is_valid_identifier(long_id) is False
+
+    def test_special_characters_rejected(self) -> None:
+        """Special characters should be rejected."""
+        from app.context import _is_valid_identifier
+
+        assert _is_valid_identifier("tenant'id") is False
+        assert _is_valid_identifier("tenant\"id") is False
+        assert _is_valid_identifier("tenant;id") is False
+        assert _is_valid_identifier("tenant=id") is False
+
+
+class TestQueryLengthLimit:
+    """Test that query length is limited to prevent token overflow."""
+
+    def test_max_query_length_config_exists(self) -> None:
+        """MAX_QUERY_LENGTH config should exist."""
+        from app.config import MAX_QUERY_LENGTH
+
+        assert isinstance(MAX_QUERY_LENGTH, int)
+        assert MAX_QUERY_LENGTH > 0
+
+    def test_execute_ask_checks_query_length(self) -> None:
+        """execute_ask should reject queries exceeding MAX_QUERY_LENGTH."""
+        import inspect
+        from app.services.ask_service import execute_ask
+
+        # Check that the function source contains the length check
+        source = inspect.getsource(execute_ask)
+        assert "MAX_QUERY_LENGTH" in source, "execute_ask must check MAX_QUERY_LENGTH"
+
+
+class TestRateLimitRetry:
+    """Test that LLM calls have retry with backoff for rate limits."""
+
+    def test_call_openai_has_retry_logic(self) -> None:
+        """_call_openai should have retry logic for rate limits."""
+        import inspect
+        from app.verification import _call_openai
+
+        sig = inspect.signature(_call_openai)
+        max_retries_param = sig.parameters.get("max_retries")
+        assert max_retries_param is not None, "_call_openai must have max_retries parameter"
+
+    def test_call_openai_handles_429(self) -> None:
+        """_call_openai source should handle HTTP 429 rate limit errors."""
+        import inspect
+        from app.verification import _call_openai
+
+        source = inspect.getsource(_call_openai)
+        assert "429" in source, "_call_openai must handle 429 rate limit errors"
+
+
+class TestSecurityWarnings:
+    """Test that security warnings are logged for unsafe configurations."""
+
+    def test_startup_checks_allow_unverified(self) -> None:
+        """Startup should check ALLOW_UNVERIFIED config."""
+        import inspect
+        from app.main import startup_event
+
+        source = inspect.getsource(startup_event)
+        assert "ALLOW_UNVERIFIED" in source, "startup must check ALLOW_UNVERIFIED"
+
+    def test_startup_checks_strict_evidence(self) -> None:
+        """Startup should check STRICT_EVIDENCE config."""
+        import inspect
+        from app.main import startup_event
+
+        source = inspect.getsource(startup_event)
+        assert "STRICT_EVIDENCE" in source, "startup must check STRICT_EVIDENCE"

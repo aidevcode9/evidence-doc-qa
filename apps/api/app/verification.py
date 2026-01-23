@@ -152,27 +152,65 @@ def _llm_enabled() -> bool:
     return bool(AZURE_OPENAI_CHAT_ENDPOINT and AZURE_OPENAI_CHAT_API_KEY and MODEL_ID)
 
 
-def _call_openai(payload: dict[str, Any]) -> dict[str, Any]:
+def _call_openai(payload: dict[str, Any], max_retries: int = 3) -> dict[str, Any]:
+    """Call OpenAI API with retry and exponential backoff for rate limits.
+
+    Args:
+        payload: Request payload
+        max_retries: Maximum number of retry attempts for rate limit errors
+
+    Returns:
+        Response JSON
+
+    Raises:
+        urllib.error.HTTPError: If request fails after all retries
+    """
     url = f"{AZURE_OPENAI_CHAT_ENDPOINT.rstrip('/')}/openai/deployments/{MODEL_ID}/chat/completions?api-version={AZURE_OPENAI_CHAT_API_VERSION}"
     headers = {
         "Content-Type": "application/json",
         "api-key": AZURE_OPENAI_CHAT_API_KEY,
     }
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        method="POST",
-        headers=headers,
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            result: dict[str, Any] = json.load(resp)
-            return result
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        logger.error("Verifier HTTP %s: %s", exc.code, body[:2000])
-        setattr(exc, "body", body)  # Store body for retry logic
-        raise
+
+    last_exc: urllib.error.HTTPError | None = None
+    for attempt in range(max_retries + 1):
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            method="POST",
+            headers=headers,
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                result: dict[str, Any] = json.load(resp)
+                return result
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            setattr(exc, "body", body)
+            last_exc = exc
+
+            # Retry on rate limit (429) or server errors (5xx)
+            if exc.code == 429 or exc.code >= 500:
+                if attempt < max_retries:
+                    # Exponential backoff: 1s, 2s, 4s
+                    delay = 2**attempt
+                    logger.warning(
+                        "Verifier HTTP %s (attempt %d/%d), retrying in %ds: %s",
+                        exc.code,
+                        attempt + 1,
+                        max_retries + 1,
+                        delay,
+                        body[:500],
+                    )
+                    time.sleep(delay)
+                    continue
+
+            logger.error("Verifier HTTP %s: %s", exc.code, body[:2000])
+            raise
+
+    # Should not reach here, but satisfy type checker
+    if last_exc:
+        raise last_exc
+    raise RuntimeError("Unexpected state in _call_openai")
 
 
 def _hash_text(text: str) -> str:
