@@ -521,10 +521,12 @@ usage_daily (
 
 ### LLMClient (NFR-032)
 
+> **Status:** ✅ IMPLEMENTED. See `apps/api/app/llm/` module.
+
 Provider-agnostic interface. Swap via config, not code.
 
 ```python
-# apps/api/app/llm/client.py
+# apps/api/app/llm/base.py
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -540,7 +542,7 @@ class LLMResponse:
 
 class LLMClient(ABC):
     @abstractmethod
-    async def complete(
+    def complete(
         self,
         system_prompt: str,
         user_prompt: str,
@@ -549,27 +551,70 @@ class LLMClient(ABC):
     ) -> LLMResponse:
         pass
 
-# Implementations
-class AnthropicClient(LLMClient): ...   # Claude 3.5 Sonnet
-class OpenAIClient(LLMClient): ...       # GPT-4o
-class AzureOpenAIClient(LLMClient): ...  # Azure-hosted
-class OllamaClient(LLMClient): ...       # Local (Llama 3.1)
+# Implementations (all in apps/api/app/llm/)
+class AzureOpenAIClient(LLMClient): ...  # Azure-hosted GPT-4o (default)
+class AnthropicClient(LLMClient): ...    # Claude Sonnet 4 / Opus 4
+class GeminiClient(LLMClient): ...       # Google Gemini 2.0 Flash
+class OllamaClient(LLMClient): ...       # Local open-source (Llama 3.2, Mistral, etc.)
 ```
+
+#### Supported Providers
+
+| Provider | Config Value | Default Model | Notes |
+|----------|--------------|---------------|-------|
+| Azure OpenAI | `azure_openai` | Configured via `MODEL_ID` | Enterprise, managed |
+| Anthropic | `anthropic` | `claude-sonnet-4-20250514` | Best reasoning |
+| Google Gemini | `gemini` | `gemini-2.0-flash` | Fast, cost-effective |
+| Ollama | `ollama` | `llama3.2:8b` | Local, air-gapped, open-source |
+
+#### Ollama Models for Legal/RAG Use Cases
+
+| Model | RAM Required | Quality | Speed | Notes |
+|-------|--------------|---------|-------|-------|
+| `llama3.2:8b` | 16GB | Good | Fast | Recommended for most cases |
+| `llama3.3:70b` | 40GB+ VRAM | Excellent | Slow | Best quality, GPU required |
+| `mistral:7b` | 16GB | Good | Very fast | Strong reasoning |
+| `qwen2.5:7b` | 16GB | Good | Fast | Excellent on structured tasks |
 
 **Config-driven selection:**
 
 ```python
-# config.py
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic")  # or 'openai', 'azure', 'ollama'
-LLM_MODEL = os.getenv("LLM_MODEL", "claude-3.5-sonnet")
-LLM_FALLBACK_PROVIDER = os.getenv("LLM_FALLBACK_PROVIDER", "openai")
+# apps/api/app/llm/__init__.py
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "azure_openai")
 
 def get_llm_client() -> LLMClient:
-    if LLM_PROVIDER == "anthropic":
-        return AnthropicClient(model=LLM_MODEL)
-    elif LLM_PROVIDER == "openai":
-        return OpenAIClient(model=LLM_MODEL)
-    # ... etc
+    if LLM_PROVIDER == "azure_openai":
+        return AzureOpenAIClient(...)
+    elif LLM_PROVIDER == "anthropic":
+        return AnthropicClient(api_key=ANTHROPIC_API_KEY, model=ANTHROPIC_MODEL)
+    elif LLM_PROVIDER == "gemini":
+        return GeminiClient(api_key=GEMINI_API_KEY, model=GEMINI_MODEL)
+    elif LLM_PROVIDER == "ollama":
+        return OllamaClient(model=OLLAMA_MODEL, base_url=OLLAMA_BASE_URL)
+```
+
+#### Environment Variables
+
+```bash
+# LLM Provider Selection
+LLM_PROVIDER=azure_openai  # azure_openai | anthropic | gemini | ollama
+
+# Azure OpenAI (default)
+AZURE_OPENAI_CHAT_ENDPOINT=https://your-resource.openai.azure.com
+AZURE_OPENAI_CHAT_API_KEY=xxx
+MODEL_ID=gpt-4o
+
+# Anthropic Claude
+ANTHROPIC_API_KEY=sk-ant-xxx
+ANTHROPIC_MODEL=claude-sonnet-4-20250514
+
+# Google Gemini
+GEMINI_API_KEY=xxx
+GEMINI_MODEL=gemini-2.0-flash
+
+# Ollama (local)
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.2:8b
 ```
 
 ### EmbeddingClient (Section 6.2)
@@ -775,12 +820,21 @@ class ParserClient(ABC):
 
 | Tier | Parser | Search | Embeddings | LLM Primary | LLM Fallback |
 |------|--------|--------|------------|-------------|--------------|
-| **Starter** | pypdf | pgvector + FTS | OpenAI | Anthropic Claude 3.5 | OpenAI GPT-4o |
-| **Professional** | LlamaParse | pgvector + FTS | OpenAI | Anthropic Claude 3.5 | OpenAI GPT-4o |
-| **Enterprise** | LlamaParse | pgvector + FTS | OpenAI | Anthropic Claude 3.5 | OpenAI GPT-4o |
-| **VPC** | LlamaParse | pgvector + FTS | Azure OpenAI | Azure OpenAI (customer) | Anthropic API |
-| **On-Prem (GPU)** | Marker (w/ Ollama) | pgvector + FTS | local (nomic) | Ollama + Llama 3.1 70B | Ollama + Qwen 2.5 72B |
-| **On-Prem (tables)** | Docling | pgvector + FTS | local (nomic) | Ollama + Llama 3.1 70B | Ollama + Qwen 2.5 72B |
+| **Starter** | pypdf | pgvector + FTS | local (nomic) | Gemini Flash | Anthropic Claude |
+| **Professional** | LlamaParse | pgvector + FTS | Azure OpenAI | Azure OpenAI GPT-4o | Anthropic Claude |
+| **Enterprise** | LlamaParse | Azure AI Search | Azure OpenAI | Azure OpenAI GPT-4o | Anthropic Claude |
+| **VPC** | LlamaParse | pgvector + FTS | Azure OpenAI | Azure OpenAI (customer) | Gemini |
+| **On-Prem (GPU)** | Marker | pgvector + FTS | local (nomic) | Ollama + Llama 3.2 | Ollama + Mistral |
+| **On-Prem (tables)** | Docling | pgvector + FTS | local (nomic) | Ollama + Llama 3.3 70B | Ollama + Qwen 2.5 |
+
+#### LLM Provider Comparison
+
+| Provider | Latency | Cost | Quality | Air-Gap | Best For |
+|----------|---------|------|---------|---------|----------|
+| Azure OpenAI | Low | $$$ | Excellent | No | Enterprise with Azure |
+| Anthropic Claude | Low | $$$ | Excellent | No | Best reasoning, legal analysis |
+| Google Gemini | Very Low | $$ | Very Good | No | Cost-effective, fast queries |
+| Ollama (local) | Medium | Free | Good | Yes | On-prem, data sovereignty |
 
 ### Config by Tier
 

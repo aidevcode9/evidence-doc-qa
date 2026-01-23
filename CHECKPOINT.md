@@ -202,6 +202,127 @@
 
 ---
 
+## Session: 2026-01-22
+
+### Pre-Flight Check
+- [x] Read STATUS.md — Phase 4 Provider Abstraction is next
+- [x] Read REQUIREMENTS.md — NFR-032, NFR-034, NFR-035
+- [x] Read ARCHITECTURE.md — Provider interface patterns
+- [x] Identified test files to update
+
+---
+
+## Task 1: NFR-032, NFR-034, NFR-035 — Provider Abstraction Interfaces
+- **FR/NFR:** NFR-032 (LLM), NFR-034 (Search), NFR-035 (Embedding)
+- **Branch:** feat/rbac-roles
+- **Status:** ✅ Complete
+
+### Changes Made
+
+**LLM Provider (`apps/api/app/llm/`):**
+- `base.py`: LLMClient abstract interface + LLMResponse dataclass
+- `azure_openai.py`: AzureOpenAIClient implementation
+- `__init__.py`: Factory function `get_llm_client()`
+
+**Embedding Provider (`apps/api/app/embedding/`):**
+- `base.py`: EmbeddingClient abstract interface + EmbeddingResult dataclass
+- `local.py`: LocalEmbeddingClient (hash-based for testing)
+- `azure_openai.py`: AzureOpenAIEmbeddingClient implementation
+- `__init__.py`: Factory function `get_embedding_client()`
+
+**Search Provider (`apps/api/app/search/`):**
+- `base.py`: SearchClient abstract interface + SearchResult/SearchResponse dataclasses
+- `local.py`: LocalSearchClient (BM25 + vector with RRF fusion)
+- `azure.py`: AzureSearchClient (Azure AI Search with semantic reranking)
+- `__init__.py`: Factory function `get_search_client()`
+
+**Tests (`tests/test_provider_abstraction.py`):**
+- 35 tests covering all interfaces and implementations
+
+### Verification
+- [x] `ruff check apps/` — passed
+- [x] `mypy apps/api/app --strict` — passed (0 errors)
+- [x] `pytest tests/ -v` — 218/218 passed (35 new tests)
+
+### Commits
+- `42b07fa` feat(security): add provider abstraction and security hardening (NFR-032, NFR-034, NFR-035)
+
+---
+
+## Task 2: Security Hardening (wsskeptic review)
+- **FR/NFR:** Security
+- **Branch:** feat/rbac-roles
+- **Status:** ✅ Complete
+
+### Changes Made
+
+**CRITICAL Fix - Filter Injection Prevention:**
+- `context.py`: Added `_is_valid_identifier()` function
+- Validates tenant_id/matter_id/user_id are alphanumeric with hyphens only
+- Rejects injection attempts like `"foo' or 1 eq 1 or '"`
+
+**HIGH Fix - Token Overflow Prevention:**
+- `config.py`: Added `MAX_QUERY_LENGTH = 4000`
+- `ask_service.py`: Added query length validation
+
+**HIGH Fix - Rate Limit Handling:**
+- `verification.py`: Added retry with exponential backoff (1s, 2s, 4s) for 429/5xx errors
+
+**HIGH Fix - Unsafe Config Warnings:**
+- `main.py`: Added startup warnings for ALLOW_UNVERIFIED and !STRICT_EVIDENCE
+
+**Tests (`tests/test_tenant_isolation.py`):**
+- 11 new security tests
+
+### Verification
+- [x] `ruff check apps/` — passed
+- [x] `mypy apps/api/app --strict` — passed (0 errors)
+- [x] `pytest tests/ -v` — 218/218 passed (11 new security tests)
+
+### Notes
+- wsskeptic review identified 1 CRITICAL, 4 HIGH issues — all fixed
+- Recommendation: APPROVE WITH FIXES → now APPROVED
+
+---
+
+## Task 3: Provider Abstraction Integration
+- **FR/NFR:** NFR-032, NFR-034, NFR-035
+- **Branch:** feat/rbac-roles
+- **Status:** ✅ Complete
+
+### Changes Made
+
+**Integration Tests (`tests/test_provider_integration.py`):**
+- 17 new tests for provider factory functions
+- Tests for embedding, LLM, and search client creation
+- Tests for config-driven provider switching
+- Tests for unknown provider error handling
+
+**Configuration (`.env.example`):**
+- Added `LLM_PROVIDER=azure_openai` (future: ollama, openai, anthropic)
+- Added `SEARCH_PROVIDER=azure` (or `local` for pgvector)
+- Added `DOCQA_MAX_QUERY_LENGTH=4000` (security)
+
+### Provider Abstraction Summary
+
+| Provider Type | Azure Implementation | Open Source Alternative |
+|--------------|---------------------|------------------------|
+| LLM | AzureOpenAIClient | (Ollama planned) |
+| Embeddings | AzureOpenAIEmbeddingClient | LocalEmbeddingClient |
+| Search | AzureSearchClient | LocalSearchClient (pgvector) |
+
+### Verification
+- [x] `ruff check apps/` — passed
+- [x] `mypy apps/api/app --strict` — passed (0 errors)
+- [x] `pytest tests/ -v` — 235/235 passed (17 new integration tests)
+
+### Notes
+- Phase 4 complete: All provider abstractions implemented
+- Providers can be swapped via environment variables only
+- No code changes needed to switch between Azure and open-source alternatives
+
+---
+
 ## Template (Copy for each task)
 
 ```markdown

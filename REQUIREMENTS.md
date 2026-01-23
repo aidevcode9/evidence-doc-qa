@@ -167,7 +167,7 @@ Tests Required (✅ Complete):
 | NFR-030 | LLM provider/model recorded in audit log for every response | `llm_calls` table has provider, model, tokens, latency |
 | NFR-031 | On-prem local LLM displays "Local Model" badge in UI | Badge visible; docs state quality trade-offs |
 | NFR-032 | LLM provider abstracted behind `LLMClient` interface | Swap providers via config only, no code changes |
-| NFR-033 | Default providers by tier: Cloud (Claude 3.5 Sonnet + GPT-4o fallback), VPC (Azure OpenAI), On-Prem (Ollama + Llama 3.1 70B) | Each tier works with documented provider |
+| NFR-033 | Default providers by tier: Cloud (Azure OpenAI + Anthropic/Gemini fallback), VPC (Azure OpenAI), On-Prem (Ollama + Llama 3.2) | Each tier works with documented provider; 4 providers implemented: azure_openai, anthropic, gemini, ollama |
 | NFR-034 | Search/retrieval abstracted behind `SearchClient` interface | Swap Azure AI Search ↔ pgvector via config only, no code changes |
 | NFR-035 | Embeddings abstracted behind `EmbeddingClient` interface | Swap Azure ↔ OpenAI ↔ local via config only, no code changes |
 | NFR-036 | Document parsing abstracted behind `ParserClient` interface | Swap LlamaParse ↔ Marker ↔ Docling ↔ Unstructured via config; cache parsed results |
