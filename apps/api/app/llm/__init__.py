@@ -34,11 +34,26 @@ AZURE_OPENAI_CHAT_API_KEY: str = ""
 AZURE_OPENAI_CHAT_API_VERSION: str = ""
 MODEL_ID: str = ""
 
+# Ollama config
+OLLAMA_BASE_URL: str = ""
+OLLAMA_MODEL: str = ""
+
+# Gemini config
+GEMINI_API_KEY: str = ""
+GEMINI_MODEL: str = ""
+
+# Anthropic config
+ANTHROPIC_API_KEY: str = ""
+ANTHROPIC_MODEL: str = ""
+
 
 def _load_config() -> None:
     """Load config values on first use."""
     global LLM_PROVIDER, AZURE_OPENAI_CHAT_ENDPOINT, AZURE_OPENAI_CHAT_API_KEY
     global AZURE_OPENAI_CHAT_API_VERSION, MODEL_ID
+    global OLLAMA_BASE_URL, OLLAMA_MODEL
+    global GEMINI_API_KEY, GEMINI_MODEL
+    global ANTHROPIC_API_KEY, ANTHROPIC_MODEL
 
     from app.config import (
         AZURE_OPENAI_CHAT_API_KEY as _AZURE_OPENAI_CHAT_API_KEY,
@@ -54,15 +69,27 @@ def _load_config() -> None:
     AZURE_OPENAI_CHAT_API_VERSION = _AZURE_OPENAI_CHAT_API_VERSION
     MODEL_ID = _MODEL_ID
 
+    # Ollama config
+    OLLAMA_BASE_URL = _getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    OLLAMA_MODEL = _getenv("OLLAMA_MODEL", "llama3.2:8b")
+
+    # Gemini config
+    GEMINI_API_KEY = _getenv("GEMINI_API_KEY", "")
+    GEMINI_MODEL = _getenv("GEMINI_MODEL", "gemini-2.0-flash")
+
+    # Anthropic config
+    ANTHROPIC_API_KEY = _getenv("ANTHROPIC_API_KEY", "")
+    ANTHROPIC_MODEL = _getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
+
 
 def get_llm_client() -> LLMClient:
     """Get the configured LLM client.
 
     Returns LLM client based on LLM_PROVIDER environment variable:
     - "azure_openai": Azure OpenAI (default)
-    - "openai": OpenAI API (future)
-    - "anthropic": Anthropic API (future)
-    - "ollama": Ollama local (future)
+    - "ollama": Ollama local (open-source models)
+    - "gemini": Google Gemini
+    - "anthropic": Anthropic Claude
 
     Returns:
         Configured LLMClient instance.
@@ -90,21 +117,38 @@ def get_llm_client() -> LLMClient:
             api_version=AZURE_OPENAI_CHAT_API_VERSION,
         )
 
-    # Future providers
-    # elif LLM_PROVIDER == "openai":
-    #     from app.llm.openai import OpenAIClient
-    #     return OpenAIClient(...)
-    #
-    # elif LLM_PROVIDER == "anthropic":
-    #     from app.llm.anthropic import AnthropicClient
-    #     return AnthropicClient(...)
-    #
-    # elif LLM_PROVIDER == "ollama":
-    #     from app.llm.ollama import OllamaClient
-    #     return OllamaClient(...)
+    elif LLM_PROVIDER == "ollama":
+        from app.llm.ollama import OllamaClient
+
+        return OllamaClient(
+            model=OLLAMA_MODEL,
+            base_url=OLLAMA_BASE_URL,
+        )
+
+    elif LLM_PROVIDER == "gemini":
+        if not GEMINI_API_KEY:
+            raise RuntimeError("GEMINI_API_KEY is required for gemini provider")
+
+        from app.llm.gemini import GeminiClient
+
+        return GeminiClient(
+            api_key=GEMINI_API_KEY,
+            model=GEMINI_MODEL,
+        )
+
+    elif LLM_PROVIDER == "anthropic":
+        if not ANTHROPIC_API_KEY:
+            raise RuntimeError("ANTHROPIC_API_KEY is required for anthropic provider")
+
+        from app.llm.anthropic import AnthropicClient
+
+        return AnthropicClient(
+            api_key=ANTHROPIC_API_KEY,
+            model=ANTHROPIC_MODEL,
+        )
 
     else:
         raise ValueError(
             f"Unknown LLM provider: {LLM_PROVIDER}. "
-            f"Valid options: azure_openai"
+            f"Valid options: azure_openai, ollama, gemini, anthropic"
         )

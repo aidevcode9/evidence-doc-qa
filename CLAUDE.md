@@ -33,6 +33,11 @@
 → Update STATUS.md: Move task to "Shipped" with date.
 → If more tasks in "Next": Ask if I should continue to next task.
 
+### Before every PR/commit:
+→ **MANDATORY:** Run `/wsskeptic` adversarial code review.
+→ Fix all CRITICAL and HIGH severity issues before committing.
+→ Document any accepted risks in commit message.
+
 ### When working autonomously (user said "work on this, I'll check back"):
 → Follow the Autonomous Work Protocol below.
 → Create checkpoint file after each task.

@@ -29,6 +29,9 @@ Last updated: 2026-01-22
 
 | Task | FR | Date |
 |------|-----|------|
+| **LLM_PROVIDERS.md setup guide** | NFR-032 | 01-22 |
+| **Ollama, Gemini, Anthropic LLM providers** | NFR-032, NFR-033 | 01-22 |
+| **LLM error sanitization (wsskeptic fix)** | — | 01-22 |
 | **Provider integration tests** | NFR-032, 034, 035 | 01-22 |
 | **Provider config in .env.example** | NFR-032, 034, 035 | 01-22 |
 | **Provider abstraction interfaces** | NFR-032, 034, 035 | 01-22 |
@@ -129,10 +132,11 @@ Last updated: 2026-01-22
 | NFR | Requirement | Status |
 |-----|-------------|--------|
 | NFR-032 | LLM provider abstracted behind interface | ✅ Shipped |
+| NFR-033 | Default providers by tier (4 LLM providers) | ✅ Shipped |
 | NFR-034 | Search/retrieval abstracted behind interface | ✅ Shipped |
 | NFR-035 | Embeddings abstracted behind interface | ✅ Shipped |
 
-**Phase 4 Complete:** 3/3 Provider abstraction features shipped. Config-driven provider selection via LLM_PROVIDER, SEARCH_PROVIDER, EMBEDDINGS_MODE.
+**Phase 4 Complete:** 4/4 Provider abstraction features shipped. LLM providers: azure_openai, anthropic, gemini, ollama. Config-driven selection via LLM_PROVIDER, SEARCH_PROVIDER, EMBEDDINGS_MODE.
 
 ---
 
@@ -160,8 +164,10 @@ Last updated: 2026-01-22
 | 01-22 | **Matter-level permissions via MatterAssignment** | Users must be explicitly assigned to matters; admin bypasses check (FR-004) |
 | 01-22 | **Provider abstraction pattern** | Abstract interfaces + factory functions; swap providers via SEARCH_PROVIDER, LLM_PROVIDER, EMBEDDINGS_MODE env vars |
 | 01-22 | **UUID validation for identifiers** | Prevent filter injection; alphanumeric+hyphens only, max 64 chars |
+| 01-22 | **4 LLM providers implemented** | azure_openai (default), anthropic, gemini, ollama; swap via LLM_PROVIDER env var |
 
 > **Current Stack:** Azure AI Search + Azure OpenAI + configurable parser
+> **LLM Providers:** Azure OpenAI, Anthropic Claude, Google Gemini, Ollama (local)
 > **Parser options:** `PARSER_PROVIDER=marker` (default, OCR), `pypdf` (digital only), `llamaparse` (cloud OCR)
 
 ## Risks / Unknowns
