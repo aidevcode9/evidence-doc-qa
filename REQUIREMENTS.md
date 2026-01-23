@@ -8,6 +8,7 @@
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v1.7 | Jan 2026 | Added Deployment NFRs (NFR-042 to NFR-044) — Docker Compose, on-prem docs, pgvector search |
 | v1.6 | Jan 2026 | Added FR-001/FR-002 implementation checklist from security review — query enforcement, retrieval layer, API layer |
 | v1.5 | Jan 2026 | Added Document Parsing NFRs (NFR-036 to NFR-039) — OCR, table extraction, Marker LLM mode |
 | v1.4 | Jan 2026 | Added Code Quality NFRs (NFR-040, NFR-041) |
@@ -128,6 +129,26 @@ Tests Required (✅ Complete):
 |----|-------------|---------------------|
 | FR-050 | Email/password + MFA (hosted); OIDC/SAML SSO (VPC/on-prem) | Login works; MFA enforced; SSO integrates |
 | FR-051 | Admin UI: manage users, roles, matters, retention, API keys | Admin can CRUD all entities |
+
+#### FR-050 Implementation Checklist (Security Review Findings)
+
+Core Implementation (✅ Complete):
+- [x] Password hashing with Argon2id (OWASP recommended)
+- [x] JWT access tokens (30 min TTL) + refresh tokens (7 days TTL)
+- [x] Account lockout after 5 failed attempts (30 min)
+- [x] Dual-mode auth: AUTH_MODE=jwt (prod) or headers (dev)
+- [x] Refresh token hashing (SHA256, not stored raw)
+- [x] User enumeration prevention (same error for wrong email/password)
+
+Security Hardening (✅ Complete):
+- [x] Atomic failed_login_count increment (prevent race condition TOCTOU)
+- [x] Add tenant_id filter to get_refresh_token() (prevent cross-tenant token probing)
+- [x] Validate access token type in decode_access_token() (reject refresh tokens)
+
+Tests (✅ Complete):
+- [x] Test: Concurrent login attempts respect lockout threshold
+- [x] Test: Refresh token lookup validates tenant isolation
+- [x] Test: Refresh token cannot be used as access token
 | FR-052 | Rate limiting and abuse controls; per-tenant quotas | Rate limits enforced; quota exceeded → 429 |
 
 ---
@@ -175,7 +196,15 @@ Tests Required (✅ Complete):
 | NFR-038 | Table extraction preserves structure for indemnification schedules | Complex tables extracted as structured data, not flattened text |
 | NFR-039 | Parser supports LLM enhancement mode (Marker `--use_llm`) | Configurable via MARKER_USE_LLM env var; works with Gemini or Ollama |
 
-### 5.5 Code Quality & Maintainability
+### 5.5 Deployment & Containerization
+
+| ID | Requirement | Acceptance Criteria |
+|----|-------------|---------------------|
+| NFR-042 | Docker Compose for local/on-prem development | `docker-compose up` starts API + PostgreSQL + pgvector; all services healthy |
+| NFR-043 | On-prem deployment documentation | docs/DEPLOYMENT_ONPREM.md covers: Ollama setup, pgvector, local embeddings, air-gapped operation |
+| NFR-044 | pgvector search provider implementation | `SEARCH_PROVIDER=pgvector` enables PostgreSQL-based hybrid search (BM25 + vector); no Azure dependency |
+
+### 5.6 Code Quality & Maintainability
 
 | ID | Requirement | Acceptance Criteria |
 |----|-------------|---------------------|
@@ -237,12 +266,14 @@ Tests Required (✅ Complete):
 
 ## Phasing (Suggested)
 
-| Phase | FRs | Goal |
-|-------|-----|------|
+| Phase | FRs/NFRs | Goal |
+|-------|----------|------|
 | 1. Core RAG | FR-010, FR-012, FR-013, FR-021, FR-023, FR-024, FR-025 | Working Q&A with citations |
 | 2. Citations UI | FR-030, FR-031, FR-032 | Clickable citations, export |
 | 3. Multi-tenancy | FR-001, FR-002, FR-003, FR-004, FR-020 | Tenant + matter isolation |
-| 4. Auth | FR-050, FR-051, FR-052 | Login, SSO, admin |
-| 5. Audit | FR-040, FR-041, FR-042, FR-043 | Logging, retention, deletion |
-| 6. Polish | FR-011, FR-014, FR-015, FR-022, FR-033 | Dedup, metadata, reranker |
-| 7. NFRs | NFR-* | Security, performance, reliability |
+| 4. Provider Abstraction | NFR-032, NFR-033, NFR-034, NFR-035 | Config-driven LLM/Search/Embeddings |
+| 5. Auth | FR-050, FR-051, FR-052 | Login, SSO, admin |
+| 6. Open-Source Deploy | NFR-042, NFR-043, NFR-044 | Docker Compose, pgvector, on-prem docs |
+| 7. Audit | FR-040, FR-041, FR-042, FR-043 | Logging, retention, deletion |
+| 8. Polish | FR-011, FR-014, FR-015, FR-022, FR-033 | Dedup, metadata, reranker |
+| 9. NFRs | NFR-* | Security, performance, reliability |

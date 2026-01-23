@@ -13,3 +13,5 @@ pytest-asyncio>=1.0.0
 
 # Type stubs for third-party libraries
 types-requests>=2.31.0
+types-python-jose>=3.3.0
+types-passlib>=1.7.0

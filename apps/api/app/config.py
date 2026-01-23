@@ -104,6 +104,39 @@ MAX_QUERY_LENGTH = int(_getenv("DOCQA_MAX_QUERY_LENGTH", "4000"))  # ~1000 token
 OTEL_ENABLED = _is_truthy(_getenv("DOCQA_OTEL_ENABLED", "0"))
 OTEL_SERVICE_NAME = _getenv("OTEL_SERVICE_NAME", "docqa-api")
 
+# Authentication (FR-050)
+AUTH_MODE = _getenv("AUTH_MODE", "headers")  # jwt | headers (headers for backward compat)
+JWT_SECRET_KEY = _getenv("JWT_SECRET_KEY", "dev-secret-key-change-in-production")
+JWT_ALGORITHM = _getenv("JWT_ALGORITHM", "HS256")
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(_getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+JWT_REFRESH_TOKEN_EXPIRE_DAYS = int(_getenv("JWT_REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+
+# Account security
+MAX_FAILED_LOGIN_ATTEMPTS = int(_getenv("MAX_FAILED_LOGIN_ATTEMPTS", "5"))
+ACCOUNT_LOCKOUT_MINUTES = int(_getenv("ACCOUNT_LOCKOUT_MINUTES", "30"))
+MIN_PASSWORD_LENGTH = int(_getenv("MIN_PASSWORD_LENGTH", "8"))
+
+# SSO - Microsoft Entra ID (FR-051)
+MICROSOFT_SSO_ENABLED = _is_truthy(_getenv("MICROSOFT_SSO_ENABLED", "0"))
+MICROSOFT_CLIENT_ID = _getenv("MICROSOFT_CLIENT_ID", "")
+MICROSOFT_CLIENT_SECRET = _getenv("MICROSOFT_CLIENT_SECRET", "")
+MICROSOFT_TENANT_ID = _getenv("MICROSOFT_TENANT_ID", "common")
+
+# SSO - Google Workspace (FR-051)
+GOOGLE_SSO_ENABLED = _is_truthy(_getenv("GOOGLE_SSO_ENABLED", "0"))
+GOOGLE_CLIENT_ID = _getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = _getenv("GOOGLE_CLIENT_SECRET", "")
+
+# SSO common settings
+SSO_REDIRECT_URI = _getenv("SSO_REDIRECT_URI", "")
+SSO_DEFAULT_ROLE = _getenv("SSO_DEFAULT_ROLE", "viewer")
+
+# Rate Limiting (FR-052)
+RATE_LIMIT_ENABLED = _is_truthy(_getenv("RATE_LIMIT_ENABLED", "1"))
+RATE_LIMIT_DEFAULT = _getenv("RATE_LIMIT_DEFAULT", "100/minute")
+RATE_LIMIT_QUERY = _getenv("RATE_LIMIT_QUERY", "20/minute")
+RATE_LIMIT_UPLOAD = _getenv("RATE_LIMIT_UPLOAD", "10/minute")
+
 # CORS
 _allowed_origins = _getenv("DOCQA_ALLOWED_ORIGINS", "http://localhost:3000")
 _origins_raw = [o.strip() for o in _allowed_origins.split(",") if o.strip()]

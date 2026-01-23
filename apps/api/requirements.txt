@@ -21,3 +21,15 @@ llama-parse>=0.4.0
 # Q&A Export (FR-032)
 python-docx>=1.1.0
 reportlab>=4.0.0
+
+# Authentication (FR-050)
+python-jose[cryptography]>=3.3.0
+passlib[argon2]>=1.7.4
+email-validator>=2.0.0
+
+# SSO (FR-051)
+authlib>=1.3.0
+httpx>=0.27.0
+
+# Rate Limiting (FR-052)
+slowapi>=0.1.9

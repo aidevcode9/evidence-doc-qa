@@ -23,14 +23,14 @@ jobs:
         env:
           DATABASE_URL: "sqlite:///./ci_test.db"
           EMBEDDINGS_MODE: "local"
-          PYTHONPATH: "."
+          PYTHONPATH: ".:apps/api"
         run: python -m evals.seed
       - name: Start API
         env:
           DATABASE_URL: "sqlite:///./ci_test.db"
           DOCQA_ENABLE_INDEXING: "0"
           EMBEDDINGS_MODE: "local"
-          PYTHONPATH: "."
+          PYTHONPATH: ".:apps/api"
         run: |
           uvicorn apps.api.app.main:app --host 0.0.0.0 --port 8000 &
           sleep 5
