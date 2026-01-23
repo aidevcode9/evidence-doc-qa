@@ -21,7 +21,6 @@ Last updated: 2026-01-22
 
 | Task | FR | Depends On | Notes |
 |------|-----|------------|-------|
-| RBAC with roles | FR-003 | FR-001/FR-002 complete | After isolation enforcement |
 | Matter-level permissions | FR-004 | FR-003 | Depends on RBAC |
 
 ## Next (Phase 4)
@@ -34,6 +33,10 @@ Last updated: 2026-01-22
 
 | Task | FR | Date |
 |------|-----|------|
+| **RBAC with roles** | FR-003 | 01-22 |
+| **Role enum + permissions** | FR-003 | 01-22 |
+| **User model + migration 0005** | FR-003 | 01-22 |
+| **RequestContext with user_id/user_role** | FR-003 | 01-22 |
 | **Tenant/Matter isolation enforcement** | FR-001, FR-002 | 01-22 |
 | **RequestContext dependency for header extraction** | FR-001, FR-002 | 01-22 |
 | **Azure Search tenant/matter OData filters** | FR-001, FR-002 | 01-22 |

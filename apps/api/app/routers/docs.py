@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse
 
 from app.context import RequestContext, get_request_context
 from app.db import get_document
+from app.rbac import has_permission
 from app.services.document_service import process_document_upload
 
 router = APIRouter()
@@ -16,7 +17,13 @@ async def upload_doc(
     file: UploadFile = File(...),
     context: RequestContext = Depends(get_request_context),
 ) -> dict[str, Any]:
-    """Upload a document with tenant/matter isolation (FR-001, FR-002)."""
+    """Upload a document with tenant/matter isolation and RBAC (FR-001, FR-002, FR-003)."""
+    # RBAC check (FR-003): Only admin, attorney, paralegal can upload
+    if not has_permission(context.user_role, "upload"):
+        raise HTTPException(
+            status_code=403,
+            detail="Permission denied: upload requires one of ['admin', 'attorney', 'paralegal']",
+        )
     result = await process_document_upload(
         file,
         tenant_id=context.tenant_id,

@@ -118,6 +118,19 @@ class QAMessage(Base):
     created_at_utc: Mapped[str] = mapped_column(String, nullable=False)
 
 
+class User(Base):
+    """User model for RBAC (FR-003)."""
+
+    __tablename__ = "users"
+
+    user_id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    email: Mapped[str] = mapped_column(String, nullable=False)
+    role: Mapped[str] = mapped_column(String, nullable=False)  # admin, attorney, paralegal, viewer
+    display_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at_utc: Mapped[str] = mapped_column(String, nullable=False)
+
+
 def init_db() -> None:
     engine = _engine()
     Base.metadata.create_all(bind=engine)
