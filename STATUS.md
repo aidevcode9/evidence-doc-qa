@@ -4,10 +4,10 @@ Last updated: 2026-01-22
 
 ---
 
-## Current Phase: 3 — Multi-tenancy ✅ COMPLETE
+## Current Phase: 5 — Auth 🔜 NOT STARTED
 
-**Goal:** Tenant + matter isolation across all data
-**Completed:** 2026-01-22
+**Goal:** Login, SSO, admin functionality
+**Next:** FR-050, FR-051, FR-052
 
 ---
 
@@ -15,24 +15,30 @@ Last updated: 2026-01-22
 
 | Task | FR | Branch | Started | Notes |
 |------|-----|--------|---------|-------|
-| — | — | — | — | — |
+| — | — | — | — | Phase 4 complete, awaiting next task |
 
-## Next (Phase 3 continued)
-
-| Task | FR | Depends On | Notes |
-|------|-----|------------|-------|
-| — | — | — | Phase 3 complete |
-
-## Next (Phase 4)
+## Next (Phase 5)
 
 | Task | FR | Depends On | Notes |
 |------|-----|------------|-------|
-| Provider Abstraction | NFR-032, 034, 035 | Phase 3 | Phase 4 |
+| User login flow | FR-050 | — | OAuth2/OIDC or custom |
+| SSO integration | FR-051 | FR-050 | Azure AD, Okta, etc. |
+| Admin dashboard | FR-052 | FR-050 | User management UI |
 
 ## Done (This Week)
 
 | Task | FR | Date |
 |------|-----|------|
+| **Provider integration tests** | NFR-032, 034, 035 | 01-22 |
+| **Provider config in .env.example** | NFR-032, 034, 035 | 01-22 |
+| **Provider abstraction interfaces** | NFR-032, 034, 035 | 01-22 |
+| **LLMClient + AzureOpenAIClient** | NFR-032 | 01-22 |
+| **EmbeddingClient + Local/Azure implementations** | NFR-035 | 01-22 |
+| **SearchClient + Local/Azure implementations** | NFR-034 | 01-22 |
+| **Security hardening (wsskeptic review)** | — | 01-22 |
+| **UUID validation for filter injection prevention** | — | 01-22 |
+| **Query length limits (MAX_QUERY_LENGTH)** | — | 01-22 |
+| **LLM retry with exponential backoff** | — | 01-22 |
 | **Matter-level permissions** | FR-004 | 01-22 |
 | **MatterAssignment model + migration 0006** | FR-004 | 01-22 |
 | **user_has_matter_access() function** | FR-004 | 01-22 |
@@ -118,6 +124,18 @@ Last updated: 2026-01-22
 
 ---
 
+## Phase 4 Progress
+
+| NFR | Requirement | Status |
+|-----|-------------|--------|
+| NFR-032 | LLM provider abstracted behind interface | ✅ Shipped |
+| NFR-034 | Search/retrieval abstracted behind interface | ✅ Shipped |
+| NFR-035 | Embeddings abstracted behind interface | ✅ Shipped |
+
+**Phase 4 Complete:** 3/3 Provider abstraction features shipped. Config-driven provider selection via LLM_PROVIDER, SEARCH_PROVIDER, EMBEDDINGS_MODE.
+
+---
+
 ## Decisions
 
 | Date | Decision | Rationale |
@@ -140,6 +158,8 @@ Last updated: 2026-01-22
 | 01-21 | **Tenant/Matter isolation columns** | FR-001/FR-002: All 6 models now have tenant_id + matter_id; indexed; migration `0004` |
 | 01-22 | **Header-based tenant context (MVP)** | X-Tenant-Id/X-Matter-Id headers; JWT extraction planned for Phase 4 |
 | 01-22 | **Matter-level permissions via MatterAssignment** | Users must be explicitly assigned to matters; admin bypasses check (FR-004) |
+| 01-22 | **Provider abstraction pattern** | Abstract interfaces + factory functions; swap providers via SEARCH_PROVIDER, LLM_PROVIDER, EMBEDDINGS_MODE env vars |
+| 01-22 | **UUID validation for identifiers** | Prevent filter injection; alphanumeric+hyphens only, max 64 chars |
 
 > **Current Stack:** Azure AI Search + Azure OpenAI + configurable parser
 > **Parser options:** `PARSER_PROVIDER=marker` (default, OCR), `pypdf` (digital only), `llamaparse` (cloud OCR)
