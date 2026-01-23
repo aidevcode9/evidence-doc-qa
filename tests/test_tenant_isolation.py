@@ -160,15 +160,27 @@ class TestRequestContextModule:
     def test_request_context_has_tenant_id(self) -> None:
         """RequestContext must have tenant_id attribute."""
         from app.context import RequestContext
+        from app.rbac import Role
 
-        ctx = RequestContext(tenant_id="test-tenant", matter_id="test-matter")
+        ctx = RequestContext(
+            tenant_id="test-tenant",
+            matter_id="test-matter",
+            user_id="test-user",
+            user_role=Role.ATTORNEY,
+        )
         assert ctx.tenant_id == "test-tenant"
 
     def test_request_context_has_matter_id(self) -> None:
         """RequestContext must have matter_id attribute."""
         from app.context import RequestContext
+        from app.rbac import Role
 
-        ctx = RequestContext(tenant_id="test-tenant", matter_id="test-matter")
+        ctx = RequestContext(
+            tenant_id="test-tenant",
+            matter_id="test-matter",
+            user_id="test-user",
+            user_role=Role.ATTORNEY,
+        )
         assert ctx.matter_id == "test-matter"
 
     def test_get_request_context_dependency_exists(self) -> None:

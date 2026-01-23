@@ -1,10 +1,11 @@
-"""Request context for tenant and matter isolation (FR-001, FR-002).
+"""Request context for tenant, matter, and user isolation (FR-001, FR-002, FR-003).
 
-This module provides FastAPI dependencies to extract tenant_id and matter_id
-from request headers. These are required for multi-tenant data isolation.
+This module provides FastAPI dependencies to extract tenant_id, matter_id,
+user_id, and user_role from request headers. These are required for
+multi-tenant data isolation and RBAC.
 
 MVP Implementation:
-- Extracts from X-Tenant-Id and X-Matter-Id headers
+- Extracts from X-Tenant-Id, X-Matter-Id, X-User-Id, X-User-Role headers
 - Future: Extract from JWT token after auth service is implemented (Phase 4)
 """
 
@@ -12,36 +13,54 @@ from __future__ import annotations
 
 from fastapi import Header, HTTPException
 
+from app.rbac import Role
+
 
 class RequestContext:
-    """Tenant and matter context extracted from request headers.
+    """Tenant, matter, and user context extracted from request headers.
 
     Attributes:
         tenant_id: The tenant identifier for data isolation (FR-001)
         matter_id: The matter identifier for data isolation (FR-002)
+        user_id: The user identifier for RBAC (FR-003)
+        user_role: The user's role for permission checking (FR-003)
     """
 
-    def __init__(self, tenant_id: str, matter_id: str) -> None:
+    def __init__(
+        self,
+        tenant_id: str,
+        matter_id: str,
+        user_id: str,
+        user_role: Role,
+    ) -> None:
         self.tenant_id = tenant_id
         self.matter_id = matter_id
+        self.user_id = user_id
+        self.user_role = user_role
 
 
 def get_request_context(
     x_tenant_id: str = Header(..., alias="X-Tenant-Id"),
     x_matter_id: str = Header(..., alias="X-Matter-Id"),
+    x_user_id: str = Header(..., alias="X-User-Id"),
+    x_user_role: str = Header(..., alias="X-User-Role"),
 ) -> RequestContext:
-    """FastAPI dependency to extract tenant/matter context from headers.
+    """FastAPI dependency to extract tenant/matter/user context from headers.
 
     Args:
         x_tenant_id: Tenant ID from X-Tenant-Id header (required)
         x_matter_id: Matter ID from X-Matter-Id header (required)
+        x_user_id: User ID from X-User-Id header (required)
+        x_user_role: User role from X-User-Role header (required)
 
     Returns:
-        RequestContext with tenant_id and matter_id
+        RequestContext with tenant_id, matter_id, user_id, and user_role
 
     Raises:
-        HTTPException: 400 if headers are missing or empty
+        HTTPException: 400 if tenant/matter headers missing or invalid role
+        HTTPException: 401 if user headers missing
     """
+    # Validate tenant/matter (FR-001, FR-002)
     if not x_tenant_id or not x_tenant_id.strip():
         raise HTTPException(
             status_code=400,
@@ -52,7 +71,32 @@ def get_request_context(
             status_code=400,
             detail="X-Matter-Id header is required",
         )
+
+    # Validate user (FR-003)
+    if not x_user_id or not x_user_id.strip():
+        raise HTTPException(
+            status_code=401,
+            detail="X-User-Id header is required for authentication",
+        )
+    if not x_user_role or not x_user_role.strip():
+        raise HTTPException(
+            status_code=401,
+            detail="X-User-Role header is required for authentication",
+        )
+
+    # Parse role (case insensitive)
+    try:
+        role = Role(x_user_role.strip().lower())
+    except ValueError:
+        valid_roles = [r.value for r in Role]
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid role: {x_user_role}. Must be one of {valid_roles}",
+        )
+
     return RequestContext(
         tenant_id=x_tenant_id.strip(),
         matter_id=x_matter_id.strip(),
+        user_id=x_user_id.strip(),
+        user_role=role,
     )

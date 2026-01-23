@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, HTTPException
 
 from app.context import RequestContext, get_request_context
+from app.rbac import has_permission
 from app.schemas import AskRequest, AskResponse
 from app.services.ask_service import execute_ask
 
@@ -13,7 +14,13 @@ def ask(
     context: RequestContext = Depends(get_request_context),
     x_docqa_session: str | None = Header(default=None),
 ) -> AskResponse:
-    """Ask a question with tenant/matter isolation (FR-001, FR-002)."""
+    """Ask a question with tenant/matter isolation and RBAC (FR-001, FR-002, FR-003)."""
+    # RBAC check (FR-003): All roles can query
+    if not has_permission(context.user_role, "query"):
+        raise HTTPException(
+            status_code=403,
+            detail="Permission denied: query requires authentication",
+        )
     return execute_ask(
         payload,
         session_id=x_docqa_session,

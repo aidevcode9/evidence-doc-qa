@@ -15,11 +15,22 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "apps" / "api"))
 
 from app.context import RequestContext
 from app.db import QAMessage, QASession
+from app.rbac import Role
 
 
-def make_context(tenant_id: str = "tenant-1", matter_id: str = "matter-1") -> RequestContext:
-    """Create a test request context."""
-    return RequestContext(tenant_id=tenant_id, matter_id=matter_id)
+def make_context(
+    tenant_id: str = "tenant-1",
+    matter_id: str = "matter-1",
+    user_id: str = "user-1",
+    user_role: Role = Role.ATTORNEY,
+) -> RequestContext:
+    """Create a test request context with user info (FR-003)."""
+    return RequestContext(
+        tenant_id=tenant_id,
+        matter_id=matter_id,
+        user_id=user_id,
+        user_role=user_role,
+    )
 
 
 class TestGeneratePdfExport:

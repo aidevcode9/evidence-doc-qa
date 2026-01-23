@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 
 from app.context import RequestContext, get_request_context
 from app.db import get_qa_session, get_session_messages
+from app.rbac import has_permission
 from app.services.export_service import generate_pdf_export, generate_docx_export
 
 router = APIRouter(tags=["export"])
@@ -37,7 +38,7 @@ async def export_session(
     format: Literal["pdf", "docx"] = Query("pdf", description="Export format"),
     x_docqa_session: str | None = Header(default=None),
 ) -> FileResponse:
-    """Export Q&A session to PDF or DOCX with tenant isolation (FR-001, FR-032).
+    """Export Q&A session to PDF or DOCX with tenant isolation and RBAC (FR-001, FR-003, FR-032).
 
     Args:
         session_id: The session ID to export
@@ -49,10 +50,17 @@ async def export_session(
         FileResponse with the exported document
 
     Raises:
-        HTTPException 403: If session header is missing or doesn't match
+        HTTPException 403: If session header is missing, doesn't match, or permission denied
         HTTPException 404: If session not found
         HTTPException 400: If session has no messages
     """
+    # RBAC check (FR-003): All roles can export
+    if not has_permission(context.user_role, "export"):
+        raise HTTPException(
+            status_code=403,
+            detail="Permission denied: export requires authentication",
+        )
+
     # Security: Require session header to match path session_id (prevents IDOR)
     if not x_docqa_session:
         raise HTTPException(

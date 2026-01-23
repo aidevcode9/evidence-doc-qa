@@ -1,6 +1,6 @@
 # STATUS.md
 
-Last updated: 2026-01-21 (Phase 3 Started)
+Last updated: 2026-01-22
 
 ---
 
@@ -15,13 +15,12 @@ Last updated: 2026-01-21 (Phase 3 Started)
 
 | Task | FR | Branch | Started | Notes |
 |------|-----|--------|---------|-------|
-| **Tenant/Matter isolation enforcement** | FR-001, FR-002 | fix/tenant-matter-isolation-enforcement | 01-21 | 🔴 CRITICAL: Schema done, enforcement missing |
+| — | — | — | — | — |
 
 ## Next (Phase 3 continued)
 
 | Task | FR | Depends On | Notes |
 |------|-----|------------|-------|
-| RBAC with roles | FR-003 | FR-001/FR-002 complete | After isolation enforcement |
 | Matter-level permissions | FR-004 | FR-003 | Depends on RBAC |
 
 ## Next (Phase 4)
@@ -34,6 +33,14 @@ Last updated: 2026-01-21 (Phase 3 Started)
 
 | Task | FR | Date |
 |------|-----|------|
+| **RBAC with roles** | FR-003 | 01-22 |
+| **Role enum + permissions** | FR-003 | 01-22 |
+| **User model + migration 0005** | FR-003 | 01-22 |
+| **RequestContext with user_id/user_role** | FR-003 | 01-22 |
+| **Tenant/Matter isolation enforcement** | FR-001, FR-002 | 01-22 |
+| **RequestContext dependency for header extraction** | FR-001, FR-002 | 01-22 |
+| **Azure Search tenant/matter OData filters** | FR-001, FR-002 | 01-22 |
+| **All routers use context dependency** | FR-001, FR-002 | 01-22 |
 | **Add tenant_id to all models** | FR-001 | 01-21 |
 | **Add matter_id to all models** | FR-002 | 01-21 |
 | **Update load_chunks with tenant/matter filters** | FR-001, FR-002 | 01-21 |
@@ -113,6 +120,7 @@ Last updated: 2026-01-21 (Phase 3 Started)
 | 01-21 | **IDOR prevention via session header** | X-DocQA-Session header required for export; prevents cross-session data access |
 | 01-21 | **Alembic for schema migrations** | Standard migration tooling; documented in ARCHITECTURE.md; `0003_add_qa_session_tables.py` |
 | 01-21 | **Tenant/Matter isolation columns** | FR-001/FR-002: All 6 models now have tenant_id + matter_id; indexed; migration `0004` |
+| 01-22 | **Header-based tenant context (MVP)** | X-Tenant-Id/X-Matter-Id headers; JWT extraction planned for Phase 4 |
 
 > **Current Stack:** Azure AI Search + Azure OpenAI + configurable parser
 > **Parser options:** `PARSER_PROVIDER=marker` (default, OCR), `pypdf` (digital only), `llamaparse` (cloud OCR)
