@@ -4,10 +4,10 @@ Last updated: 2026-01-22
 
 ---
 
-## Current Phase: 5 — Auth 🔜 NOT STARTED
+## Current Phase: 5 — Auth ✅ COMPLETE
 
 **Goal:** Login, SSO, admin functionality
-**Next:** FR-050, FR-051, FR-052
+**Progress:** FR-050 ✅, FR-051 ✅, FR-052 ✅
 
 ---
 
@@ -15,20 +15,41 @@ Last updated: 2026-01-22
 
 | Task | FR | Branch | Started | Notes |
 |------|-----|--------|---------|-------|
-| — | — | — | — | Phase 4 complete, awaiting next task |
+| — | — | — | — | Phase 5 complete, awaiting next phase |
 
-## Next (Phase 5)
+## Next (Phase 6 - Audit)
 
 | Task | FR | Depends On | Notes |
 |------|-----|------------|-------|
-| User login flow | FR-050 | — | OAuth2/OIDC or custom |
-| SSO integration | FR-051 | FR-050 | Azure AD, Okta, etc. |
-| Admin dashboard | FR-052 | FR-050 | User management UI |
+| Audit logging | FR-040 | FR-050 ✅ | User action logs |
+| Retention policies | FR-041 | FR-040 | Data lifecycle |
+| Deletion requests | FR-042 | FR-041 | GDPR compliance |
+| Audit export | FR-043 | FR-040 | Compliance reports |
 
 ## Done (This Week)
 
 | Task | FR | Date |
 |------|-----|------|
+| **SSO security hardening (wsskeptic)** | FR-051 | 01-22 |
+| **JWKS ID token signature validation** | FR-051 | 01-22 |
+| **Database-backed SSO state (multi-instance)** | FR-051 | 01-22 |
+| **Admin JWT auth in jwt mode** | FR-052 | 01-22 |
+| **SQL wildcard escaping in search** | FR-052 | 01-22 |
+| **Rate limiting applied to main.py** | FR-052 | 01-22 |
+| **SSO integration (Microsoft + Google)** | FR-051 | 01-22 |
+| **Admin dashboard (user CRUD, matter access)** | FR-052 | 01-22 |
+| **30 new tests (SSO + admin + rate limit)** | FR-051, FR-052 | 01-22 |
+| **Auth security hardening (wsskeptic)** | FR-050 | 01-22 |
+| **Atomic failed_login_count (race fix)** | FR-050 | 01-22 |
+| **Tenant isolation in refresh token lookup** | FR-050 | 01-22 |
+| **Access token type validation** | FR-050 | 01-22 |
+| **OAuth2/JWT authentication** | FR-050 | 01-22 |
+| **security.py (password hashing, JWT)** | FR-050 | 01-22 |
+| **Auth router (login/refresh/logout/me)** | FR-050 | 01-22 |
+| **Dual-mode auth (JWT + headers)** | FR-050 | 01-22 |
+| **RefreshToken model + migration 0007** | FR-050 | 01-22 |
+| **User auth columns (password_hash, is_active, etc.)** | FR-050 | 01-22 |
+| **45 auth tests (TDD)** | FR-050 | 01-22 |
 | **LLM_PROVIDERS.md setup guide** | NFR-032 | 01-22 |
 | **Ollama, Gemini, Anthropic LLM providers** | NFR-032, NFR-033 | 01-22 |
 | **LLM error sanitization (wsskeptic fix)** | — | 01-22 |
@@ -140,6 +161,18 @@ Last updated: 2026-01-22
 
 ---
 
+## Phase 5 Progress
+
+| FR | Requirement | Status |
+|----|-------------|--------|
+| FR-050 | User login flow (OAuth2/JWT) | ✅ Shipped |
+| FR-051 | SSO integration (OIDC) | ✅ Shipped |
+| FR-052 | Admin dashboard | ✅ Shipped |
+
+**Phase 5 Complete:** 3/3 Auth features shipped. JWT access/refresh tokens, Microsoft + Google SSO with PKCE, admin user CRUD, matter access management, rate limiting.
+
+---
+
 ## Decisions
 
 | Date | Decision | Rationale |
@@ -165,6 +198,14 @@ Last updated: 2026-01-22
 | 01-22 | **Provider abstraction pattern** | Abstract interfaces + factory functions; swap providers via SEARCH_PROVIDER, LLM_PROVIDER, EMBEDDINGS_MODE env vars |
 | 01-22 | **UUID validation for identifiers** | Prevent filter injection; alphanumeric+hyphens only, max 64 chars |
 | 01-22 | **4 LLM providers implemented** | azure_openai (default), anthropic, gemini, ollama; swap via LLM_PROVIDER env var |
+| 01-22 | **OAuth2 with JWT tokens** | Access (30m) + Refresh (7d) tokens; Argon2id password hashing; dual-mode auth (jwt/headers) |
+| 01-22 | **AUTH_MODE env var** | `jwt` for production, `headers` for dev/backward compat; JWT extracts from Bearer token |
+| 01-22 | **Microsoft + Google SSO** | OIDC with PKCE flow; covers 95%+ of law firms; JIT provisioning creates users as Viewer |
+| 01-22 | **Admin endpoints with manage_users** | User CRUD, matter access, pagination; admin cannot deactivate self |
+| 01-22 | **Rate limiting via slowapi** | Per-endpoint configurable limits; protects LLM costs |
+| 01-22 | **JWKS token validation** | ID tokens validated with provider JWKS; prevents forged tokens |
+| 01-22 | **Database SSO state** | SSOState table replaces in-memory dict; supports multi-instance |
+| 01-22 | **Nonce replay protection** | Nonce validated in ID token to prevent replay attacks |
 
 > **Current Stack:** Azure AI Search + Azure OpenAI + configurable parser
 > **LLM Providers:** Azure OpenAI, Anthropic Claude, Google Gemini, Ollama (local)
