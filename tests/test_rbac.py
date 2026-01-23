@@ -140,15 +140,19 @@ class TestGetRequestContextWithUser:
 
     def test_extracts_user_headers(self) -> None:
         """get_request_context extracts X-User-Id and X-User-Role."""
+        from unittest.mock import patch
+
         from app.context import get_request_context
         from app.rbac import Role
 
-        context = get_request_context(
-            x_tenant_id="tenant-1",
-            x_matter_id="matter-1",
-            x_user_id="user-123",
-            x_user_role="attorney",
-        )
+        # Mock matter access check (FR-004)
+        with patch("app.context.user_has_matter_access", return_value=True):
+            context = get_request_context(
+                x_tenant_id="tenant-1",
+                x_matter_id="matter-1",
+                x_user_id="user-123",
+                x_user_role="attorney",
+            )
 
         assert context.user_id == "user-123"
         assert context.user_role == Role.ATTORNEY
@@ -201,15 +205,19 @@ class TestGetRequestContextWithUser:
 
     def test_role_case_insensitive(self) -> None:
         """Role parsing is case insensitive."""
+        from unittest.mock import patch
+
         from app.context import get_request_context
         from app.rbac import Role
 
-        context = get_request_context(
-            x_tenant_id="tenant-1",
-            x_matter_id="matter-1",
-            x_user_id="user-123",
-            x_user_role="ATTORNEY",  # Uppercase
-        )
+        # Mock matter access check (FR-004)
+        with patch("app.context.user_has_matter_access", return_value=True):
+            context = get_request_context(
+                x_tenant_id="tenant-1",
+                x_matter_id="matter-1",
+                x_user_id="user-123",
+                x_user_role="ATTORNEY",  # Uppercase
+            )
         assert context.user_role == Role.ATTORNEY
 
 
@@ -306,45 +314,54 @@ class TestEndpointPermissionEnforcement:
 
     These tests verify that the @require_permission decorator is actually
     applied to endpoints, not just that it works in isolation.
+    All tests mock user_has_matter_access since FR-004 is now enforced.
     """
 
     def test_upload_endpoint_blocks_viewer(self) -> None:
         """Upload endpoint returns 403 for viewer role."""
+        from unittest.mock import patch
+
         from fastapi.testclient import TestClient
 
         from app.main import app
 
         client = TestClient(app)
-        response = client.post(
-            "/v1/docs/upload",
-            headers={
-                "X-Tenant-Id": "tenant-1",
-                "X-Matter-Id": "matter-1",
-                "X-User-Id": "user-123",
-                "X-User-Role": "viewer",  # Viewer cannot upload
-            },
-            files={"file": ("test.pdf", b"fake pdf content", "application/pdf")},
-        )
+        # Mock matter access check (FR-004)
+        with patch("app.context.user_has_matter_access", return_value=True):
+            response = client.post(
+                "/v1/docs/upload",
+                headers={
+                    "X-Tenant-Id": "tenant-1",
+                    "X-Matter-Id": "matter-1",
+                    "X-User-Id": "user-123",
+                    "X-User-Role": "viewer",  # Viewer cannot upload
+                },
+                files={"file": ("test.pdf", b"fake pdf content", "application/pdf")},
+            )
         assert response.status_code == 403
         assert "Permission denied" in response.json()["detail"]
 
     def test_upload_endpoint_allows_attorney(self) -> None:
         """Upload endpoint allows attorney role (may fail on other validation)."""
+        from unittest.mock import patch
+
         from fastapi.testclient import TestClient
 
         from app.main import app
 
         client = TestClient(app)
-        response = client.post(
-            "/v1/docs/upload",
-            headers={
-                "X-Tenant-Id": "tenant-1",
-                "X-Matter-Id": "matter-1",
-                "X-User-Id": "user-123",
-                "X-User-Role": "attorney",
-            },
-            files={"file": ("test.pdf", b"fake pdf content", "application/pdf")},
-        )
+        # Mock matter access check (FR-004)
+        with patch("app.context.user_has_matter_access", return_value=True):
+            response = client.post(
+                "/v1/docs/upload",
+                headers={
+                    "X-Tenant-Id": "tenant-1",
+                    "X-Matter-Id": "matter-1",
+                    "X-User-Id": "user-123",
+                    "X-User-Role": "attorney",
+                },
+                files={"file": ("test.pdf", b"fake pdf content", "application/pdf")},
+            )
         # Should NOT be 403 - may be other error but not permission denied
         assert response.status_code != 403
 
@@ -372,19 +389,20 @@ class TestEndpointPermissionEnforcement:
                 parser_mode="marker",
             ),
         )
-        # Mock execute_ask to avoid needing full RAG pipeline
-        with patch("app.routers.ask.execute_ask") as mock_ask:
-            mock_ask.return_value = mock_response
-            response = client.post(
-                "/v1/ask",
-                headers={
-                    "X-Tenant-Id": "tenant-1",
-                    "X-Matter-Id": "matter-1",
-                    "X-User-Id": "user-123",
-                    "X-User-Role": "viewer",  # Viewer CAN query
-                },
-                json={"question": "test question"},
-            )
+        # Mock matter access check (FR-004) and execute_ask
+        with patch("app.context.user_has_matter_access", return_value=True):
+            with patch("app.routers.ask.execute_ask") as mock_ask:
+                mock_ask.return_value = mock_response
+                response = client.post(
+                    "/v1/ask",
+                    headers={
+                        "X-Tenant-Id": "tenant-1",
+                        "X-Matter-Id": "matter-1",
+                        "X-User-Id": "user-123",
+                        "X-User-Role": "viewer",  # Viewer CAN query
+                    },
+                    json={"question": "test question"},
+                )
         # Should NOT be 403 - viewer has query permission
         assert response.status_code != 403
 
@@ -397,18 +415,19 @@ class TestEndpointPermissionEnforcement:
         from app.main import app
 
         client = TestClient(app)
-        # Mock to avoid needing actual session
-        with patch("app.routers.export.get_qa_session") as mock_session:
-            mock_session.return_value = None  # Will 404, but not 403
-            response = client.get(
-                "/v1/sessions/test-session/export",
-                headers={
-                    "X-Tenant-Id": "tenant-1",
-                    "X-Matter-Id": "matter-1",
-                    "X-User-Id": "user-123",
-                    "X-User-Role": "viewer",  # Viewer CAN export
-                    "X-DocQA-Session": "test-session",
-                },
-            )
+        # Mock matter access check (FR-004) and get_qa_session
+        with patch("app.context.user_has_matter_access", return_value=True):
+            with patch("app.routers.export.get_qa_session") as mock_session:
+                mock_session.return_value = None  # Will 404, but not 403
+                response = client.get(
+                    "/v1/sessions/test-session/export",
+                    headers={
+                        "X-Tenant-Id": "tenant-1",
+                        "X-Matter-Id": "matter-1",
+                        "X-User-Id": "user-123",
+                        "X-User-Role": "viewer",  # Viewer CAN export
+                        "X-DocQA-Session": "test-session",
+                    },
+                )
         # Should be 404 (session not found), not 403 (permission denied)
         assert response.status_code == 404
