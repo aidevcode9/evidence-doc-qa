@@ -8,6 +8,7 @@
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v1.8 | Jan 2026 | Added LLM Observability NFRs (NFR-045, NFR-046) — Langfuse Cloud + self-hosted option |
 | v1.7 | Jan 2026 | Added Deployment NFRs (NFR-042 to NFR-044) — Docker Compose, on-prem docs, pgvector search |
 | v1.6 | Jan 2026 | Added FR-001/FR-002 implementation checklist from security review — query enforcement, retrieval layer, API layer |
 | v1.5 | Jan 2026 | Added Document Parsing NFRs (NFR-036 to NFR-039) — OCR, table extraction, Marker LLM mode |
@@ -211,6 +212,36 @@ Tests (✅ Complete):
 | NFR-040 | Full type annotations; `mypy --strict` passes | Zero mypy errors; generic types parameterized; all functions typed |
 | NFR-041 | Dev dependencies separated from production | `requirements-dev.txt` for ruff, mypy, pytest; not in main requirements.txt |
 
+### 5.7 LLM Observability (Langfuse)
+
+| ID | Requirement | Acceptance Criteria |
+|----|-------------|---------------------|
+| NFR-045 | Langfuse Cloud integration for ALL LLM calls | Every LLM call logged to both `llm_calls` table AND Langfuse; `langfuse_trace_id` stored for correlation; visual trace viewer accessible |
+| NFR-046 | Self-hosted Langfuse option for Enterprise/On-Prem | Docker Compose config for self-hosted Langfuse; `LANGFUSE_HOST` points to internal URL; data stays in customer VPC |
+
+#### NFR-045 Setup (Langfuse Cloud)
+
+1. **Create Langfuse account:** https://cloud.langfuse.com
+2. **Get API keys:** Settings → API Keys → Create new key pair
+3. **Add environment variables:**
+   ```bash
+   LANGFUSE_ENABLED=true
+   LANGFUSE_PUBLIC_KEY=pk-lf-xxx
+   LANGFUSE_SECRET_KEY=sk-lf-xxx
+   LANGFUSE_HOST=https://cloud.langfuse.com
+   ```
+4. **Add GitHub secrets** (for Container Apps):
+   - `LANGFUSE_PUBLIC_KEY`
+   - `LANGFUSE_SECRET_KEY`
+5. **Verify:** Check Langfuse dashboard for traces after `/ask` calls
+
+#### NFR-046 Setup (Self-Hosted) — Future
+
+For Enterprise/VPC/On-Prem deployments requiring data sovereignty:
+- Deploy via `docker-compose.langfuse.yml`
+- Set `LANGFUSE_HOST=http://langfuse.internal:3000`
+- See `docs/architecture/observability.md` for full config
+
 ---
 
 ## Data Model (Reference)
@@ -225,7 +256,7 @@ Tests (✅ Complete):
 | doc_chunks | id, document_id, tenant_id, matter_id, page_number, char_start, char_end, text, embedding |
 | qa_sessions | id, tenant_id, matter_id, created_by |
 | qa_messages | id, session_id, role, content, citations_json |
-| llm_calls | id, session_id, message_id, provider, model, prompt_tokens, completion_tokens, latency_ms |
+| llm_calls | id, session_id, message_id, provider, model, prompt_tokens, completion_tokens, latency_ms, langfuse_trace_id |
 | audit_events | id, tenant_id, matter_id, user_id, event_type, event_json |
 | usage_daily | tenant_id, date, queries_count, pages_ingested, llm_tokens_prompt, llm_tokens_completion |
 
