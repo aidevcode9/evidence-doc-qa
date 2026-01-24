@@ -5,6 +5,10 @@ Provides endpoints for:
 - GET /v1/audit/events/export - Export audit events as CSV (admin only)
 
 All endpoints require admin role (manage_users permission).
+
+Security (wsskeptic review):
+- Export uses streaming with chunked queries to prevent memory exhaustion
+- Filenames are sanitized to prevent path injection
 """
 
 from __future__ import annotations
@@ -12,7 +16,8 @@ from __future__ import annotations
 import csv
 import io
 import json
-from typing import Any
+import re
+from typing import Any, Generator
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -23,6 +28,29 @@ from app.db import AuditEvent, count_audit_events, list_audit_events
 from app.rbac import Role, has_permission
 
 router = APIRouter(prefix="/v1/audit", tags=["audit"])
+
+# Export chunk size for streaming (wsskeptic: prevent OOM)
+EXPORT_CHUNK_SIZE = 5000
+
+
+def _sanitize_date_for_filename(date_str: str | None) -> str:
+    """Sanitize date string for use in filename.
+
+    Prevents path injection by removing dangerous characters.
+
+    Args:
+        date_str: Date string from user input
+
+    Returns:
+        Safe string for filename (only alphanumeric and hyphens)
+    """
+    if not date_str:
+        return ""
+    # Extract just the date portion (YYYY-MM-DD) if ISO format
+    date_only = date_str[:10] if len(date_str) >= 10 else date_str
+    # Remove any path separators and special characters
+    safe = re.sub(r"[^a-zA-Z0-9-]", "", date_only)
+    return safe
 
 
 # Response schemas
@@ -209,6 +237,82 @@ def list_events_endpoint(
     )
 
 
+def _generate_csv_chunks(
+    tenant_id: str,
+    matter_id: str | None,
+    event_type: str | None,
+    user_id: str | None,
+    start_date: str | None,
+    end_date: str | None,
+) -> Generator[str, None, None]:
+    """Generate CSV content in chunks to prevent memory exhaustion.
+
+    Args:
+        tenant_id: Tenant ID
+        matter_id: Filter by matter ID
+        event_type: Filter by event type
+        user_id: Filter by user ID
+        start_date: Filter by start date
+        end_date: Filter by end date
+
+    Yields:
+        CSV content chunks
+    """
+    # Yield header row first
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "event_id",
+        "tenant_id",
+        "matter_id",
+        "user_id",
+        "event_type",
+        "event_data",
+        "response_id",
+        "created_at_utc",
+    ])
+    yield output.getvalue()
+
+    # Stream data in chunks to prevent OOM (wsskeptic fix)
+    offset = 0
+    while True:
+        events = list_audit_events(
+            tenant_id=tenant_id,
+            matter_id=matter_id,
+            event_type=event_type,
+            user_id=user_id,
+            start_date=start_date,
+            end_date=end_date,
+            offset=offset,
+            limit=EXPORT_CHUNK_SIZE,
+        )
+
+        if not events:
+            break
+
+        # Write chunk to CSV
+        chunk_output = io.StringIO()
+        chunk_writer = csv.writer(chunk_output)
+        for event in events:
+            chunk_writer.writerow([
+                event.event_id,
+                event.tenant_id,
+                event.matter_id or "",
+                event.user_id,
+                event.event_type,
+                event.event_json,
+                event.response_id or "",
+                event.created_at_utc,
+            ])
+        yield chunk_output.getvalue()
+
+        offset += EXPORT_CHUNK_SIZE
+
+        # Stop if we got fewer than chunk size (last page)
+        if len(events) < EXPORT_CHUNK_SIZE:
+            break
+
+
 @router.get("/events/export")
 def export_events_endpoint(
     matter_id: str | None = Query(None, description="Filter by matter ID"),
@@ -223,6 +327,9 @@ def export_events_endpoint(
     Requires admin role. Exports all matching audit events as a
     downloadable CSV file.
 
+    Security: Uses streaming with chunked database queries to prevent
+    memory exhaustion on large exports (wsskeptic fix).
+
     Args:
         matter_id: Filter by matter ID
         event_type: Filter by event type
@@ -231,61 +338,29 @@ def export_events_endpoint(
         end_date: Filter by created_at <= end_date
 
     Returns:
-        CSV file download
+        CSV file download (streamed)
     """
-    # Get all events (no pagination for export)
-    events = list_audit_events(
-        tenant_id=tenant_id,
-        matter_id=matter_id,
-        event_type=event_type,
-        user_id=user_id,
-        start_date=start_date,
-        end_date=end_date,
-        offset=0,
-        limit=100000,  # High limit for export
-    )
-
-    # Generate CSV
-    output = io.StringIO()
-    writer = csv.writer(output)
-
-    # Header row
-    writer.writerow([
-        "event_id",
-        "tenant_id",
-        "matter_id",
-        "user_id",
-        "event_type",
-        "event_data",
-        "response_id",
-        "created_at_utc",
-    ])
-
-    # Data rows
-    for event in events:
-        writer.writerow([
-            event.event_id,
-            event.tenant_id,
-            event.matter_id or "",
-            event.user_id,
-            event.event_type,
-            event.event_json,
-            event.response_id or "",
-            event.created_at_utc,
-        ])
-
-    output.seek(0)
-
-    # Generate filename with date range
+    # Generate filename with sanitized date range (wsskeptic fix)
     filename = "audit_events"
     if start_date:
-        filename += f"_from_{start_date[:10]}"
+        safe_start = _sanitize_date_for_filename(start_date)
+        if safe_start:
+            filename += f"_from_{safe_start}"
     if end_date:
-        filename += f"_to_{end_date[:10]}"
+        safe_end = _sanitize_date_for_filename(end_date)
+        if safe_end:
+            filename += f"_to_{safe_end}"
     filename += ".csv"
 
     return StreamingResponse(
-        iter([output.getvalue()]),
+        _generate_csv_chunks(
+            tenant_id=tenant_id,
+            matter_id=matter_id,
+            event_type=event_type,
+            user_id=user_id,
+            start_date=start_date,
+            end_date=end_date,
+        ),
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

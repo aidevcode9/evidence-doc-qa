@@ -1,0 +1,71 @@
+name: deploy-container
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - 'apps/api/**'
+      - '.github/workflows/deploy-container.yml'
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  REGISTRY: ${{ secrets.ACR_LOGIN_SERVER }}
+  IMAGE_NAME: docqa-api
+  RESOURCE_GROUP: doc-qa-demo
+  CONTAINER_APP_NAME: docqa-api
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Login to ACR
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ secrets.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build and push Docker image
+        run: |
+          cd apps/api
+          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} .
+          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest .
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+      - name: Deploy to Container Apps
+        run: |
+          az containerapp update \
+            --name ${{ env.CONTAINER_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --set-env-vars \
+              "DATABASE_URL=${{ secrets.DATABASE_URL }}" \
+              "AZURE_OPENAI_ENDPOINT=${{ secrets.AZURE_OPENAI_ENDPOINT }}" \
+              "AZURE_OPENAI_API_KEY=${{ secrets.AZURE_OPENAI_API_KEY }}" \
+              "AZURE_OPENAI_API_VERSION=${{ secrets.AZURE_OPENAI_API_VERSION }}" \
+              "AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT=${{ secrets.AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT }}" \
+              "AZURE_OPENAI_CHAT_ENDPOINT=${{ secrets.AZURE_OPENAI_CHAT_ENDPOINT }}" \
+              "AZURE_OPENAI_CHAT_API_KEY=${{ secrets.AZURE_OPENAI_CHAT_API_KEY }}" \
+              "AZURE_OPENAI_CHAT_API_VERSION=${{ secrets.AZURE_OPENAI_CHAT_API_VERSION }}" \
+              "AZURE_SEARCH_ENDPOINT=${{ secrets.AZURE_SEARCH_ENDPOINT }}" \
+              "AZURE_SEARCH_API_KEY=${{ secrets.AZURE_SEARCH_API_KEY }}" \
+              "AZURE_SEARCH_INDEX=${{ secrets.AZURE_SEARCH_INDEX }}" \
+              "DOCQA_MODEL_ID=${{ secrets.DOCQA_MODEL_ID }}" \
+              "METRICS_ADMIN_TOKEN=${{ secrets.METRICS_ADMIN_TOKEN }}" \
+              "PARSER_PROVIDER=marker" \
+              "EMBEDDINGS_MODE=remote" \
+              "DOCQA_OTEL_ENABLED=1" \
+              "OTEL_SERVICE_NAME=docqa-api" \
+              "APPLICATIONINSIGHTS_CONNECTION_STRING=${{ secrets.APPLICATIONINSIGHTS_CONNECTION_STRING }}" \
+              "DOCQA_ALLOWED_ORIGINS=http://localhost:3000,${{ secrets.VERCEL_URL }}"

@@ -1,6 +1,6 @@
 # STATUS.md
 
-Last updated: 2026-01-22
+Last updated: 2026-01-24
 
 ---
 
@@ -15,7 +15,7 @@ Last updated: 2026-01-22
 
 | Task | FR | Branch | Started | Notes |
 |------|-----|--------|---------|-------|
-| — | — | — | — | — |
+| Container Apps migration | INFRA | feat/audit-logging | 01-24 | Fix build timeout; add GitHub secrets, merge to main |
 
 ## Next
 
@@ -180,6 +180,8 @@ Last updated: 2026-01-22
 | 01-22 | **7-year audit retention** | DEFAULT_AUDIT_RETENTION_DAYS=2555; legal compliance requirement |
 | 01-22 | **Configurable retention per tenant** | RetentionPolicy table; qa_messages=365d, telemetry=90d, audit=7yrs default |
 | 01-22 | **Hard delete cascades** | Documents→Chunks→IndexRecords→QASessions→Messages→Audit→Assignments |
+| 01-24 | **Azure Container Apps migration** | App Service build timeout (17min) due to marker-pdf/torch; Container Apps pre-builds Docker image |
+| 01-24 | **Atomic hard delete transaction** | All 7 resource deletions in single session_scope() for rollback safety |
 
 > **Current Stack:** Azure AI Search + Azure OpenAI + configurable parser
 > **LLM Providers:** Azure OpenAI, Anthropic Claude, Google Gemini, Ollama (local)

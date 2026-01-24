@@ -323,3 +323,41 @@ class TestAuditRouter:
         """Audit export should require admin role."""
         # This will be tested via integration test
         pass
+
+
+class TestAuditExportSecurity:
+    """Security tests for audit export (wsskeptic findings)."""
+
+    def test_export_uses_streaming_response(self) -> None:
+        """CSV export should use streaming to avoid memory exhaustion."""
+        from app.routers.audit import export_events_endpoint
+        import inspect
+
+        # Check that the function uses StreamingResponse with a generator
+        source = inspect.getsource(export_events_endpoint)
+        # Should use iter() with a generator or streaming pattern
+        assert "StreamingResponse" in source
+        # Should NOT load all data into memory at once with high limit
+        assert "limit=100000" not in source, "Export should use chunked queries, not high limit"
+
+    def test_export_filename_sanitizes_date_input(self) -> None:
+        """Export filename should sanitize date input to prevent injection."""
+        from app.routers.audit import _sanitize_date_for_filename
+
+        # Should only allow safe characters in filename
+        assert _sanitize_date_for_filename("2026-01-24") == "2026-01-24"
+        # Slashes removed (path injection prevention)
+        assert "/" not in _sanitize_date_for_filename("2026/01/24")
+        assert ".." not in _sanitize_date_for_filename("../../../etc/passwd")
+        # ISO format truncated to date portion
+        assert _sanitize_date_for_filename("2026-01-24T12:00:00Z") == "2026-01-24"
+        # Empty/None returns empty string
+        assert _sanitize_date_for_filename(None) == ""
+        assert _sanitize_date_for_filename("") == ""
+
+    def test_export_has_reasonable_chunk_size(self) -> None:
+        """Export should query database in reasonable chunks."""
+        from app.routers.audit import EXPORT_CHUNK_SIZE
+
+        # Chunk size should be reasonable (1000-10000)
+        assert 1000 <= EXPORT_CHUNK_SIZE <= 10000
