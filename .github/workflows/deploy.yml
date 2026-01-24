@@ -1,13 +1,16 @@
-name: deploy-backend
+# DISABLED: Migrated to Azure Container Apps (deploy-container.yml)
+# Old App Service deployment timed out due to marker-pdf/torch installation
+name: deploy-backend-DISABLED
 
 on:
   push:
-    branches: ["main"]
-    paths:
-      - 'apps/api/**'
-      - 'packages/shared/**'
-      - 'infra/**'
-      - '.github/workflows/deploy.yml'
+    branches: ["never-trigger-this-workflow"]
+    # Original paths kept for reference:
+    # paths:
+    #   - 'apps/api/**'
+    #   - 'packages/shared/**'
+    #   - 'infra/**'
+    #   - '.github/workflows/deploy.yml'
 
 permissions:
   id-token: write
