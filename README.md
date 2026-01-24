@@ -46,8 +46,9 @@ See `docs/ENVIRONMENT.md` for required variables, secret handling, and
 environment-specific guidance.
 
 ## Docs
+- `ARCHITECTURE.md` — Overview + pointers to modular docs
+- `docs/architecture/` — Detailed architecture (data model, interfaces, deployment)
 - `docs/PRD.md`
-- `docs/ARCHITECTURE.md`
 - `docs/EVALS_V1_REQUIREMENTS.md`
 - `docs/OPEN_QUESTIONS.md`
 - `docs/ENVIRONMENT.md`

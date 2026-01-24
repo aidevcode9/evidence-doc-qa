@@ -212,7 +212,8 @@ await session.execute(
 | Doc | Purpose | When to Check |
 |-----|---------|---------------|
 | `REQUIREMENTS.md` | FRs/NFRs with acceptance criteria | Starting a new feature |
-| `ARCHITECTURE.md` | Data model, interfaces, deployment tiers | Implementing schema, services, providers |
+| `ARCHITECTURE.md` | Overview + pointers to detailed docs | Quick reference |
+| `docs/architecture/*.md` | Detailed: data-model, interfaces, deployment, observability | Deep implementation work |
 | `STATUS.md` | Current phase, active tasks, blockers | Daily; before picking work |
 | `EVALS.md` | Golden queries and pass/fail criteria | Adding/changing retrieval or LLM logic |
 

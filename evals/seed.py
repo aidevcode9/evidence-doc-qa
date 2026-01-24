@@ -18,8 +18,8 @@ def is_already_seeded(snapshot_id: str) -> bool:
 
 
 def seed():
-    # Use ARCHITECTURE.md as the source
-    src_path = "docs/ARCHITECTURE.md"
+    # Use ARCHITECTURE.md as the source (root-level slim version)
+    src_path = "ARCHITECTURE.md"
     docs_snapshot_id = "snap_demo"
 
     # Default tenant/matter for eval seeding (multi-tenancy support)
