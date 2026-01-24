@@ -12,6 +12,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
+# Install CPU-only torch first to avoid 5GB+ CUDA packages (saves disk space)
+RUN pip install --user --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+# Then install the rest of the requirements
 COPY requirements.txt .
 RUN pip install --user --no-cache-dir -r requirements.txt
 
