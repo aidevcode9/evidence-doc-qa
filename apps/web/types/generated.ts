@@ -29,9 +29,13 @@ export interface AskResponse {
   version_snapshot: VersionSnapshot;
 }
 export interface Citation {
+  citation_index: number;
   doc_id: string;
   doc_name: string;
   page_num: number;
+  page_end: number;
+  char_start: number;
+  char_end: number;
   chunk_id: string;
   snippet: string;
   highlighted_text?: string | null;
