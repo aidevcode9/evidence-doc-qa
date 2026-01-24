@@ -1,7 +1,6 @@
 import os
-import json
 from apps.api.app import ingestion, indexing, db
-from apps.api.app.db import Chunk, Document, IndexRecord, init_db, session_scope
+from apps.api.app.db import Chunk, Document, init_db, session_scope
 from sqlalchemy import select
 
 
@@ -89,38 +88,7 @@ def seed():
         )
     )
 
-    # Insert IndexRecords (Local mode)
-    from apps.api.app.embeddings import embed_texts
-
-    texts = [row[9] for row in chunk_rows]  # chunk_text is at index 9
-    embeddings = embed_texts(texts)
-    indexed_at = ingestion.utc_now()
-
-    from apps.api.app.config import INDEX_VERSION, RETRIEVAL_VERSION
-
-    db.insert_index_records(
-        IndexRecord(
-            chunk_id=row[0],
-            tenant_id=tenant_id,
-            matter_id=matter_id,
-            docs_snapshot_id=row[1],
-            doc_id=row[2],
-            doc_name="ARCHITECTURE.md",
-            page_num=row[4],
-            page_end=row[5],
-            char_start=row[7],
-            char_end=row[8],
-            chunk_index=row[6],
-            chunk_text=row[9],
-            embedding_json=json.dumps(embedding),
-            indexed_at_utc=indexed_at,
-            index_version=INDEX_VERSION,
-            retrieval_version=RETRIEVAL_VERSION,
-        )
-        for row, embedding in zip(chunk_rows, embeddings)
-    )
-
-    # NEW: Also index into Azure Search if enabled
+    # Index chunks (handles both local DB and Azure Search)
     indexing.index_chunk_rows(
         doc_id=doc_id,
         doc_name="ARCHITECTURE.md",
