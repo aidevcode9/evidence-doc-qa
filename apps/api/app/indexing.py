@@ -27,6 +27,8 @@ def index_chunk_rows(
     doc_name: str,
     docs_snapshot_id: str,
     chunk_rows: list[ChunkRowTuple],
+    tenant_id: str = "",
+    matter_id: str = "",
 ) -> None:
     if not ENABLE_INDEXING:
         return
@@ -77,6 +79,8 @@ def index_chunk_rows(
         insert_index_records(
             IndexRecord(
                 chunk_id=rec["chunk_id"],
+                tenant_id=tenant_id,
+                matter_id=matter_id,
                 docs_snapshot_id=rec["docs_snapshot_id"],
                 doc_id=rec["doc_id"],
                 doc_name=rec["doc_name"],

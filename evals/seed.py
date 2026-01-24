@@ -126,6 +126,8 @@ def seed():
         doc_name="ARCHITECTURE.md",
         docs_snapshot_id=docs_snapshot_id,
         chunk_rows=chunk_rows,
+        tenant_id=tenant_id,
+        matter_id=matter_id,
     )
 
     print("Seeding complete.")

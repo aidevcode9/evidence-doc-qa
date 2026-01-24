@@ -37,7 +37,10 @@ def run_debug():
     )
     
     # 3. Index (Azure or Local)
-    indexing.index_chunk_rows(doc_id, "loan_estimate.pdf", docs_snapshot_id, chunk_rows)
+    indexing.index_chunk_rows(
+        doc_id, "loan_estimate.pdf", docs_snapshot_id, chunk_rows,
+        tenant_id="debug-tenant", matter_id="debug-matter"
+    )
     
     # 4. Run Query
     question = "What is the loan amount for Taylor?"
