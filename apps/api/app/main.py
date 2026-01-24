@@ -16,7 +16,7 @@ from app.config import (
 from app.db import init_db
 from app.indexing import ensure_index
 from app.telemetry import logger
-from app.routers import health, ask, docs, metrics, export, auth, sso, admin
+from app.routers import health, ask, docs, metrics, export, auth, sso, admin, audit
 
 app = FastAPI(title="DocQ&A API", version="0.0.0")
 
@@ -62,6 +62,7 @@ app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(sso.router)  # FR-051: SSO login
 app.include_router(admin.router)  # FR-052: Admin dashboard
+app.include_router(audit.router)  # FR-040: Audit logging
 app.include_router(ask.router)
 app.include_router(docs.router)
 app.include_router(metrics.router)

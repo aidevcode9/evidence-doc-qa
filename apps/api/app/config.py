@@ -137,6 +137,11 @@ RATE_LIMIT_DEFAULT = _getenv("RATE_LIMIT_DEFAULT", "100/minute")
 RATE_LIMIT_QUERY = _getenv("RATE_LIMIT_QUERY", "20/minute")
 RATE_LIMIT_UPLOAD = _getenv("RATE_LIMIT_UPLOAD", "10/minute")
 
+# Retention Policies (FR-042)
+DEFAULT_QA_RETENTION_DAYS = int(_getenv("DEFAULT_QA_RETENTION_DAYS", "365"))
+DEFAULT_TELEMETRY_RETENTION_DAYS = int(_getenv("DEFAULT_TELEMETRY_RETENTION_DAYS", "90"))
+DEFAULT_AUDIT_RETENTION_DAYS = int(_getenv("DEFAULT_AUDIT_RETENTION_DAYS", "2555"))  # 7 years
+
 # CORS
 _allowed_origins = _getenv("DOCQA_ALLOWED_ORIGINS", "http://localhost:3000")
 _origins_raw = [o.strip() for o in _allowed_origins.split(",") if o.strip()]

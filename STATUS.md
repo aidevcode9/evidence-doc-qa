@@ -4,10 +4,10 @@ Last updated: 2026-01-22
 
 ---
 
-## Current Phase: 5 — Auth ✅ COMPLETE
+## Current Phase: 7 — Polish
 
-**Goal:** Login, SSO, admin functionality
-**Progress:** FR-050 ✅, FR-051 ✅, FR-052 ✅
+**Goal:** Dedup, metadata, reranker, and finishing touches
+**Progress:** FR-011 ⬜, FR-014 ⬜, FR-015 ⬜, FR-022 ⬜, FR-033 ⬜
 
 ---
 
@@ -15,72 +15,28 @@ Last updated: 2026-01-22
 
 | Task | FR | Branch | Started | Notes |
 |------|-----|--------|---------|-------|
-| — | — | — | — | Phase 5 complete, awaiting next phase |
+| — | — | — | — | — |
 
-## Next (Phase 6 - Audit)
+## Next
 
 | Task | FR | Depends On | Notes |
 |------|-----|------------|-------|
-| Audit logging | FR-040 | FR-050 ✅ | User action logs |
-| Retention policies | FR-041 | FR-040 | Data lifecycle |
-| Deletion requests | FR-042 | FR-041 | GDPR compliance |
-| Audit export | FR-043 | FR-040 | Compliance reports |
+| Document deduplication | FR-011 | — | SHA256 content hash |
+| Metadata extraction | FR-014 | — | Title, date, author |
+| Semantic reranker | FR-015 | — | Cross-encoder scoring |
+| Follow-up questions | FR-022 | — | Contextual suggestions |
+| Citation highlighting | FR-033 | — | Highlight text in viewer |
 
 ## Done (This Week)
 
 | Task | FR | Date |
 |------|-----|------|
-| **SSO security hardening (wsskeptic)** | FR-051 | 01-22 |
-| **JWKS ID token signature validation** | FR-051 | 01-22 |
-| **Database-backed SSO state (multi-instance)** | FR-051 | 01-22 |
-| **Admin JWT auth in jwt mode** | FR-052 | 01-22 |
-| **SQL wildcard escaping in search** | FR-052 | 01-22 |
-| **Rate limiting applied to main.py** | FR-052 | 01-22 |
-| **SSO integration (Microsoft + Google)** | FR-051 | 01-22 |
-| **Admin dashboard (user CRUD, matter access)** | FR-052 | 01-22 |
-| **30 new tests (SSO + admin + rate limit)** | FR-051, FR-052 | 01-22 |
-| **Auth security hardening (wsskeptic)** | FR-050 | 01-22 |
-| **Atomic failed_login_count (race fix)** | FR-050 | 01-22 |
-| **Tenant isolation in refresh token lookup** | FR-050 | 01-22 |
-| **Access token type validation** | FR-050 | 01-22 |
-| **OAuth2/JWT authentication** | FR-050 | 01-22 |
-| **security.py (password hashing, JWT)** | FR-050 | 01-22 |
-| **Auth router (login/refresh/logout/me)** | FR-050 | 01-22 |
-| **Dual-mode auth (JWT + headers)** | FR-050 | 01-22 |
-| **RefreshToken model + migration 0007** | FR-050 | 01-22 |
-| **User auth columns (password_hash, is_active, etc.)** | FR-050 | 01-22 |
-| **45 auth tests (TDD)** | FR-050 | 01-22 |
-| **LLM_PROVIDERS.md setup guide** | NFR-032 | 01-22 |
-| **Ollama, Gemini, Anthropic LLM providers** | NFR-032, NFR-033 | 01-22 |
-| **LLM error sanitization (wsskeptic fix)** | — | 01-22 |
-| **Provider integration tests** | NFR-032, 034, 035 | 01-22 |
-| **Provider config in .env.example** | NFR-032, 034, 035 | 01-22 |
-| **Provider abstraction interfaces** | NFR-032, 034, 035 | 01-22 |
-| **LLMClient + AzureOpenAIClient** | NFR-032 | 01-22 |
-| **EmbeddingClient + Local/Azure implementations** | NFR-035 | 01-22 |
-| **SearchClient + Local/Azure implementations** | NFR-034 | 01-22 |
-| **Security hardening (wsskeptic review)** | — | 01-22 |
-| **UUID validation for filter injection prevention** | — | 01-22 |
-| **Query length limits (MAX_QUERY_LENGTH)** | — | 01-22 |
-| **LLM retry with exponential backoff** | — | 01-22 |
-| **Matter-level permissions** | FR-004 | 01-22 |
-| **MatterAssignment model + migration 0006** | FR-004 | 01-22 |
-| **user_has_matter_access() function** | FR-004 | 01-22 |
-| **Context validates matter access** | FR-004 | 01-22 |
-| **Admin bypasses matter permission check** | FR-004 | 01-22 |
-| **RBAC with roles** | FR-003 | 01-22 |
-| **Role enum + permissions** | FR-003 | 01-22 |
-| **User model + migration 0005** | FR-003 | 01-22 |
-| **RequestContext with user_id/user_role** | FR-003 | 01-22 |
-| **Tenant/Matter isolation enforcement** | FR-001, FR-002 | 01-22 |
-| **RequestContext dependency for header extraction** | FR-001, FR-002 | 01-22 |
-| **Azure Search tenant/matter OData filters** | FR-001, FR-002 | 01-22 |
-| **All routers use context dependency** | FR-001, FR-002 | 01-22 |
-| **Add tenant_id to all models** | FR-001 | 01-21 |
-| **Add matter_id to all models** | FR-002 | 01-21 |
-| **Update load_chunks with tenant/matter filters** | FR-001, FR-002 | 01-21 |
-| **Update load_index_records with tenant/matter filters** | FR-001, FR-002 | 01-21 |
-| **Alembic migration 0004 for tenant/matter isolation** | FR-001, FR-002 | 01-21 |
+| **Phase 6 Audit complete (59 tests)** | FR-040, FR-041, FR-042, FR-043 | 01-22 |
+| **Audit logging with PII redaction** | FR-040 | 01-22 |
+| **Immutable logs + CSV export** | FR-041 | 01-22 |
+| **Retention policies (configurable per tenant)** | FR-042 | 01-22 |
+| **Matter hard delete workflow** | FR-043 | 01-22 |
+| **Phase 5 Auth complete (64 tests)** | FR-050, FR-051, FR-052 | 01-22 |
 
 ## Blocked
 
@@ -173,6 +129,19 @@ Last updated: 2026-01-22
 
 ---
 
+## Phase 6 Progress
+
+| FR | Requirement | Status |
+|----|-------------|--------|
+| FR-040 | Audit logging | ✅ Shipped |
+| FR-041 | Immutable logs + export | ✅ Shipped |
+| FR-042 | Retention policies | ✅ Shipped |
+| FR-043 | Hard delete workflow | ✅ Shipped |
+
+**Phase 6 Complete:** 4/4 Audit features shipped. Audit events with PII redaction, CSV export, configurable retention per tenant, matter hard delete with cascading cleanup.
+
+---
+
 ## Decisions
 
 | Date | Decision | Rationale |
@@ -206,6 +175,11 @@ Last updated: 2026-01-22
 | 01-22 | **JWKS token validation** | ID tokens validated with provider JWKS; prevents forged tokens |
 | 01-22 | **Database SSO state** | SSOState table replaces in-memory dict; supports multi-instance |
 | 01-22 | **Nonce replay protection** | Nonce validated in ID token to prevent replay attacks |
+| 01-22 | **Audit event PII redaction** | Question text hashed, not stored; only metadata in event_json (FR-040) |
+| 01-22 | **Immutable audit logs** | No UPDATE/DELETE functions for AuditEvent; only hard_delete_matter removes them |
+| 01-22 | **7-year audit retention** | DEFAULT_AUDIT_RETENTION_DAYS=2555; legal compliance requirement |
+| 01-22 | **Configurable retention per tenant** | RetentionPolicy table; qa_messages=365d, telemetry=90d, audit=7yrs default |
+| 01-22 | **Hard delete cascades** | Documents→Chunks→IndexRecords→QASessions→Messages→Audit→Assignments |
 
 > **Current Stack:** Azure AI Search + Azure OpenAI + configurable parser
 > **LLM Providers:** Azure OpenAI, Anthropic Claude, Google Gemini, Ollama (local)
@@ -245,6 +219,36 @@ Last updated: 2026-01-22
 ---
 
 ## Archive
+
+<details>
+<summary>Week of 01-22 (Phase 5-6)</summary>
+
+| Task | FR | Date |
+|------|-----|------|
+| Phase 6 Audit complete (59 tests) | FR-040-043 | 01-22 |
+| Audit logging with PII redaction | FR-040 | 01-22 |
+| Immutable logs + CSV export | FR-041 | 01-22 |
+| Retention policies | FR-042 | 01-22 |
+| Matter hard delete workflow | FR-043 | 01-22 |
+| Phase 5 Auth complete (64 tests) | FR-050-052 | 01-22 |
+| SSO security hardening (wsskeptic) | FR-051 | 01-22 |
+| JWKS ID token signature validation | FR-051 | 01-22 |
+| Database-backed SSO state | FR-051 | 01-22 |
+| Admin JWT auth in jwt mode | FR-052 | 01-22 |
+| SQL wildcard escaping | FR-052 | 01-22 |
+| Rate limiting middleware | FR-052 | 01-22 |
+| Auth security hardening (wsskeptic) | FR-050 | 01-22 |
+| Atomic failed_login_count | FR-050 | 01-22 |
+| Tenant isolation in refresh token | FR-050 | 01-22 |
+| Access token type validation | FR-050 | 01-22 |
+| 4 LLM providers (azure, anthropic, gemini, ollama) | NFR-032-033 | 01-22 |
+| Provider abstraction interfaces | NFR-032-035 | 01-22 |
+| Matter-level permissions | FR-004 | 01-22 |
+| RBAC with roles | FR-003 | 01-22 |
+| Tenant/Matter isolation | FR-001-002 | 01-21 |
+| Citations UI + export | FR-030-032 | 01-21 |
+
+</details>
 
 <details>
 <summary>Week of 01-08</summary>
