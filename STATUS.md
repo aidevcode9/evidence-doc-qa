@@ -4,10 +4,10 @@ Last updated: 2026-01-22
 
 ---
 
-## Current Phase: 6 — Audit
+## Current Phase: 7 — Polish
 
-**Goal:** Logging, retention, deletion workflows
-**Progress:** FR-040 🔄, FR-041 ⬜, FR-042 ⬜, FR-043 ⬜
+**Goal:** Dedup, metadata, reranker, and finishing touches
+**Progress:** FR-011 ⬜, FR-014 ⬜, FR-015 ⬜, FR-022 ⬜, FR-033 ⬜
 
 ---
 
@@ -15,26 +15,28 @@ Last updated: 2026-01-22
 
 | Task | FR | Branch | Started | Notes |
 |------|-----|--------|---------|-------|
-| Audit logging | FR-040 | feat/audit-logging | 01-22 | User action logs |
+| — | — | — | — | — |
 
 ## Next
 
 | Task | FR | Depends On | Notes |
 |------|-----|------------|-------|
-| Immutable logs + export | FR-041 | FR-040 | Admin export endpoint |
-| Retention policies | FR-042 | FR-041 | Configurable per tenant |
-| Hard delete workflow | FR-043 | FR-042 | Matter deletion |
+| Document deduplication | FR-011 | — | SHA256 content hash |
+| Metadata extraction | FR-014 | — | Title, date, author |
+| Semantic reranker | FR-015 | — | Cross-encoder scoring |
+| Follow-up questions | FR-022 | — | Contextual suggestions |
+| Citation highlighting | FR-033 | — | Highlight text in viewer |
 
 ## Done (This Week)
 
 | Task | FR | Date |
 |------|-----|------|
+| **Phase 6 Audit complete (59 tests)** | FR-040, FR-041, FR-042, FR-043 | 01-22 |
+| **Audit logging with PII redaction** | FR-040 | 01-22 |
+| **Immutable logs + CSV export** | FR-041 | 01-22 |
+| **Retention policies (configurable per tenant)** | FR-042 | 01-22 |
+| **Matter hard delete workflow** | FR-043 | 01-22 |
 | **Phase 5 Auth complete (64 tests)** | FR-050, FR-051, FR-052 | 01-22 |
-| **SSO: Microsoft + Google with PKCE, JWKS, nonce** | FR-051 | 01-22 |
-| **Admin: User CRUD, matter access, rate limiting** | FR-052 | 01-22 |
-| **OAuth2/JWT with Argon2id, account lockout** | FR-050 | 01-22 |
-| **Phase 4 Provider abstraction (4 LLM providers)** | NFR-032-035 | 01-22 |
-| **Phase 3 Multi-tenancy (RBAC, matter permissions)** | FR-001-004 | 01-22 |
 
 ## Blocked
 
@@ -127,6 +129,19 @@ Last updated: 2026-01-22
 
 ---
 
+## Phase 6 Progress
+
+| FR | Requirement | Status |
+|----|-------------|--------|
+| FR-040 | Audit logging | ✅ Shipped |
+| FR-041 | Immutable logs + export | ✅ Shipped |
+| FR-042 | Retention policies | ✅ Shipped |
+| FR-043 | Hard delete workflow | ✅ Shipped |
+
+**Phase 6 Complete:** 4/4 Audit features shipped. Audit events with PII redaction, CSV export, configurable retention per tenant, matter hard delete with cascading cleanup.
+
+---
+
 ## Decisions
 
 | Date | Decision | Rationale |
@@ -160,6 +175,11 @@ Last updated: 2026-01-22
 | 01-22 | **JWKS token validation** | ID tokens validated with provider JWKS; prevents forged tokens |
 | 01-22 | **Database SSO state** | SSOState table replaces in-memory dict; supports multi-instance |
 | 01-22 | **Nonce replay protection** | Nonce validated in ID token to prevent replay attacks |
+| 01-22 | **Audit event PII redaction** | Question text hashed, not stored; only metadata in event_json (FR-040) |
+| 01-22 | **Immutable audit logs** | No UPDATE/DELETE functions for AuditEvent; only hard_delete_matter removes them |
+| 01-22 | **7-year audit retention** | DEFAULT_AUDIT_RETENTION_DAYS=2555; legal compliance requirement |
+| 01-22 | **Configurable retention per tenant** | RetentionPolicy table; qa_messages=365d, telemetry=90d, audit=7yrs default |
+| 01-22 | **Hard delete cascades** | Documents→Chunks→IndexRecords→QASessions→Messages→Audit→Assignments |
 
 > **Current Stack:** Azure AI Search + Azure OpenAI + configurable parser
 > **LLM Providers:** Azure OpenAI, Anthropic Claude, Google Gemini, Ollama (local)
@@ -201,10 +221,16 @@ Last updated: 2026-01-22
 ## Archive
 
 <details>
-<summary>Week of 01-20 (Phase 3-5)</summary>
+<summary>Week of 01-22 (Phase 5-6)</summary>
 
 | Task | FR | Date |
 |------|-----|------|
+| Phase 6 Audit complete (59 tests) | FR-040-043 | 01-22 |
+| Audit logging with PII redaction | FR-040 | 01-22 |
+| Immutable logs + CSV export | FR-041 | 01-22 |
+| Retention policies | FR-042 | 01-22 |
+| Matter hard delete workflow | FR-043 | 01-22 |
+| Phase 5 Auth complete (64 tests) | FR-050-052 | 01-22 |
 | SSO security hardening (wsskeptic) | FR-051 | 01-22 |
 | JWKS ID token signature validation | FR-051 | 01-22 |
 | Database-backed SSO state | FR-051 | 01-22 |

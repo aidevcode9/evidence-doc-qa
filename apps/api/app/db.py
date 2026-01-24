@@ -195,6 +195,42 @@ class SSOState(Base):
     created_at_utc: Mapped[str] = mapped_column(String, nullable=False)
 
 
+class AuditEvent(Base):
+    """Immutable audit event log (FR-040).
+
+    Stores all user actions for compliance and debugging.
+    No UPDATE or DELETE functions provided (immutability).
+    """
+
+    __tablename__ = "audit_events"
+
+    event_id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    matter_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    user_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    event_json: Mapped[str] = mapped_column(Text, nullable=False)  # JSON-encoded details
+    response_id: Mapped[str | None] = mapped_column(String, nullable=True)  # Links to Q&A
+    created_at_utc: Mapped[str] = mapped_column(String, nullable=False, index=True)
+
+
+class RetentionPolicy(Base):
+    """Configurable retention policy per tenant and resource type (FR-042).
+
+    Defines how long data is retained before cleanup.
+    Supports different retention periods for different resource types.
+    """
+
+    __tablename__ = "retention_policies"
+
+    policy_id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    resource_type: Mapped[str] = mapped_column(String, nullable=False)  # qa_messages, telemetry, etc.
+    retention_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at_utc: Mapped[str] = mapped_column(String, nullable=False)
+    updated_at_utc: Mapped[str] = mapped_column(String, nullable=False)
+
+
 def init_db() -> None:
     engine = _engine()
     Base.metadata.create_all(bind=engine)
@@ -1128,3 +1164,222 @@ def cleanup_expired_sso_states() -> int:
         stmt = delete(SSOState).where(SSOState.expires_at_utc < now)
         result = session.execute(stmt)
         return result.rowcount if result.rowcount else 0
+
+
+# Audit Event CRUD functions (FR-040)
+
+
+def create_audit_event(
+    tenant_id: str,
+    user_id: str,
+    event_type: str,
+    event_json: dict[str, Any],
+    matter_id: str | None = None,
+    response_id: str | None = None,
+) -> AuditEvent:
+    """Create an immutable audit event (FR-040).
+
+    Args:
+        tenant_id: Tenant ID
+        user_id: User ID who performed the action
+        event_type: Type of event (query, upload, export, delete, login, etc.)
+        event_json: JSON-serializable dict with event details (no PII)
+        matter_id: Matter ID if action is matter-specific
+        response_id: Links to Q&A response if applicable
+
+    Returns:
+        The created AuditEvent record
+    """
+    import json
+    import uuid
+
+    event = AuditEvent(
+        event_id=str(uuid.uuid4()),
+        tenant_id=tenant_id,
+        matter_id=matter_id,
+        user_id=user_id,
+        event_type=event_type,
+        event_json=json.dumps(event_json),
+        response_id=response_id,
+        created_at_utc=datetime.now(timezone.utc).isoformat(),
+    )
+    with session_scope() as session:
+        session.add(event)
+    return event
+
+
+def list_audit_events(
+    tenant_id: str,
+    matter_id: str | None = None,
+    event_type: str | None = None,
+    user_id: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    offset: int = 0,
+    limit: int = 100,
+) -> list[AuditEvent]:
+    """List audit events with filters (FR-040, FR-041).
+
+    Args:
+        tenant_id: Tenant ID (REQUIRED for isolation)
+        matter_id: Filter by matter ID
+        event_type: Filter by event type
+        user_id: Filter by user ID
+        start_date: Filter by created_at >= start_date (ISO format)
+        end_date: Filter by created_at <= end_date (ISO format)
+        offset: Number of records to skip
+        limit: Maximum number of records to return
+
+    Returns:
+        List of AuditEvent records
+    """
+    with session_scope() as session:
+        query = select(AuditEvent).where(AuditEvent.tenant_id == tenant_id)
+
+        if matter_id:
+            query = query.where(AuditEvent.matter_id == matter_id)
+        if event_type:
+            query = query.where(AuditEvent.event_type == event_type)
+        if user_id:
+            query = query.where(AuditEvent.user_id == user_id)
+        if start_date:
+            query = query.where(AuditEvent.created_at_utc >= start_date)
+        if end_date:
+            query = query.where(AuditEvent.created_at_utc <= end_date)
+
+        query = query.order_by(AuditEvent.created_at_utc.desc())
+        query = query.offset(offset).limit(limit)
+
+        events = session.scalars(query).all()
+        return list(events)
+
+
+def count_audit_events(
+    tenant_id: str,
+    matter_id: str | None = None,
+    event_type: str | None = None,
+    user_id: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> int:
+    """Count audit events with filters (FR-041).
+
+    Args:
+        tenant_id: Tenant ID (REQUIRED for isolation)
+        matter_id: Filter by matter ID
+        event_type: Filter by event type
+        user_id: Filter by user ID
+        start_date: Filter by created_at >= start_date (ISO format)
+        end_date: Filter by created_at <= end_date (ISO format)
+
+    Returns:
+        Count of matching audit events
+    """
+    from sqlalchemy import func
+
+    with session_scope() as session:
+        query = select(func.count()).select_from(AuditEvent).where(
+            AuditEvent.tenant_id == tenant_id
+        )
+
+        if matter_id:
+            query = query.where(AuditEvent.matter_id == matter_id)
+        if event_type:
+            query = query.where(AuditEvent.event_type == event_type)
+        if user_id:
+            query = query.where(AuditEvent.user_id == user_id)
+        if start_date:
+            query = query.where(AuditEvent.created_at_utc >= start_date)
+        if end_date:
+            query = query.where(AuditEvent.created_at_utc <= end_date)
+
+        count = session.scalar(query)
+        return count or 0
+
+
+# Retention Policy CRUD functions (FR-042)
+
+
+def create_retention_policy(
+    tenant_id: str,
+    resource_type: str,
+    retention_days: int,
+) -> RetentionPolicy:
+    """Create a retention policy for a tenant and resource type (FR-042).
+
+    Args:
+        tenant_id: Tenant ID
+        resource_type: Type of resource (qa_messages, qa_sessions, audit_events, etc.)
+        retention_days: Number of days to retain data
+
+    Returns:
+        The created RetentionPolicy record
+    """
+    import uuid
+
+    now = datetime.now(timezone.utc).isoformat()
+    policy = RetentionPolicy(
+        policy_id=str(uuid.uuid4()),
+        tenant_id=tenant_id,
+        resource_type=resource_type,
+        retention_days=retention_days,
+        created_at_utc=now,
+        updated_at_utc=now,
+    )
+    with session_scope() as session:
+        session.add(policy)
+    return policy
+
+
+def get_retention_policy(
+    tenant_id: str,
+    resource_type: str,
+) -> RetentionPolicy | None:
+    """Get retention policy for a tenant and resource type (FR-042).
+
+    Args:
+        tenant_id: Tenant ID
+        resource_type: Type of resource
+
+    Returns:
+        RetentionPolicy or None if not found
+    """
+    with session_scope() as session:
+        stmt = select(RetentionPolicy).where(
+            RetentionPolicy.tenant_id == tenant_id,
+            RetentionPolicy.resource_type == resource_type,
+        )
+        return session.scalars(stmt).first()
+
+
+def update_retention_policy(
+    tenant_id: str,
+    resource_type: str,
+    retention_days: int,
+) -> bool:
+    """Update retention days for a policy (FR-042).
+
+    Args:
+        tenant_id: Tenant ID
+        resource_type: Type of resource
+        retention_days: New retention days value
+
+    Returns:
+        True if policy was updated, False if not found
+    """
+    from sqlalchemy import update
+
+    with session_scope() as session:
+        stmt = (
+            update(RetentionPolicy)
+            .where(
+                RetentionPolicy.tenant_id == tenant_id,
+                RetentionPolicy.resource_type == resource_type,
+            )
+            .values(
+                retention_days=retention_days,
+                updated_at_utc=datetime.now(timezone.utc).isoformat(),
+            )
+        )
+        result = session.execute(stmt)
+        return bool(result.rowcount and result.rowcount > 0)

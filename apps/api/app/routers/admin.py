@@ -437,3 +437,50 @@ def revoke_matter_endpoint(
 
     # Revoke access
     revoke_matter_access(user_id, tenant_id, matter_id)
+
+
+# Matter management endpoints
+
+
+class MatterDeleteResponse(BaseModel):
+    """Response from hard deleting a matter."""
+
+    message: str
+    deleted: dict[str, int]
+
+
+@router.delete("/matters/{matter_id}", response_model=MatterDeleteResponse)
+def hard_delete_matter_endpoint(
+    matter_id: str,
+    admin: tuple[str, str] = Depends(_require_admin),
+) -> MatterDeleteResponse:
+    """Hard delete a matter and all its data (FR-043).
+
+    This is an IRREVERSIBLE operation that permanently deletes:
+    - All documents and chunks
+    - All index records
+    - All QA sessions and messages
+    - All audit events for the matter
+    - All matter assignments
+
+    Args:
+        matter_id: Matter ID to delete
+        admin: Admin context (tenant_id, user_id)
+
+    Returns:
+        Deletion statistics
+    """
+    from app.matter_delete import hard_delete_matter
+
+    tenant_id, admin_user_id = admin
+
+    stats = hard_delete_matter(
+        tenant_id=tenant_id,
+        matter_id=matter_id,
+        deleted_by=admin_user_id,
+    )
+
+    return MatterDeleteResponse(
+        message=f"Matter {matter_id} has been permanently deleted",
+        deleted=stats,
+    )
