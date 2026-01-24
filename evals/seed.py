@@ -22,6 +22,10 @@ def seed():
     src_path = "docs/ARCHITECTURE.md"
     docs_snapshot_id = "snap_demo"
 
+    # Default tenant/matter for eval seeding (multi-tenancy support)
+    tenant_id = "eval-tenant"
+    matter_id = "eval-matter"
+
     if not os.path.exists(src_path):
         print(f"Source file not found: {src_path}")
         return
@@ -49,18 +53,24 @@ def seed():
     print(f"Building {len(chunk_rows)} chunks...")
 
     # Insert Chunks
+    # Row structure from build_chunk_rows:
+    # (chunk_id, docs_snapshot_id, doc_id, doc_sha256, page_num, page_end,
+    #  chunk_index, char_start, char_end, chunk_text, parse_mode)
     db.insert_chunks(
         Chunk(
             chunk_id=row[0],
+            tenant_id=tenant_id,
+            matter_id=matter_id,
             docs_snapshot_id=row[1],
             doc_id=row[2],
             doc_sha256=row[3],
             page_num=row[4],
-            chunk_index=row[5],
-            char_start=row[6],
-            char_end=row[7],
-            chunk_text=row[8],
-            parse_mode=row[9],
+            page_end=row[5],
+            chunk_index=row[6],
+            char_start=row[7],
+            char_end=row[8],
+            chunk_text=row[9],
+            parse_mode=row[10],
         )
         for row in chunk_rows
     )
@@ -69,6 +79,8 @@ def seed():
     db.insert_document(
         Document(
             doc_id=doc_id,
+            tenant_id=tenant_id,
+            matter_id=matter_id,
             doc_sha256=doc_sha256,
             doc_name="ARCHITECTURE.md",
             storage_path=src_path,
@@ -80,7 +92,7 @@ def seed():
     # Insert IndexRecords (Local mode)
     from apps.api.app.embeddings import embed_texts
 
-    texts = [row[8] for row in chunk_rows]
+    texts = [row[9] for row in chunk_rows]  # chunk_text is at index 9
     embeddings = embed_texts(texts)
     indexed_at = ingestion.utc_now()
 
@@ -89,12 +101,17 @@ def seed():
     db.insert_index_records(
         IndexRecord(
             chunk_id=row[0],
+            tenant_id=tenant_id,
+            matter_id=matter_id,
             docs_snapshot_id=row[1],
             doc_id=row[2],
             doc_name="ARCHITECTURE.md",
             page_num=row[4],
-            chunk_index=row[5],
-            chunk_text=row[8],
+            page_end=row[5],
+            char_start=row[7],
+            char_end=row[8],
+            chunk_index=row[6],
+            chunk_text=row[9],
             embedding_json=json.dumps(embedding),
             indexed_at_utc=indexed_at,
             index_version=INDEX_VERSION,
