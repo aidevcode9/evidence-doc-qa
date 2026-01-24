@@ -5,6 +5,7 @@ on:
     branches: ["main"]
     paths:
       - 'apps/api/**'
+      - 'packages/shared/**'
       - '.github/workflows/deploy-container.yml'
 
 permissions:
@@ -37,9 +38,9 @@ jobs:
 
       - name: Build and push Docker image
         run: |
-          cd apps/api
-          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} .
-          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest .
+          # Build from repo root to access packages/shared
+          docker build -f apps/api/Dockerfile -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} .
+          docker build -f apps/api/Dockerfile -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest .
           docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
           docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
