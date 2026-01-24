@@ -15,7 +15,7 @@ Last updated: 2026-01-24
 
 | Task | FR | Branch | Started | Notes |
 |------|-----|--------|---------|-------|
-| Container Apps migration | INFRA | feat/audit-logging | 01-24 | Fix build timeout; add GitHub secrets, merge to main |
+| Verify Container Apps deploy | INFRA | main | 01-24 | Build triggered; test CORS + upload |
 
 ## Next
 
@@ -31,12 +31,11 @@ Last updated: 2026-01-24
 
 | Task | FR | Date |
 |------|-----|------|
-| **Phase 6 Audit complete (59 tests)** | FR-040, FR-041, FR-042, FR-043 | 01-22 |
-| **Audit logging with PII redaction** | FR-040 | 01-22 |
-| **Immutable logs + CSV export** | FR-041 | 01-22 |
-| **Retention policies (configurable per tenant)** | FR-042 | 01-22 |
-| **Matter hard delete workflow** | FR-043 | 01-22 |
-| **Phase 5 Auth complete (64 tests)** | FR-050, FR-051, FR-052 | 01-22 |
+| **Container Apps migration** | INFRA | 01-24 |
+| **CI fixes (tenant_id, EMBEDDINGS_MODE, seed dedup)** | INFRA | 01-24 |
+| **Modularized ARCHITECTURE.md** | DOCS | 01-24 |
+| **Phase 6 Audit complete (59 tests)** | FR-040–043 | 01-22 |
+| **Phase 5 Auth complete (64 tests)** | FR-050–052 | 01-22 |
 
 ## Blocked
 
@@ -182,6 +181,7 @@ Last updated: 2026-01-24
 | 01-22 | **Hard delete cascades** | Documents→Chunks→IndexRecords→QASessions→Messages→Audit→Assignments |
 | 01-24 | **Azure Container Apps migration** | App Service build timeout (17min) due to marker-pdf/torch; Container Apps pre-builds Docker image |
 | 01-24 | **Atomic hard delete transaction** | All 7 resource deletions in single session_scope() for rollback safety |
+| 01-24 | **Modular ARCHITECTURE.md** | Split 1100→113 lines; detailed docs in `docs/architecture/`; reduces context per conversation |
 
 > **Current Stack:** Azure AI Search + Azure OpenAI + configurable parser
 > **LLM Providers:** Azure OpenAI, Anthropic Claude, Google Gemini, Ollama (local)
