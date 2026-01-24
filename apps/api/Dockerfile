@@ -1,6 +1,7 @@
 # Multi-stage build for Azure Container Apps
 # Build context: repo root (not apps/api)
 # Installs marker-pdf + torch during build (avoids Kudu timeout)
+# Rebuild: 2026-01-24
 
 FROM python:3.12-slim AS builder
 
