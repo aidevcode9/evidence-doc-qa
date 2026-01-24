@@ -50,10 +50,14 @@ TOP_K_VECTOR = int(_getenv("DOCQA_TOP_K_VECTOR", "5"))
 TOP_K_BM25 = int(_getenv("DOCQA_TOP_K_BM25", "5"))
 RRF_K = int(_getenv("DOCQA_RRF_K", "60"))
 
-_embeddings_local = _getenv("EMBEDDINGS_LOCAL")
-if _embeddings_local is not None:
-    EMBEDDINGS_MODE = "local" if _is_truthy(_embeddings_local) else "remote"
+# EMBEDDINGS_MODE: "local" uses hash-based embeddings, "remote" uses Azure OpenAI
+# EMBEDDINGS_LOCAL is a legacy env var (truthy = local, falsy = remote)
+_embeddings_local_raw = os.getenv("EMBEDDINGS_LOCAL")  # None if not set
+if _embeddings_local_raw is not None:
+    # Legacy env var is set - use it
+    EMBEDDINGS_MODE = "local" if _is_truthy(_embeddings_local_raw) else "remote"
 else:
+    # Use EMBEDDINGS_MODE directly (default: local for CI/dev safety)
     EMBEDDINGS_MODE = _getenv("EMBEDDINGS_MODE", "local")
 EMBEDDINGS_DIM = int(_getenv("EMBEDDINGS_DIM", "16"))
 
