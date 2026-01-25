@@ -50,7 +50,7 @@ export function DocumentViewer({ citation, apiUrl, onClose }: DocumentViewerProp
                 {citation.doc_name}
               </h2>
               <p className="text-xs text-gray-400">
-                Page {citation.page_num} • Citation [{citation.citation_index}]
+                Page {citation.page_num}
               </p>
             </div>
           </div>
