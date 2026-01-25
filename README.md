@@ -13,6 +13,9 @@ Evidence-Bound is a production-ready RAG (Retrieval-Augmented Generation) system
 - **Multiple LLM Providers**: Azure OpenAI, Ollama (local), Google Gemini, Anthropic Claude
 - **Production Observability**: OpenTelemetry + Langfuse for LLM tracing
 
+![Design](docs/sy-phil.png)
+
+
 ## Architecture
 
 ```
