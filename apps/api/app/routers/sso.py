@@ -363,15 +363,16 @@ async def google_login(tenant_id: str = Query(...)) -> RedirectResponse:
 async def sso_callback(
     code: str = Query(...),
     state: str = Query(...),
-) -> dict[str, Any]:
-    """Handle SSO callback from Microsoft or Google.
+) -> RedirectResponse:
+    """Handle SSO callback from Microsoft or Google (FR-053).
 
     Args:
         code: Authorization code from provider
         state: State token for CSRF protection
 
     Returns:
-        JWT access and refresh tokens
+        Redirect to frontend /auth/callback with tokens in query params.
+        Frontend stores tokens in httpOnly cookies for XSS protection.
     """
     # Validate state and get provider/tenant info from DB
     state_data = _validate_and_consume_state(state)
@@ -449,9 +450,11 @@ async def sso_callback(
         expires_at_utc=expires_at.isoformat(),
     )
 
-    return {
+    # Redirect to frontend with tokens (FR-053)
+    # Frontend will store tokens in httpOnly cookies
+    params = urlencode({
         "access_token": access_token,
         "refresh_token": refresh_token,
-        "token_type": "bearer",
-        "expires_in": config.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-    }
+    })
+    frontend_callback = f"{config.FRONTEND_URL}/auth/callback?{params}"
+    return RedirectResponse(url=frontend_callback, status_code=302)

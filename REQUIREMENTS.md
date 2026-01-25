@@ -151,6 +151,44 @@ Tests (✅ Complete):
 - [x] Test: Refresh token lookup validates tenant isolation
 - [x] Test: Refresh token cannot be used as access token
 | FR-052 | Rate limiting and abuse controls; per-tenant quotas | Rate limits enforced; quota exceeded → 429 |
+| FR-053 | Frontend login UI with Google SSO | Login page redirects to Google; callback stores JWT; protected routes redirect unauthenticated users |
+
+#### FR-053 Implementation Checklist (Frontend Login UI)
+
+Login Page:
+- [ ] `/login` route with Google SSO button
+- [ ] Redirect to backend `/v1/auth/google/login` endpoint
+- [ ] Display error messages from failed auth
+- [ ] "Sign in with Google" branding per Google guidelines
+
+OAuth Callback:
+- [ ] `/auth/callback` route handles redirect from Google
+- [ ] Extracts `access_token` and `refresh_token` from URL params
+- [ ] Stores tokens in httpOnly cookies (via API route)
+- [ ] Redirects to main app on success
+
+Auth Context:
+- [ ] `AuthProvider` wraps app with auth state
+- [ ] `useAuth()` hook returns: `user`, `isAuthenticated`, `isLoading`, `logout`
+- [ ] Extracts user info from JWT (decode client-side for display only)
+- [ ] Auto-refresh token before expiry (30 min access, 7 day refresh)
+
+Protected Routes:
+- [ ] `withAuth()` HOC or middleware redirects to `/login` if unauthenticated
+- [ ] Main app page requires authentication
+- [ ] Logout clears cookies and redirects to `/login`
+
+API Client Update:
+- [ ] `getAuthHeaders()` reads JWT from cookie
+- [ ] Returns `Authorization: Bearer <token>` header
+- [ ] Falls back to demo headers if `AUTH_MODE=headers`
+
+Tests:
+- [ ] Test: Unauthenticated user redirected to /login
+- [ ] Test: Successful OAuth callback stores tokens
+- [ ] Test: Expired token triggers refresh
+- [ ] Test: API calls include Bearer token
+- [ ] Test: Logout clears auth state
 
 ---
 

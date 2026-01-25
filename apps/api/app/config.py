@@ -134,6 +134,7 @@ GOOGLE_CLIENT_SECRET = _getenv("GOOGLE_CLIENT_SECRET", "")
 # SSO common settings
 SSO_REDIRECT_URI = _getenv("SSO_REDIRECT_URI", "")
 SSO_DEFAULT_ROLE = _getenv("SSO_DEFAULT_ROLE", "viewer")
+FRONTEND_URL = _getenv("FRONTEND_URL", "http://localhost:3000")
 
 # Rate Limiting (FR-052)
 RATE_LIMIT_ENABLED = _is_truthy(_getenv("RATE_LIMIT_ENABLED", "1"))

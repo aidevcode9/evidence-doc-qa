@@ -4,10 +4,10 @@ Last updated: 2026-01-25
 
 ---
 
-## Current Phase: 7 — Polish
+## Current Phase: 5 — Auth (COMPLETE)
 
-**Goal:** Dedup, metadata, reranker, and finishing touches
-**Progress:** FR-011 ⬜, FR-014 ⬜, FR-015 ⬜, FR-022 ⬜, FR-033 ⬜
+**Goal:** Production-ready authentication for senior technologist demo
+**Progress:** FR-050–053 ✅ All shipped
 
 ---
 
@@ -15,7 +15,7 @@ Last updated: 2026-01-25
 
 | Task | FR | Branch | Started | Notes |
 |------|-----|--------|---------|-------|
-| Frontend auth integration | FR-050 | main | 01-25 | API calls need JWT or demo headers |
+| — | — | — | — | Phase 5 complete. Ready for demo. |
 
 ## Next
 
@@ -31,6 +31,9 @@ Last updated: 2026-01-25
 
 | Task | FR | Date |
 |------|-----|------|
+| **Frontend Login UI + Google SSO** | FR-053 | 01-25 |
+| **GitHub Actions SSO env vars** | INFRA | 01-25 |
+| **Centralized API client + proxy route** | FR-050 | 01-25 |
 | **Container Apps healthy** | INFRA | 01-25 |
 | **CI workflow fixed (evidence_shared)** | INFRA | 01-25 |
 | **Container Apps migration** | INFRA | 01-24 |
@@ -122,11 +125,12 @@ Last updated: 2026-01-25
 
 | FR | Requirement | Status |
 |----|-------------|--------|
-| FR-050 | User login flow (OAuth2/JWT) | ⚠️ Backend done, frontend not integrated |
-| FR-051 | SSO integration (OIDC) | ✅ Shipped (backend) |
-| FR-052 | Admin dashboard | ✅ Shipped (backend) |
+| FR-050 | User login flow (OAuth2/JWT) | ✅ Shipped |
+| FR-051 | SSO integration (OIDC) | ✅ Shipped |
+| FR-052 | Admin dashboard | ✅ Shipped |
+| FR-053 | Frontend login UI + Google SSO | ✅ Shipped |
 
-**Phase 5 Backend Complete:** JWT access/refresh tokens, Microsoft + Google SSO with PKCE, admin user CRUD, matter access management, rate limiting. **Frontend needs integration** - currently uses demo headers as workaround.
+**Phase 5 Complete:** 4/4 Auth features shipped. JWT + Google SSO login, httpOnly cookies, protected routes, wsskeptic approved.
 
 ---
 
@@ -185,6 +189,8 @@ Last updated: 2026-01-25
 | 01-24 | **Atomic hard delete transaction** | All 7 resource deletions in single session_scope() for rollback safety |
 | 01-24 | **Modular ARCHITECTURE.md** | Split 1100→113 lines; detailed docs in `docs/architecture/`; reduces context per conversation |
 | 01-25 | **Demo headers workaround** | Frontend uses hardcoded X-Tenant-Id etc. until JWT frontend integration; AUTH_MODE=headers |
+| 01-25 | **httpOnly cookies for JWT** | Access + refresh tokens stored in httpOnly/Secure/SameSite=Lax cookies; prevents XSS; wsskeptic approved |
+| 01-25 | **Google SSO redirect flow** | Backend redirects to frontend /auth/callback with tokens; frontend stores in cookies immediately |
 
 > **Current Stack:** Azure AI Search + Azure OpenAI + configurable parser
 > **LLM Providers:** Azure OpenAI, Anthropic Claude, Google Gemini, Ollama (local)
@@ -216,7 +222,7 @@ Last updated: 2026-01-25
 | 2. Citations UI | FR-030, FR-031, FR-032 | Clickable citations, export |
 | 3. Multi-tenancy | FR-001–004, FR-020 | Tenant + matter isolation |
 | 4. Provider Abstraction | NFR-032, NFR-034, NFR-035, NFR-036 | Config-driven Parser/Search/LLM/Embeddings |
-| 5. Auth | FR-050–052 | Login, SSO, admin |
+| 5. Auth | FR-050–053 | Login, SSO, admin, frontend UI |
 | 6. Audit | FR-040–043 | Logging, retention, deletion |
 | 7. Polish | FR-011, FR-014, FR-015, FR-022, FR-033 | Dedup, metadata, reranker |
 | 8. NFRs | NFR-001–022 | Security, perf, reliability |
