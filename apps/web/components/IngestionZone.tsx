@@ -1,13 +1,13 @@
 "use client";
 
 import React, { useRef, useState } from "react";
+import { apiUpload } from "@/lib/api";
 
 type IngestionZoneProps = {
   onUploadSuccess: (snapshotId: string, fileName: string) => void;
-  apiUrl: string;
 };
 
-export function IngestionZone({ onUploadSuccess, apiUrl }: IngestionZoneProps) {
+export function IngestionZone({ onUploadSuccess }: IngestionZoneProps) {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -20,10 +20,7 @@ export function IngestionZone({ onUploadSuccess, apiUrl }: IngestionZoneProps) {
     formData.append("file", file);
 
     try {
-      const res = await fetch(`${apiUrl}/v1/docs/upload`, {
-        method: "POST",
-        body: formData,
-      });
+      const res = await apiUpload("/v1/docs/upload", formData);
       if (!res.ok) throw new Error("Upload failed");
       const data = await res.json();
       onUploadSuccess(data.docs_snapshot_id, file.name);
