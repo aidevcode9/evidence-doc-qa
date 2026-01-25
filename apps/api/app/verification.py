@@ -262,15 +262,17 @@ def _load_verifier_prompt() -> str:
     global _PROMPT_HASH
     if _PROMPT_TEXT is not None:
         return _PROMPT_TEXT
-    prompt_path = (
-        Path(__file__).resolve().parents[3]
-        / "prompts"
-        / "evidence_verifier"
-        / f"{VERIFIER_PROMPT_VERSION}.txt"
-    )
     try:
+        # In development, file is at apps/api/app/verification.py, prompts is at repo root
+        # In container, file is at /app/app/verification.py - path may be shorter
+        prompt_path = (
+            Path(__file__).resolve().parents[3]
+            / "prompts"
+            / "evidence_verifier"
+            / f"{VERIFIER_PROMPT_VERSION}.txt"
+        )
         _PROMPT_TEXT = prompt_path.read_text(encoding="utf-8").strip()
-    except OSError:
+    except (OSError, IndexError):
         _PROMPT_TEXT = (
             "You are EvidenceVerifier (prompt_id=\"evidence_verifier\", prompt_version=\"2.0.1\").\n"
             "TASK\n"
