@@ -257,13 +257,14 @@ class TestSSOCallback:
                                     response = sso_enabled_app.get(
                                         "/v1/auth/sso/callback",
                                         params={"code": "auth-code", "state": "valid-state"},
+                                        follow_redirects=False,
                                     )
 
-                                    # Should return tokens
-                                    assert response.status_code == 200
-                                    data = response.json()
-                                    assert "access_token" in data
-                                    assert "refresh_token" in data
+                                    # Should redirect to frontend with tokens (FR-053)
+                                    assert response.status_code == 302
+                                    location = response.headers.get("location", "")
+                                    assert "access_token=" in location
+                                    assert "refresh_token=" in location
 
                                     # Should create user as Viewer
                                     mock_create_user.assert_called_once()
@@ -312,9 +313,11 @@ class TestSSOCallback:
                                     response = sso_enabled_app.get(
                                         "/v1/auth/sso/callback",
                                         params={"code": "auth-code", "state": "valid-state"},
+                                        follow_redirects=False,
                                     )
 
-                                    assert response.status_code == 200
+                                    # Should redirect to frontend with tokens (FR-053)
+                                    assert response.status_code == 302
                                     mock_update.assert_called_once()
 
     def test_callback_rejects_mismatched_auth_provider(
@@ -398,21 +401,28 @@ class TestSSOCallback:
                                     response = sso_enabled_app.get(
                                         "/v1/auth/sso/callback",
                                         params={"code": "auth-code", "state": "valid-state"},
+                                        follow_redirects=False,
                                     )
 
-                                    assert response.status_code == 200
-                                    data = response.json()
+                                    # Should redirect to frontend with tokens (FR-053)
+                                    assert response.status_code == 302
+                                    location = response.headers.get("location", "")
 
-                                    # Verify token structure
-                                    assert "access_token" in data
-                                    assert "refresh_token" in data
-                                    assert data.get("token_type") == "bearer"
-                                    assert "expires_in" in data
+                                    # Parse tokens from redirect URL
+                                    from urllib.parse import urlparse, parse_qs
+
+                                    parsed = urlparse(location)
+                                    query_params = parse_qs(parsed.query)
+
+                                    # Verify token structure in redirect
+                                    assert "access_token" in query_params
+                                    assert "refresh_token" in query_params
+                                    access_token = query_params["access_token"][0]
 
                                     # Verify access token is decodable
                                     from app.security import decode_access_token
 
-                                    claims = decode_access_token(data["access_token"])
+                                    claims = decode_access_token(access_token)
                                     assert claims is not None
                                     assert claims["sub"] == "existing-user-id"
                                     assert claims["tenant_id"] == "test-tenant"

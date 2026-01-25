@@ -4,10 +4,10 @@ Last updated: 2026-01-25
 
 ---
 
-## Current Phase: 7 — Polish
+## Current Phase: 5.5 — Auth Frontend
 
-**Goal:** Dedup, metadata, reranker, and finishing touches
-**Progress:** FR-011 ⬜, FR-014 ⬜, FR-015 ⬜, FR-022 ⬜, FR-033 ⬜
+**Goal:** Complete frontend login UI with Google SSO for senior technologist demo
+**Progress:** FR-053 ⬜ (in progress)
 
 ---
 
@@ -15,7 +15,7 @@ Last updated: 2026-01-25
 
 | Task | FR | Branch | Started | Notes |
 |------|-----|--------|---------|-------|
-| Frontend auth integration | FR-050 | main | 01-25 | API calls need JWT or demo headers |
+| **Frontend Login UI + Google SSO** | FR-053 | feat/fr053-login-ui | 01-25 | Login page, OAuth callback, JWT cookies, protected routes |
 
 ## Next
 
@@ -31,6 +31,7 @@ Last updated: 2026-01-25
 
 | Task | FR | Date |
 |------|-----|------|
+| **Centralized API client + proxy route** | FR-050 | 01-25 |
 | **Container Apps healthy** | INFRA | 01-25 |
 | **CI workflow fixed (evidence_shared)** | INFRA | 01-25 |
 | **Container Apps migration** | INFRA | 01-24 |
@@ -122,11 +123,12 @@ Last updated: 2026-01-25
 
 | FR | Requirement | Status |
 |----|-------------|--------|
-| FR-050 | User login flow (OAuth2/JWT) | ⚠️ Backend done, frontend not integrated |
+| FR-050 | User login flow (OAuth2/JWT) | ✅ Backend shipped, frontend API client done |
 | FR-051 | SSO integration (OIDC) | ✅ Shipped (backend) |
 | FR-052 | Admin dashboard | ✅ Shipped (backend) |
+| FR-053 | Frontend login UI + Google SSO | 🔄 In progress |
 
-**Phase 5 Backend Complete:** JWT access/refresh tokens, Microsoft + Google SSO with PKCE, admin user CRUD, matter access management, rate limiting. **Frontend needs integration** - currently uses demo headers as workaround.
+**Phase 5 Status:** Backend complete (JWT, SSO, admin). Frontend centralized API client done. **Now implementing:** Login page, OAuth callback, protected routes for production-ready demo.
 
 ---
 
@@ -216,7 +218,7 @@ Last updated: 2026-01-25
 | 2. Citations UI | FR-030, FR-031, FR-032 | Clickable citations, export |
 | 3. Multi-tenancy | FR-001–004, FR-020 | Tenant + matter isolation |
 | 4. Provider Abstraction | NFR-032, NFR-034, NFR-035, NFR-036 | Config-driven Parser/Search/LLM/Embeddings |
-| 5. Auth | FR-050–052 | Login, SSO, admin |
+| 5. Auth | FR-050–053 | Login, SSO, admin, frontend UI |
 | 6. Audit | FR-040–043 | Logging, retention, deletion |
 | 7. Polish | FR-011, FR-014, FR-015, FR-022, FR-033 | Dedup, metadata, reranker |
 | 8. NFRs | NFR-001–022 | Security, perf, reliability |
