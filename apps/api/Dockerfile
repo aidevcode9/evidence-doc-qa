@@ -51,6 +51,9 @@ ENV PATH=/home/appuser/.local/bin:$PATH
 # Copy application code (from apps/api/ in repo root context)
 COPY --chown=appuser:appuser apps/api/ .
 
+# Create data directories (appuser needs write access for uploads)
+RUN mkdir -p /app/data/raw && chown -R appuser:appuser /app/data
+
 # Switch to non-root user
 USER appuser
 
