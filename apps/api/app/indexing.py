@@ -69,6 +69,8 @@ def index_chunk_rows(
                 "indexed_at_utc": indexed_at,
                 "index_version": INDEX_VERSION,
                 "retrieval_version": RETRIEVAL_VERSION,
+                "tenant_id": tenant_id,
+                "matter_id": matter_id,
             }
         )
 
