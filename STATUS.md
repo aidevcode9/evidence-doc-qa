@@ -21,7 +21,6 @@ Last updated: 2026-01-25
 
 | Task | FR | Depends On | Notes |
 |------|-----|------------|-------|
-| @observe decorators for LLM tracing | NFR-045 | Phase 1 ✅ | verification.py, ask_service.py |
 | Document deduplication | FR-011 | — | SHA256 content hash |
 | Metadata extraction | FR-014 | — | Title, date, author |
 | Semantic reranker | FR-015 | — | Cross-encoder scoring |
@@ -32,6 +31,7 @@ Last updated: 2026-01-25
 
 | Task | FR | Date |
 |------|-----|------|
+| **@observe decorators for LLM tracing** | NFR-045 | 01-24 |
 | **Langfuse LLM Observability** | NFR-045 | 01-24 |
 | **Frontend Login UI + Google SSO** | FR-053 | 01-25 |
 | **GitHub Actions SSO env vars** | INFRA | 01-25 |
@@ -153,10 +153,10 @@ Last updated: 2026-01-25
 
 | NFR | Requirement | Status |
 |-----|-------------|--------|
-| NFR-045 | Langfuse LLM observability integration | ✅ Infrastructure shipped |
-| NFR-046 | LLM trace debugging UI | 🔲 Pending (depends on NFR-045 decorators) |
+| NFR-045 | Langfuse LLM observability integration | ✅ Complete (Phase 1 + 2) |
+| NFR-046 | LLM trace debugging UI | 🔲 Pending (Langfuse dashboard) |
 
-**NFR-045 Phase 1:** Infrastructure shipped. setup_langfuse(), flush_langfuse(), graceful degradation. Phase 2: Add @observe decorators to verification.py, ask_service.py.
+**NFR-045 Complete:** Infrastructure + @observe decorators shipped. verify_relevance(), _call_openai(), execute_ask() all traced with PII-safe settings.
 
 ---
 
