@@ -571,6 +571,8 @@ def execute_ask(
     
     _record_request_internal(
         request_id=request_id,
+        tenant_id=tenant_id,
+        matter_id=matter_id,
         docs_snapshot_id=docs_snapshot_id,
         version_snapshot=version_snapshot,
         refusal_code=None,
@@ -607,6 +609,8 @@ def execute_ask(
 def _record_request_internal(
     *,
     request_id: str,
+    tenant_id: str,
+    matter_id: str,
     docs_snapshot_id: str,
     version_snapshot: VersionSnapshot,
     refusal_code: RefusalCode | None,
@@ -624,9 +628,11 @@ def _record_request_internal(
         trace_metadata = {"question_len": question_len, "answer_len": answer_len}
     else:
         trace_metadata = {**trace_metadata, "question_len": question_len, "answer_len": answer_len}
-    
+
     record_telemetry(
         request_id=request_id,
+        tenant_id=tenant_id,
+        matter_id=matter_id,
         docs_snapshot_id=docs_snapshot_id,
         prompt_version=version_snapshot["prompt_version"],
         retrieval_version=version_snapshot["retrieval_version"],
@@ -680,6 +686,8 @@ def _emit_refusal(
     )
     _record_request_internal(
         request_id=request_id,
+        tenant_id=tenant_id or "unknown",
+        matter_id=matter_id or "unknown",
         docs_snapshot_id=docs_snapshot_id,
         version_snapshot=version_snapshot,
         refusal_code=refusal_code,

@@ -18,6 +18,8 @@ logger = logging.getLogger("docqa")
 def record_telemetry(
     *,
     request_id: str,
+    tenant_id: str,
+    matter_id: str,
     docs_snapshot_id: str,
     prompt_version: str,
     retrieval_version: str,
@@ -42,6 +44,8 @@ def record_telemetry(
     insert_telemetry(
         Telemetry(
             request_id=request_id,
+            tenant_id=tenant_id,
+            matter_id=matter_id,
             docs_snapshot_id=docs_snapshot_id,
             prompt_version=prompt_version,
             retrieval_version=retrieval_version,
