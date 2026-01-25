@@ -1,5 +1,6 @@
 import React from "react";
 import { Message, Citation } from "@/types";
+import { getAuthHeaders, getApiUrl } from "@/lib/api";
 
 const MetricTooltip = ({ label, description }: { label: string; description: string }) => (
   <span className="flex items-center gap-2">
@@ -56,23 +57,23 @@ interface EvidencePanelProps {
   message: Message | null;
   onCitationClick?: (citation: Citation) => void;
   sessionId?: string | null;
-  apiUrl?: string;
 }
 
-const ExportButtons = ({ sessionId, apiUrl }: { sessionId?: string | null; apiUrl?: string }) => {
+const ExportButtons = ({ sessionId }: { sessionId?: string | null }) => {
   const [isExporting, setIsExporting] = React.useState<"pdf" | "docx" | null>(null);
 
-  if (!sessionId || !apiUrl) return null;
+  if (!sessionId) return null;
 
   const handleExport = async (format: "pdf" | "docx") => {
     if (isExporting) return;
 
     setIsExporting(format);
     try {
-      const url = `${apiUrl}/v1/sessions/${sessionId}/export?format=${format}`;
+      const url = `${getApiUrl()}/v1/sessions/${sessionId}/export?format=${format}`;
       const response = await fetch(url, {
         method: "GET",
         headers: {
+          ...getAuthHeaders(),
           "X-DocQA-Session": sessionId,
         },
       });
@@ -144,7 +145,7 @@ const ExportButtons = ({ sessionId, apiUrl }: { sessionId?: string | null; apiUr
   );
 };
 
-export function EvidencePanel({ message, onCitationClick, sessionId, apiUrl }: EvidencePanelProps) {
+export function EvidencePanel({ message, onCitationClick, sessionId }: EvidencePanelProps) {
   if (!message) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-gray-600 p-8 text-center border-l border-white/5 bg-white/[0.02]">
@@ -588,10 +589,10 @@ export function EvidencePanel({ message, onCitationClick, sessionId, apiUrl }: E
       )}
 
       {/* Export Buttons (FR-032) */}
-      {sessionId && apiUrl && (
+      {sessionId && (
         <div className="p-4 border-t border-white/5 bg-black/30">
           <div className="text-[10px] uppercase font-bold text-gray-600 mb-2">Export Session</div>
-          <ExportButtons sessionId={sessionId} apiUrl={apiUrl} />
+          <ExportButtons sessionId={sessionId} />
         </div>
       )}
 

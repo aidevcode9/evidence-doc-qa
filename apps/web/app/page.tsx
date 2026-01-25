@@ -6,6 +6,7 @@ import { IngestionZone } from "@/components/IngestionZone";
 import { ChatInterface } from "@/components/ChatInterface";
 import { EvidencePanel } from "@/components/EvidencePanel";
 import { DocumentViewer } from "@/components/DocumentViewer";
+import { getAuthHeaders, getApiUrl } from "@/lib/api";
 
 export default function DocQAPage() {
   const [docsSnapshotId, setDocsSnapshotId] = useState<string>("");
@@ -15,8 +16,6 @@ export default function DocQAPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<{ name: string; email: string } | null>(null);
   const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null);
-
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   const handleCitationClick = (citation: Citation) => {
     setSelectedCitation(citation);
@@ -66,12 +65,15 @@ export default function DocQAPage() {
     setIsAsking(true);
 
     try {
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      };
       if (sessionId) headers["X-DocQA-Session"] = sessionId;
       if (userProfile?.email) headers["X-DocQA-User-Email"] = userProfile.email;
       if (userProfile?.name) headers["X-DocQA-User-Name"] = userProfile.name;
 
-      const res = await fetch(`${API_URL}/v1/ask`, {
+      const res = await fetch(`${getApiUrl()}/v1/ask`, {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -129,7 +131,7 @@ export default function DocQAPage() {
                 </h1>
             </div>
         </div>
-        <IngestionZone onUploadSuccess={handleUploadSuccess} apiUrl={API_URL} />
+        <IngestionZone onUploadSuccess={handleUploadSuccess} />
       </header>
 
       {/* Main Grid */}
@@ -155,7 +157,6 @@ export default function DocQAPage() {
               message={selectedMessage}
               onCitationClick={handleCitationClick}
               sessionId={sessionId}
-              apiUrl={API_URL}
             />
         </div>
       </main>
@@ -164,7 +165,6 @@ export default function DocQAPage() {
       {selectedCitation && (
         <DocumentViewer
           citation={selectedCitation}
-          apiUrl={API_URL}
           onClose={handleCloseViewer}
         />
       )}

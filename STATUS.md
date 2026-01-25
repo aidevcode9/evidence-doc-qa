@@ -1,6 +1,6 @@
 # STATUS.md
 
-Last updated: 2026-01-24
+Last updated: 2026-01-25
 
 ---
 
@@ -15,7 +15,7 @@ Last updated: 2026-01-24
 
 | Task | FR | Branch | Started | Notes |
 |------|-----|--------|---------|-------|
-| Verify Container Apps deploy | INFRA | main | 01-24 | Build triggered; test CORS + upload |
+| Frontend auth integration | FR-050 | main | 01-25 | API calls need JWT or demo headers |
 
 ## Next
 
@@ -31,11 +31,13 @@ Last updated: 2026-01-24
 
 | Task | FR | Date |
 |------|-----|------|
+| **Container Apps healthy** | INFRA | 01-25 |
+| **CI workflow fixed (evidence_shared)** | INFRA | 01-25 |
 | **Container Apps migration** | INFRA | 01-24 |
 | **CI fixes (tenant_id, EMBEDDINGS_MODE, seed dedup)** | INFRA | 01-24 |
 | **Modularized ARCHITECTURE.md** | DOCS | 01-24 |
 | **Phase 6 Audit complete (59 tests)** | FR-040–043 | 01-22 |
-| **Phase 5 Auth complete (64 tests)** | FR-050–052 | 01-22 |
+| **Phase 5 Auth backend complete (64 tests)** | FR-050–052 | 01-22 |
 
 ## Blocked
 
@@ -120,11 +122,11 @@ Last updated: 2026-01-24
 
 | FR | Requirement | Status |
 |----|-------------|--------|
-| FR-050 | User login flow (OAuth2/JWT) | ✅ Shipped |
-| FR-051 | SSO integration (OIDC) | ✅ Shipped |
-| FR-052 | Admin dashboard | ✅ Shipped |
+| FR-050 | User login flow (OAuth2/JWT) | ⚠️ Backend done, frontend not integrated |
+| FR-051 | SSO integration (OIDC) | ✅ Shipped (backend) |
+| FR-052 | Admin dashboard | ✅ Shipped (backend) |
 
-**Phase 5 Complete:** 3/3 Auth features shipped. JWT access/refresh tokens, Microsoft + Google SSO with PKCE, admin user CRUD, matter access management, rate limiting.
+**Phase 5 Backend Complete:** JWT access/refresh tokens, Microsoft + Google SSO with PKCE, admin user CRUD, matter access management, rate limiting. **Frontend needs integration** - currently uses demo headers as workaround.
 
 ---
 
@@ -182,6 +184,7 @@ Last updated: 2026-01-24
 | 01-24 | **Azure Container Apps migration** | App Service build timeout (17min) due to marker-pdf/torch; Container Apps pre-builds Docker image |
 | 01-24 | **Atomic hard delete transaction** | All 7 resource deletions in single session_scope() for rollback safety |
 | 01-24 | **Modular ARCHITECTURE.md** | Split 1100→113 lines; detailed docs in `docs/architecture/`; reduces context per conversation |
+| 01-25 | **Demo headers workaround** | Frontend uses hardcoded X-Tenant-Id etc. until JWT frontend integration; AUTH_MODE=headers |
 
 > **Current Stack:** Azure AI Search + Azure OpenAI + configurable parser
 > **LLM Providers:** Azure OpenAI, Anthropic Claude, Google Gemini, Ollama (local)

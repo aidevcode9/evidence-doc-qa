@@ -3,11 +3,10 @@ import { Citation } from "@/types";
 
 interface DocumentViewerProps {
   citation: Citation | null;
-  apiUrl: string;
   onClose: () => void;
 }
 
-export function DocumentViewer({ citation, apiUrl, onClose }: DocumentViewerProps) {
+export function DocumentViewer({ citation, onClose }: DocumentViewerProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,8 +21,8 @@ export function DocumentViewer({ citation, apiUrl, onClose }: DocumentViewerProp
     return null;
   }
 
-  // Build URL with page fragment for PDF navigation
-  const docUrl = `${apiUrl}/v1/docs/${citation.doc_id}/view#page=${citation.page_num}`;
+  // Use Next.js API proxy route (handles auth headers for iframes)
+  const docUrl = `/api/docs/${citation.doc_id}/view#page=${citation.page_num}`;
 
   const handleIframeLoad = () => {
     setLoading(false);
