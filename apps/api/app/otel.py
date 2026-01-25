@@ -1,6 +1,8 @@
 import os
 from contextlib import contextmanager
-from typing import Any, Generator, TYPE_CHECKING
+from typing import Any, Callable, Generator, TypeVar, TYPE_CHECKING
+
+F = TypeVar("F", bound=Callable[..., Any])
 from app.config import (
     OTEL_ENABLED,
     OTEL_SERVICE_NAME,
@@ -23,11 +25,45 @@ _langfuse_client: Any = None
 
 # Try to import Langfuse (optional dependency)
 Langfuse: Any = None
+observe: Any = None
 try:
     from langfuse import Langfuse as LangfuseClient
+    from langfuse.decorators import observe as langfuse_observe
     Langfuse = LangfuseClient
+    observe = langfuse_observe
 except ImportError:
     pass
+
+
+def _noop_observe(
+    *,
+    name: str | None = None,
+    as_type: str | None = None,
+    capture_input: bool = True,
+    capture_output: bool = True,
+) -> Callable[[F], F]:
+    """No-op @observe decorator when Langfuse is not installed.
+
+    Provides graceful degradation: functions work normally without tracing.
+    """
+    def decorator(func: F) -> F:
+        return func
+    return decorator
+
+
+def get_observe_decorator() -> Callable[..., Callable[[F], F]]:
+    """Get the @observe decorator (Langfuse or no-op fallback).
+
+    Usage:
+        from app.otel import get_observe_decorator
+        observe = get_observe_decorator()
+
+        @observe(name="my_function", capture_input=False, capture_output=False)
+        def my_function(): ...
+    """
+    if observe is not None and LANGFUSE_ENABLED:
+        return observe  # type: ignore[no-any-return]
+    return _noop_observe
 
 try:
     from opentelemetry import trace

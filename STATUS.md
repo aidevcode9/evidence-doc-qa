@@ -21,6 +21,7 @@ Last updated: 2026-01-25
 
 | Task | FR | Depends On | Notes |
 |------|-----|------------|-------|
+| @observe decorators for LLM tracing | NFR-045 | Phase 1 ✅ | verification.py, ask_service.py |
 | Document deduplication | FR-011 | — | SHA256 content hash |
 | Metadata extraction | FR-014 | — | Title, date, author |
 | Semantic reranker | FR-015 | — | Cross-encoder scoring |

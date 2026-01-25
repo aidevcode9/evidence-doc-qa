@@ -323,6 +323,53 @@
 
 ---
 
+## Session: 2026-01-24
+
+### Pre-Flight Check
+- [x] Read STATUS.md — NFR-045 Phase 2 in Next
+- [x] Read REQUIREMENTS.md — NFR-045 acceptance criteria
+- [x] Read ARCHITECTURE.md — Langfuse integration pattern
+- [x] Identified files to update: verification.py, ask_service.py, otel.py
+
+---
+
+## Task 1: NFR-045 Phase 2 — @observe Decorators
+- **FR/NFR:** NFR-045
+- **Branch:** feat/fr050-frontend-auth
+- **Status:** ✅ Complete
+
+### Changes Made
+
+**otel.py:**
+- Added `observe` import from `langfuse.decorators` (with fallback)
+- Added `_noop_observe()` for graceful degradation when Langfuse unavailable
+- Added `get_observe_decorator()` factory function
+- Proper TypeVar typing for mypy --strict
+
+**verification.py:**
+- Added `@_observe(name="verify_relevance", capture_input=False, capture_output=False)`
+- Added `@_observe(name="call_openai", as_type="generation", capture_input=False, capture_output=False)`
+
+**ask_service.py:**
+- Added `@_observe(name="execute_ask", capture_input=False, capture_output=False)`
+
+### Verification
+- [x] `ruff check apps/` — passed
+- [x] `mypy apps/api/app --strict` — passed (0 errors)
+- [x] `pytest tests/ -v` — 405/405 passed
+- [x] LLM telemetry verified — decorators applied, PII-safe (capture_input/output=False)
+
+### wsskeptic Review
+- 0 CRITICAL, 0 HIGH, 0 MEDIUM, 2 LOW (accepted)
+- Recommendation: APPROVE
+
+### Notes
+- Phase 2 completes NFR-045 decorator integration
+- All decorators use PII-safe settings (no input/output capture)
+- Graceful degradation: app works without Langfuse installed
+
+---
+
 ## Template (Copy for each task)
 
 ```markdown
