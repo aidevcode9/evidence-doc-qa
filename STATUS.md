@@ -4,10 +4,10 @@ Last updated: 2026-01-25
 
 ---
 
-## Current Phase: 5.5 — Auth Frontend
+## Current Phase: 5 — Auth (COMPLETE)
 
-**Goal:** Complete frontend login UI with Google SSO for senior technologist demo
-**Progress:** FR-053 ⬜ (in progress)
+**Goal:** Production-ready authentication for senior technologist demo
+**Progress:** FR-050–053 ✅ All shipped
 
 ---
 
@@ -15,7 +15,7 @@ Last updated: 2026-01-25
 
 | Task | FR | Branch | Started | Notes |
 |------|-----|--------|---------|-------|
-| **Frontend Login UI + Google SSO** | FR-053 | feat/fr053-login-ui | 01-25 | Login page, OAuth callback, JWT cookies, protected routes |
+| — | — | — | — | Phase 5 complete. Ready for demo. |
 
 ## Next
 
@@ -31,6 +31,8 @@ Last updated: 2026-01-25
 
 | Task | FR | Date |
 |------|-----|------|
+| **Frontend Login UI + Google SSO** | FR-053 | 01-25 |
+| **GitHub Actions SSO env vars** | INFRA | 01-25 |
 | **Centralized API client + proxy route** | FR-050 | 01-25 |
 | **Container Apps healthy** | INFRA | 01-25 |
 | **CI workflow fixed (evidence_shared)** | INFRA | 01-25 |
@@ -123,12 +125,12 @@ Last updated: 2026-01-25
 
 | FR | Requirement | Status |
 |----|-------------|--------|
-| FR-050 | User login flow (OAuth2/JWT) | ✅ Backend shipped, frontend API client done |
-| FR-051 | SSO integration (OIDC) | ✅ Shipped (backend) |
-| FR-052 | Admin dashboard | ✅ Shipped (backend) |
-| FR-053 | Frontend login UI + Google SSO | 🔄 In progress |
+| FR-050 | User login flow (OAuth2/JWT) | ✅ Shipped |
+| FR-051 | SSO integration (OIDC) | ✅ Shipped |
+| FR-052 | Admin dashboard | ✅ Shipped |
+| FR-053 | Frontend login UI + Google SSO | ✅ Shipped |
 
-**Phase 5 Status:** Backend complete (JWT, SSO, admin). Frontend centralized API client done. **Now implementing:** Login page, OAuth callback, protected routes for production-ready demo.
+**Phase 5 Complete:** 4/4 Auth features shipped. JWT + Google SSO login, httpOnly cookies, protected routes, wsskeptic approved.
 
 ---
 
@@ -187,6 +189,8 @@ Last updated: 2026-01-25
 | 01-24 | **Atomic hard delete transaction** | All 7 resource deletions in single session_scope() for rollback safety |
 | 01-24 | **Modular ARCHITECTURE.md** | Split 1100→113 lines; detailed docs in `docs/architecture/`; reduces context per conversation |
 | 01-25 | **Demo headers workaround** | Frontend uses hardcoded X-Tenant-Id etc. until JWT frontend integration; AUTH_MODE=headers |
+| 01-25 | **httpOnly cookies for JWT** | Access + refresh tokens stored in httpOnly/Secure/SameSite=Lax cookies; prevents XSS; wsskeptic approved |
+| 01-25 | **Google SSO redirect flow** | Backend redirects to frontend /auth/callback with tokens; frontend stores in cookies immediately |
 
 > **Current Stack:** Azure AI Search + Azure OpenAI + configurable parser
 > **LLM Providers:** Azure OpenAI, Anthropic Claude, Google Gemini, Ollama (local)
