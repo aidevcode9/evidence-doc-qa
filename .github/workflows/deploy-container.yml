@@ -75,9 +75,13 @@ jobs:
               "JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30" \
               "JWT_REFRESH_TOKEN_EXPIRE_DAYS=7" \
               "FRONTEND_URL=${{ secrets.VERCEL_URL }}" \
-              "SSO_REDIRECT_URI=https://docqa-api.nicedesert-f48be8e2.canadacentral.azurecontainerapps.io/v1/auth/sso/callback" \
+              "SSO_REDIRECT_URI=${{ secrets.API_URL }}/v1/auth/sso/callback" \
               "SSO_DEFAULT_ROLE=viewer" \
               "GOOGLE_SSO_ENABLED=true" \
               "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" \
               "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" \
-              "MICROSOFT_SSO_ENABLED=false"
+              "MICROSOFT_SSO_ENABLED=false" \
+              "LANGFUSE_ENABLED=1" \
+              "LANGFUSE_PUBLIC_KEY=${{ secrets.LANGFUSE_PUBLIC_KEY }}" \
+              "LANGFUSE_SECRET_KEY=${{ secrets.LANGFUSE_SECRET_KEY }}" \
+              "LANGFUSE_HOST=https://cloud.langfuse.com"

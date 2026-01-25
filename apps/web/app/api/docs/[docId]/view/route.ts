@@ -23,10 +23,11 @@ const FETCH_TIMEOUT_MS = 30000;
 const DOC_ID_PATTERN = /^[a-zA-Z0-9][-a-zA-Z0-9]{0,63}$/;
 
 // Allowlisted API hosts for SSRF protection
+// Configure ALLOWED_API_HOST env var for production deployments
 const ALLOWED_API_HOSTS = [
   "localhost",
   "127.0.0.1",
-  "docqa-api.nicedesert-f48be8e2.canadacentral.azurecontainerapps.io",
+  ...(process.env.ALLOWED_API_HOST ? [process.env.ALLOWED_API_HOST] : []),
 ];
 
 /**

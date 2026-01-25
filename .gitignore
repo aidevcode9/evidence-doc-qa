@@ -240,3 +240,12 @@ GEMINI.md
 
 # Infrastructure
 infra/provision.ps1
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Secrets (should never be committed)
+*.pem
+*.key
+credentials.json
+secrets.json
