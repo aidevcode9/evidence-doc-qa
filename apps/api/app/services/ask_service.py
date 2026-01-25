@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from app import evidence, otel, policy, retrieval, verification, ingestion
+from app.otel import get_observe_decorator
 from app.db import QAMessage, get_or_create_session, insert_qa_message
 from app.config import (
     MODEL_ID,
@@ -30,10 +31,14 @@ from app.telemetry import logger, record_telemetry
 from app.services import cost, rag
 from app.services.cost import CostBreakdown, TraceMetadata
 
+# Get Langfuse @observe decorator (or no-op fallback) - NFR-045
+_observe = get_observe_decorator()
+
 ChunkDict = dict[str, Any]
 VersionSnapshot = dict[str, str]
 
 
+@_observe(name="execute_ask", capture_input=False, capture_output=False)
 def execute_ask(
     payload: AskRequest,
     session_id: str | None = None,

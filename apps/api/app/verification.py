@@ -15,11 +15,16 @@ from app.config import (
     AZURE_OPENAI_CHAT_ENDPOINT,
     MODEL_ID,
 )
+from app.otel import get_observe_decorator
 from app.telemetry import logger
+
+# Get Langfuse @observe decorator (or no-op fallback)
+_observe = get_observe_decorator()
 
 UsageInfo = dict[str, int | bool | str]
 
 
+@_observe(name="verify_relevance", capture_input=False, capture_output=False)
 def verify_relevance(
     question: str,
     chunk_text: str,
@@ -152,6 +157,7 @@ def _llm_enabled() -> bool:
     return bool(AZURE_OPENAI_CHAT_ENDPOINT and AZURE_OPENAI_CHAT_API_KEY and MODEL_ID)
 
 
+@_observe(name="call_openai", as_type="generation", capture_input=False, capture_output=False)
 def _call_openai(payload: dict[str, Any], max_retries: int = 3) -> dict[str, Any]:
     """Call OpenAI API with retry and exponential backoff for rate limits.
 

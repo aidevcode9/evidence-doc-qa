@@ -1,7 +1,16 @@
 import os
 from contextlib import contextmanager
-from typing import Any, Generator, TYPE_CHECKING
-from app.config import OTEL_ENABLED, OTEL_SERVICE_NAME
+from typing import Any, Callable, Generator, TypeVar, TYPE_CHECKING
+
+F = TypeVar("F", bound=Callable[..., Any])
+from app.config import (
+    OTEL_ENABLED,
+    OTEL_SERVICE_NAME,
+    LANGFUSE_ENABLED,
+    LANGFUSE_PUBLIC_KEY,
+    LANGFUSE_SECRET_KEY,
+    LANGFUSE_HOST,
+)
 from app.telemetry import logger
 
 if TYPE_CHECKING:
@@ -9,6 +18,52 @@ if TYPE_CHECKING:
 
 _OTEL_INITIALIZED = False
 _TRACER: Any = None
+
+# Langfuse state (NFR-045)
+_LANGFUSE_INITIALIZED = False
+_langfuse_client: Any = None
+
+# Try to import Langfuse (optional dependency)
+Langfuse: Any = None
+observe: Any = None
+try:
+    from langfuse import Langfuse as LangfuseClient
+    from langfuse.decorators import observe as langfuse_observe
+    Langfuse = LangfuseClient
+    observe = langfuse_observe
+except ImportError:
+    pass
+
+
+def _noop_observe(
+    *,
+    name: str | None = None,
+    as_type: str | None = None,
+    capture_input: bool = True,
+    capture_output: bool = True,
+) -> Callable[[F], F]:
+    """No-op @observe decorator when Langfuse is not installed.
+
+    Provides graceful degradation: functions work normally without tracing.
+    """
+    def decorator(func: F) -> F:
+        return func
+    return decorator
+
+
+def get_observe_decorator() -> Callable[..., Callable[[F], F]]:
+    """Get the @observe decorator (Langfuse or no-op fallback).
+
+    Usage:
+        from app.otel import get_observe_decorator
+        observe = get_observe_decorator()
+
+        @observe(name="my_function", capture_input=False, capture_output=False)
+        def my_function(): ...
+    """
+    if observe is not None and LANGFUSE_ENABLED:
+        return observe  # type: ignore[no-any-return]
+    return _noop_observe
 
 try:
     from opentelemetry import trace
@@ -67,3 +122,55 @@ def setup_otel(app: "FastAPI") -> None:
     URLLibInstrumentor().instrument()
     _OTEL_INITIALIZED = True
     logger.info("OpenTelemetry enabled for FastAPI.")
+
+
+def setup_langfuse() -> None:
+    """Initialize Langfuse LLM observability (NFR-045).
+
+    Langfuse provides a debugging UI for LLM traces. When enabled:
+    - Every LLM call is traced with model, tokens, latency
+    - Traces visible at Langfuse dashboard
+    - PII-safe: capture_input=False, capture_output=False by default
+
+    Requires:
+    - LANGFUSE_ENABLED=1
+    - LANGFUSE_PUBLIC_KEY=pk-lf-xxx
+    - LANGFUSE_SECRET_KEY=sk-lf-xxx
+    """
+    global _LANGFUSE_INITIALIZED, _langfuse_client
+
+    if _LANGFUSE_INITIALIZED:
+        return
+
+    if not LANGFUSE_ENABLED:
+        logger.debug("Langfuse disabled: LANGFUSE_ENABLED not set or missing keys.")
+        return
+
+    if Langfuse is None:
+        logger.warning("Langfuse disabled: langfuse package not installed.")
+        return
+
+    try:
+        _langfuse_client = Langfuse(
+            public_key=LANGFUSE_PUBLIC_KEY,
+            secret_key=LANGFUSE_SECRET_KEY,
+            host=LANGFUSE_HOST,
+        )
+        _LANGFUSE_INITIALIZED = True
+        logger.info("Langfuse enabled: %s", LANGFUSE_HOST)
+    except Exception as exc:  # noqa: BLE001 - defensive init
+        logger.warning("Langfuse initialization failed: %s", exc)
+
+
+def flush_langfuse() -> None:
+    """Flush pending Langfuse traces on shutdown.
+
+    Call this in app shutdown event to ensure all traces are sent
+    before the process exits.
+    """
+    if _langfuse_client is not None:
+        try:
+            _langfuse_client.flush()
+            logger.debug("Langfuse traces flushed.")
+        except Exception as exc:  # noqa: BLE001 - defensive flush
+            logger.warning("Langfuse flush failed: %s", exc)

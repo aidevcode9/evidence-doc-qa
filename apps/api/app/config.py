@@ -108,6 +108,14 @@ MAX_QUERY_LENGTH = int(_getenv("DOCQA_MAX_QUERY_LENGTH", "4000"))  # ~1000 token
 OTEL_ENABLED = _is_truthy(_getenv("DOCQA_OTEL_ENABLED", "0"))
 OTEL_SERVICE_NAME = _getenv("OTEL_SERVICE_NAME", "docqa-api")
 
+# Langfuse LLM Observability (NFR-045, NFR-046)
+LANGFUSE_PUBLIC_KEY = _getenv("LANGFUSE_PUBLIC_KEY", "")
+LANGFUSE_SECRET_KEY = _getenv("LANGFUSE_SECRET_KEY", "")
+LANGFUSE_HOST = _getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+# Enabled only when both keys are provided AND explicit opt-in
+_langfuse_enabled_raw = _getenv("LANGFUSE_ENABLED", "0")
+LANGFUSE_ENABLED = _is_truthy(_langfuse_enabled_raw) and bool(LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY)
+
 # Authentication (FR-050)
 AUTH_MODE = _getenv("AUTH_MODE", "headers")  # jwt | headers (headers for backward compat)
 JWT_SECRET_KEY = _getenv("JWT_SECRET_KEY", "dev-secret-key-change-in-production")
