@@ -33,10 +33,16 @@
 → Update STATUS.md: Move task to "Shipped" with date.
 → If more tasks in "Next": Ask if I should continue to next task.
 
+### Before starting ANY FR/NFR implementation:
+→ **NON-NEGOTIABLE:** Run `/wsresearch` first.
+→ Gather patterns, similar code, risks, and invariants.
+→ Do NOT skip this step even under time pressure.
+
 ### Before every PR/commit:
-→ **MANDATORY:** Run `/wsskeptic` adversarial code review.
+→ **NON-NEGOTIABLE:** Run `/wsskeptic` adversarial code review.
 → Fix all CRITICAL and HIGH severity issues before committing.
 → Document any accepted risks in commit message.
+→ Do NOT skip this step even under time pressure.
 
 ### When working autonomously (user said "work on this, I'll check back"):
 → Follow the Autonomous Work Protocol below.
@@ -213,19 +219,49 @@ await session.execute(
 |-----|---------|---------------|
 | `REQUIREMENTS.md` | FRs/NFRs with acceptance criteria | Starting a new feature |
 | `ARCHITECTURE.md` | Overview + pointers to detailed docs | Quick reference |
-| `docs/architecture/*.md` | Detailed: data-model, interfaces, deployment, observability | Deep implementation work |
 | `STATUS.md` | Current phase, active tasks, blockers | Daily; before picking work |
+| `docs/WORKFLOW.md` | Development workflow commands | Understanding the process |
+| `docs/architecture/*.md` | Detailed: data-model, interfaces, deployment, observability | Deep implementation work |
 | `EVALS.md` | Golden queries and pass/fail criteria | Adding/changing retrieval or LLM logic |
+| `CHECKPOINT.md` | Autonomous work log | Resuming work, auditing sessions |
+
+**These docs are the source of truth. Keep them in sync.**
 
 **Workflow:**
 1. Check `STATUS.md` → find task in "Next" or "Now"
-2. Look up FR in `REQUIREMENTS.md` → read acceptance criteria
-3. Check `ARCHITECTURE.md` → find relevant schema/interface
-4. **Write test first (TDD)**
-5. Implement → run tests + evals
-6. **Verify LLM telemetry if applicable**
-7. Update `STATUS.md` → move task to "Shipped"
-8. Commit with `(FR-NNN)` reference
+2. **Run `/wsresearch`** → gather context, patterns, risks (NON-NEGOTIABLE)
+3. Look up FR in `REQUIREMENTS.md` → read acceptance criteria
+4. Check `ARCHITECTURE.md` → find relevant schema/interface
+5. **Write test first (TDD)**
+6. Implement → run tests + evals
+7. **Verify LLM telemetry if applicable**
+8. **Run `/wsskeptic`** → adversarial review (NON-NEGOTIABLE)
+9. Update `STATUS.md` → move task to "Shipped"
+10. Commit with `(FR-NNN)` reference
+
+---
+
+## 📚 Documentation Sync Requirements
+
+**These documents must stay in sync with the codebase:**
+
+| Document | What to Update | When |
+|----------|----------------|------|
+| `REQUIREMENTS.md` | Acceptance criteria, implementation checklists | When FR/NFR scope changes |
+| `ARCHITECTURE.md` | Patterns, interfaces, schemas | When adding new abstractions |
+| `STATUS.md` | Phase progress, Now/Next/Done | After every FR completion |
+| `CHECKPOINT.md` | Session logs | After each task in autonomous mode |
+| `docs/architecture/*.md` | Detailed specs | When implementation differs from spec |
+
+**Automated Checks (CI):**
+- [ ] `STATUS.md` has no items in "Now" older than 3 days without update
+- [ ] All shipped FRs have corresponding test files
+- [ ] `ARCHITECTURE.md` references match actual file paths
+
+**Manual Review (Before PR):**
+- [ ] If you added a new pattern → documented in `ARCHITECTURE.md`?
+- [ ] If you added env vars → documented in `.env.example` and deployment docs?
+- [ ] If you changed an interface → updated `docs/architecture/interfaces.md`?
 
 ---
 
@@ -391,6 +427,9 @@ Types: `feat`, `fix`, `test`, `docs`, `refactor`, `chore`
 - **Writing code before tests**
 - **LLM calls bypassing telemetry wrapper**
 - **Skipping LLM telemetry "for speed"**
+- **Skipping `/wsresearch` "to save time"** — NON-NEGOTIABLE
+- **Skipping `/wsskeptic` "just this once"** — NON-NEGOTIABLE
+- **Documentation drift** — Code changed but docs not updated
 
 ---
 
