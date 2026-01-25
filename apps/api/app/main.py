@@ -90,6 +90,9 @@ def startup_event() -> None:
             "This should be enabled in production environments."
         )
 
+    # Initialize Langfuse LLM observability (NFR-045)
+    otel.setup_langfuse()
+
     # Initialize DB
     try:
         init_db()
@@ -105,3 +108,9 @@ def startup_event() -> None:
     # Bootstrap data directories
     os.makedirs(DATA_DIR, exist_ok=True)
     os.makedirs(RAW_DIR, exist_ok=True)
+
+
+@app.on_event("shutdown")
+def shutdown_event() -> None:
+    # Flush Langfuse traces on shutdown (NFR-045)
+    otel.flush_langfuse()

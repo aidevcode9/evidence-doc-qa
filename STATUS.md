@@ -31,6 +31,7 @@ Last updated: 2026-01-25
 
 | Task | FR | Date |
 |------|-----|------|
+| **Langfuse LLM Observability** | NFR-045 | 01-24 |
 | **Frontend Login UI + Google SSO** | FR-053 | 01-25 |
 | **GitHub Actions SSO env vars** | INFRA | 01-25 |
 | **Centralized API client + proxy route** | FR-050 | 01-25 |
@@ -147,6 +148,17 @@ Last updated: 2026-01-25
 
 ---
 
+## NFR Observability Progress
+
+| NFR | Requirement | Status |
+|-----|-------------|--------|
+| NFR-045 | Langfuse LLM observability integration | ✅ Infrastructure shipped |
+| NFR-046 | LLM trace debugging UI | 🔲 Pending (depends on NFR-045 decorators) |
+
+**NFR-045 Phase 1:** Infrastructure shipped. setup_langfuse(), flush_langfuse(), graceful degradation. Phase 2: Add @observe decorators to verification.py, ask_service.py.
+
+---
+
 ## Decisions
 
 | Date | Decision | Rationale |
@@ -191,6 +203,7 @@ Last updated: 2026-01-25
 | 01-25 | **Demo headers workaround** | Frontend uses hardcoded X-Tenant-Id etc. until JWT frontend integration; AUTH_MODE=headers |
 | 01-25 | **httpOnly cookies for JWT** | Access + refresh tokens stored in httpOnly/Secure/SameSite=Lax cookies; prevents XSS; wsskeptic approved |
 | 01-25 | **Google SSO redirect flow** | Backend redirects to frontend /auth/callback with tokens; frontend stores in cookies immediately |
+| 01-24 | **Langfuse for LLM observability** | Optional dependency; graceful degradation; @observe decorators for LLM tracing (NFR-045) |
 
 > **Current Stack:** Azure AI Search + Azure OpenAI + configurable parser
 > **LLM Providers:** Azure OpenAI, Anthropic Claude, Google Gemini, Ollama (local)

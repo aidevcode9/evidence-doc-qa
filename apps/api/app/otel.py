@@ -1,7 +1,14 @@
 import os
 from contextlib import contextmanager
 from typing import Any, Generator, TYPE_CHECKING
-from app.config import OTEL_ENABLED, OTEL_SERVICE_NAME
+from app.config import (
+    OTEL_ENABLED,
+    OTEL_SERVICE_NAME,
+    LANGFUSE_ENABLED,
+    LANGFUSE_PUBLIC_KEY,
+    LANGFUSE_SECRET_KEY,
+    LANGFUSE_HOST,
+)
 from app.telemetry import logger
 
 if TYPE_CHECKING:
@@ -9,6 +16,18 @@ if TYPE_CHECKING:
 
 _OTEL_INITIALIZED = False
 _TRACER: Any = None
+
+# Langfuse state (NFR-045)
+_LANGFUSE_INITIALIZED = False
+_langfuse_client: Any = None
+
+# Try to import Langfuse (optional dependency)
+Langfuse: Any = None
+try:
+    from langfuse import Langfuse as LangfuseClient
+    Langfuse = LangfuseClient
+except ImportError:
+    pass
 
 try:
     from opentelemetry import trace
@@ -67,3 +86,55 @@ def setup_otel(app: "FastAPI") -> None:
     URLLibInstrumentor().instrument()
     _OTEL_INITIALIZED = True
     logger.info("OpenTelemetry enabled for FastAPI.")
+
+
+def setup_langfuse() -> None:
+    """Initialize Langfuse LLM observability (NFR-045).
+
+    Langfuse provides a debugging UI for LLM traces. When enabled:
+    - Every LLM call is traced with model, tokens, latency
+    - Traces visible at Langfuse dashboard
+    - PII-safe: capture_input=False, capture_output=False by default
+
+    Requires:
+    - LANGFUSE_ENABLED=1
+    - LANGFUSE_PUBLIC_KEY=pk-lf-xxx
+    - LANGFUSE_SECRET_KEY=sk-lf-xxx
+    """
+    global _LANGFUSE_INITIALIZED, _langfuse_client
+
+    if _LANGFUSE_INITIALIZED:
+        return
+
+    if not LANGFUSE_ENABLED:
+        logger.debug("Langfuse disabled: LANGFUSE_ENABLED not set or missing keys.")
+        return
+
+    if Langfuse is None:
+        logger.warning("Langfuse disabled: langfuse package not installed.")
+        return
+
+    try:
+        _langfuse_client = Langfuse(
+            public_key=LANGFUSE_PUBLIC_KEY,
+            secret_key=LANGFUSE_SECRET_KEY,
+            host=LANGFUSE_HOST,
+        )
+        _LANGFUSE_INITIALIZED = True
+        logger.info("Langfuse enabled: %s", LANGFUSE_HOST)
+    except Exception as exc:  # noqa: BLE001 - defensive init
+        logger.warning("Langfuse initialization failed: %s", exc)
+
+
+def flush_langfuse() -> None:
+    """Flush pending Langfuse traces on shutdown.
+
+    Call this in app shutdown event to ensure all traces are sent
+    before the process exits.
+    """
+    if _langfuse_client is not None:
+        try:
+            _langfuse_client.flush()
+            logger.debug("Langfuse traces flushed.")
+        except Exception as exc:  # noqa: BLE001 - defensive flush
+            logger.warning("Langfuse flush failed: %s", exc)
