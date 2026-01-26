@@ -27,11 +27,13 @@ _langfuse_client: Any = None
 # Try to import Langfuse (optional dependency)
 Langfuse: Any = None
 observe: Any = None
+langfuse_context: Any = None
 try:
     from langfuse import Langfuse as LangfuseClient
-    from langfuse.decorators import observe as langfuse_observe
+    from langfuse.decorators import observe as langfuse_observe, langfuse_context as _langfuse_context
     Langfuse = LangfuseClient
     observe = langfuse_observe
+    langfuse_context = _langfuse_context
 except ImportError:
     pass
 
@@ -167,11 +169,21 @@ def flush_langfuse() -> None:
     """Flush pending Langfuse traces on shutdown.
 
     Call this in app shutdown event to ensure all traces are sent
-    before the process exits.
+    before the process exits. Flushes both the Langfuse client and
+    the decorator context (which maintains its own trace buffer).
     """
+    # Flush the decorator context first (used by @observe decorators)
+    if langfuse_context is not None:
+        try:
+            langfuse_context.flush()
+            logger.debug("Langfuse decorator context flushed.")
+        except Exception as exc:  # noqa: BLE001 - defensive flush
+            logger.warning("Langfuse decorator context flush failed: %s", exc)
+
+    # Flush the explicit client (used for manual tracing)
     if _langfuse_client is not None:
         try:
             _langfuse_client.flush()
-            logger.debug("Langfuse traces flushed.")
+            logger.debug("Langfuse client flushed.")
         except Exception as exc:  # noqa: BLE001 - defensive flush
-            logger.warning("Langfuse flush failed: %s", exc)
+            logger.warning("Langfuse client flush failed: %s", exc)

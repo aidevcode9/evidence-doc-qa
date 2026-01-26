@@ -208,3 +208,96 @@ class TestLangfuseFlushOnShutdown:
 
         assert hasattr(otel, "flush_langfuse")
         assert callable(otel.flush_langfuse)
+
+
+class TestLangfuseIntegration:
+    """Integration tests that verify actual Langfuse connectivity.
+
+    These tests require LANGFUSE_* environment variables to be set.
+    Skip in CI where credentials aren't available.
+    """
+
+    @pytest.mark.skipif(
+        not os.getenv("LANGFUSE_PUBLIC_KEY") or not os.getenv("LANGFUSE_SECRET_KEY"),
+        reason="Langfuse credentials not configured"
+    )
+    def test_langfuse_client_can_connect(self):
+        """Test that Langfuse client can connect with current credentials."""
+        from langfuse import Langfuse
+
+        client = Langfuse(
+            public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
+            secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
+            host=os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com"),
+        )
+
+        # Auth check - this will fail if credentials are wrong
+        try:
+            client.auth_check()
+            auth_ok = True
+        except Exception as e:
+            pytest.fail(f"Langfuse auth check failed: {e}")
+
+        assert auth_ok is True
+        client.flush()
+
+    @pytest.mark.skipif(
+        not os.getenv("LANGFUSE_PUBLIC_KEY") or not os.getenv("LANGFUSE_SECRET_KEY"),
+        reason="Langfuse credentials not configured"
+    )
+    def test_langfuse_can_send_trace(self):
+        """Test that we can send a trace to Langfuse."""
+        from langfuse import Langfuse
+
+        client = Langfuse(
+            public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
+            secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
+            host=os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com"),
+        )
+
+        # Create a test trace
+        trace = client.trace(
+            name="test_trace_from_pytest",
+            metadata={"test": True, "source": "test_langfuse.py"},
+        )
+
+        # Add a span to the trace
+        span = trace.span(
+            name="test_span",
+            input={"test_input": "hello"},
+            output={"test_output": "world"},
+        )
+        span.end()
+
+        # Flush to ensure it's sent
+        client.flush()
+
+        # If we get here without exception, the trace was sent
+        assert trace.id is not None
+        print(f"\nLangfuse test trace ID: {trace.id}")
+        print(f"Check Langfuse dashboard for trace: {trace.id}")
+
+    @pytest.mark.skipif(
+        not os.getenv("LANGFUSE_PUBLIC_KEY") or not os.getenv("LANGFUSE_SECRET_KEY"),
+        reason="Langfuse credentials not configured"
+    )
+    def test_observe_decorator_sends_trace(self):
+        """Test that @observe decorator actually sends traces."""
+        from langfuse.decorators import observe, langfuse_context
+        import time
+
+        @observe(name="test_observed_function")
+        def test_function(x: int, y: int) -> int:
+            langfuse_context.update_current_observation(
+                metadata={"test": True, "timestamp": time.time()}
+            )
+            return x + y
+
+        # Call the decorated function
+        result = test_function(2, 3)
+        assert result == 5
+
+        # Flush to ensure trace is sent
+        langfuse_context.flush()
+
+        print("\nObserve decorator test completed - check Langfuse for 'test_observed_function' trace")
