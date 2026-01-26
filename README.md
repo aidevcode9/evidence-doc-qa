@@ -271,3 +271,5 @@ Built with:
 - [Marker](https://github.com/VikParuchuri/marker) - PDF extraction
 - [Langfuse](https://langfuse.com/) - LLM observability
 - [OpenTelemetry](https://opentelemetry.io/) - Distributed tracing
+  
+Author: Chuck Hernandez | [LinkedIn](https://linkedin.com/in/chuck-hernandez) 
