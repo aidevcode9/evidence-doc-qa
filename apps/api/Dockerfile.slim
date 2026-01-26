@@ -1,0 +1,64 @@
+# Slim build for PyPDF-only mode (FR-055)
+# ~500MB image vs ~4GB full image
+# No torch, marker-pdf, or OCR dependencies
+# Build context: repo root (not apps/api)
+
+FROM python:3.12-slim AS builder
+
+WORKDIR /build
+
+# Install build dependencies (minimal - no OpenCV/ML libs)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy and install shared package FIRST (evidence_shared)
+COPY packages/shared/python /build/shared
+RUN pip install --user --no-cache-dir /build/shared
+
+# Install slim requirements (no marker-pdf, no llama-parse, no torch)
+COPY apps/api/requirements-slim.txt .
+RUN pip install --user --no-cache-dir -r requirements-slim.txt
+
+# Production image
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Force PyPDF-only mode (no OCR support in slim image)
+ENV PARSER_PROVIDER=pypdf
+
+WORKDIR /app
+
+# Minimal runtime dependencies (no OpenCV/libgl for marker)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user for security
+RUN useradd --create-home --shell /bin/bash appuser
+
+# Copy installed packages from builder
+COPY --from=builder /root/.local /home/appuser/.local
+RUN chown -R appuser:appuser /home/appuser/.local
+ENV PATH=/home/appuser/.local/bin:$PATH
+
+# Copy application code
+COPY --chown=appuser:appuser apps/api/ .
+
+# Create data directories
+RUN mkdir -p /app/data/raw && chown -R appuser:appuser /app/data
+
+# Switch to non-root user
+USER appuser
+
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')" || exit 1
+
+# Run with uvicorn
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "info"]

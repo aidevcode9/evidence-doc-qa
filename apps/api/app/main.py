@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import otel
 from app.config import (
+    AUTH_BYPASS_ENABLED,
     AUTH_MODE,
     DATA_DIR,
     RAW_DIR,
@@ -79,6 +80,11 @@ def startup_event() -> None:
         )
 
     # Security warnings for production (HIGH severity)
+    if AUTH_BYPASS_ENABLED:
+        logger.warning(
+            "SECURITY WARNING: AUTH_BYPASS_ENABLED=True - ALL authentication is disabled! "
+            "This is for LOCAL DEMOS ONLY. Never enable in production."
+        )
     if ALLOW_UNVERIFIED:
         logger.warning(
             "SECURITY WARNING: ALLOW_UNVERIFIED=True - unverified chunks may be returned. "

@@ -83,7 +83,7 @@ AZURE_SEARCH_CREATE_INDEX = _is_truthy(_getenv("AZURE_SEARCH_CREATE_INDEX", "0")
 ENABLE_INDEXING = _is_truthy(_getenv("DOCQA_ENABLE_INDEXING", "1"))
 
 # Document Parsing (NFR-036)
-PARSER_PROVIDER = _getenv("PARSER_PROVIDER", "marker")  # pypdf | marker | llamaparse
+PARSER_PROVIDER = _getenv("PARSER_PROVIDER", "pypdf")  # pypdf | marker | llamaparse
 
 # Marker-specific
 MARKER_USE_LLM = _is_truthy(_getenv("MARKER_USE_LLM", "0"))
@@ -118,6 +118,11 @@ LANGFUSE_ENABLED = _is_truthy(_langfuse_enabled_raw) and bool(LANGFUSE_PUBLIC_KE
 
 # Authentication (FR-050)
 AUTH_MODE = _getenv("AUTH_MODE", "headers")  # jwt | headers (headers for backward compat)
+
+# Auth Bypass Mode (FR-054) - FOR LOCAL DEMOS ONLY
+# WARNING: Never enable in production! Skips all auth checks.
+AUTH_BYPASS_ENABLED = _is_truthy(_getenv("AUTH_BYPASS_ENABLED", "1"))
+
 JWT_SECRET_KEY = _getenv("JWT_SECRET_KEY", "dev-secret-key-change-in-production")
 JWT_ALGORITHM = _getenv("JWT_ALGORITHM", "HS256")
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(_getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
