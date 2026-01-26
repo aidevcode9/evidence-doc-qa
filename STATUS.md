@@ -1,6 +1,6 @@
 # STATUS.md
 
-Last updated: 2026-01-25
+Last updated: 2026-01-26
 
 ---
 
@@ -21,6 +21,8 @@ Last updated: 2026-01-25
 
 | Task | FR | Depends On | Notes |
 |------|-----|------------|-------|
+| **Auth bypass mode for demos** | FR-054 | — | AUTH_BYPASS_ENABLED=true skips Google OAuth |
+| **PyPDF-only mode (slim container)** | FR-055 | — | PARSER_PROVIDER=pypdf, no torch/marker deps |
 | Document deduplication | FR-011 | — | SHA256 content hash |
 | Metadata extraction | FR-014 | — | Title, date, author |
 | Semantic reranker | FR-015 | — | Cross-encoder scoring |

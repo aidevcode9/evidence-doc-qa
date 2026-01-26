@@ -241,8 +241,10 @@ GEMINI.md
 # Infrastructure
 infra/provision.ps1
 
-# Claude Code local settings
+# Claude Code local settings and custom commands
 .claude/settings.local.json
+.claude/commands/
+.claude/plans/
 
 # Secrets (should never be committed)
 *.pem

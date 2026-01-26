@@ -8,6 +8,7 @@
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v1.9 | Jan 2026 | Added FR-054 (optional auth bypass), FR-055 (PyPDF-only mode) for lightweight deployments |
 | v1.8 | Jan 2026 | Added LLM Observability NFRs (NFR-045, NFR-046) — Langfuse Cloud + self-hosted option |
 | v1.7 | Jan 2026 | Added Deployment NFRs (NFR-042 to NFR-044) — Docker Compose, on-prem docs, pgvector search |
 | v1.6 | Jan 2026 | Added FR-001/FR-002 implementation checklist from security review — query enforcement, retrieval layer, API layer |
@@ -189,6 +190,50 @@ Tests:
 - [ ] Test: Expired token triggers refresh
 - [ ] Test: API calls include Bearer token
 - [ ] Test: Logout clears auth state
+
+| FR-054 | Optional authentication bypass for demos | When `AUTH_BYPASS_ENABLED=true`, skip all auth checks; use default tenant/user for requests |
+| FR-055 | PyPDF-only parser mode for lightweight containers | When `PARSER_PROVIDER=pypdf`, use PyPDF exclusively (no Marker/torch dependencies); reduces container size from ~4GB to <500MB |
+
+#### FR-054 Implementation Checklist (Auth Bypass)
+
+Config:
+- [ ] Add `AUTH_BYPASS_ENABLED` env var (default: false)
+- [ ] Document security implications in .env.example
+
+Backend Changes:
+- [ ] Modify auth middleware to skip JWT validation when AUTH_BYPASS_ENABLED=true
+- [ ] Inject default tenant_id/matter_id/user_id when bypassed
+- [ ] Log warning on startup if auth bypass is enabled
+
+Frontend Changes:
+- [ ] Skip Google OAuth redirect when bypass enabled
+- [ ] Hide "Sign in with Google" button
+- [ ] Auto-redirect to main app
+
+Security:
+- [ ] NEVER enable in production (add startup warning)
+- [ ] Document bypass mode is for local demos only
+
+#### FR-055 Implementation Checklist (PyPDF-Only Mode)
+
+Config:
+- [ ] Ensure `PARSER_PROVIDER=pypdf` works without Marker installed
+- [ ] Document PyPDF limitations (digital PDFs only, no OCR, no tables)
+
+Backend Changes:
+- [ ] Modify parser client to gracefully handle missing Marker dependency
+- [ ] Add health check that reports parser capability (OCR: yes/no)
+- [ ] Return user-friendly error if scanned PDF uploaded in pypdf mode
+
+Docker:
+- [ ] Create `Dockerfile.slim` that excludes torch/marker dependencies
+- [ ] Document container size comparison (slim vs full)
+- [ ] Add CI build for slim image
+
+Tests:
+- [ ] Test: pypdf mode parses digital PDF successfully
+- [ ] Test: pypdf mode returns error for scanned/image PDFs
+- [ ] Test: Marker import failure doesn't crash app when pypdf mode
 
 ---
 
