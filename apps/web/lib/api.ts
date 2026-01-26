@@ -86,3 +86,27 @@ export async function apiUpload(
 export function getApiUrl(): string {
   return API_URL;
 }
+
+/**
+ * Server capabilities from /healthz endpoint (FR-054, FR-055).
+ */
+export interface ServerCapabilities {
+  status: string;
+  parser_provider: "pypdf" | "marker" | "llamaparse";
+  ocr_supported: boolean;
+  supported_formats: string[];
+  auth_bypass_enabled: boolean;
+}
+
+/**
+ * Fetch server capabilities from /healthz endpoint.
+ * Used by frontend to adapt UI (e.g., hide Google SSO when auth bypassed,
+ * show "PDF only" when pypdf mode).
+ */
+export async function fetchCapabilities(): Promise<ServerCapabilities> {
+  const response = await fetch(`${API_URL}/healthz`);
+  if (!response.ok) {
+    throw new Error("Failed to fetch server capabilities");
+  }
+  return response.json();
+}

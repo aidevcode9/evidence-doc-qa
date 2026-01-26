@@ -3,12 +3,26 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getAuthMode } from "@/lib/auth";
+import { fetchCapabilities, type ServerCapabilities } from "@/lib/api";
 
 type LoginPayload = {
   name: string;
   email: string;
   betaCode: string;
 };
+
+/**
+ * Sanitize redirect URL to prevent open redirect attacks.
+ * Only allows relative paths starting with "/" (not "//").
+ */
+function getSafeRedirectUrl(url: string | null): string {
+  if (!url) return "/";
+  // Must start with "/" but not "//" (protocol-relative URL)
+  if (url.startsWith("/") && !url.startsWith("//")) {
+    return url;
+  }
+  return "/";
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,10 +32,12 @@ export default function LoginPage() {
   const [nextPath, setNextPath] = useState("/");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [capabilities, setCapabilities] = useState<ServerCapabilities | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    setNextPath(params.get("next") || "/");
+    const safeNextPath = getSafeRedirectUrl(params.get("next"));
+    setNextPath(safeNextPath);
 
     const storedUser = localStorage.getItem("docqa_user");
     if (storedUser) {
@@ -33,7 +49,18 @@ export default function LoginPage() {
         // Ignore invalid storage.
       }
     }
-  }, []);
+
+    // Fetch server capabilities to check if auth is bypassed
+    fetchCapabilities()
+      .then((caps) => {
+        setCapabilities(caps);
+        // Auto-redirect if auth bypass is enabled (FR-054)
+        if (caps.auth_bypass_enabled) {
+          router.replace(safeNextPath);
+        }
+      })
+      .catch((err) => console.error("Failed to fetch capabilities:", err));
+  }, [router]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -84,6 +111,9 @@ export default function LoginPage() {
       setIsSubmitting(false);
     }
   };
+
+  // Show Google SSO only if: JWT mode AND auth bypass is NOT enabled
+  const showGoogleSSO = getAuthMode() === "jwt" && !capabilities?.auth_bypass_enabled;
 
   return (
     <div className="min-h-screen flex flex-col bg-black text-white">
@@ -171,8 +201,8 @@ export default function LoginPage() {
               </button>
             </form>
 
-            {/* Google SSO Button - shown in JWT mode */}
-            {getAuthMode() === "jwt" && (
+            {/* Google SSO Button - shown in JWT mode when auth bypass is NOT enabled (FR-054) */}
+            {showGoogleSSO && (
               <>
                 <div className="relative my-6">
                   <div className="absolute inset-0 flex items-center">

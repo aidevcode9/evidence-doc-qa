@@ -2,7 +2,6 @@ import os
 from contextlib import contextmanager
 from typing import Any, Callable, Generator, TypeVar, TYPE_CHECKING
 
-F = TypeVar("F", bound=Callable[..., Any])
 from app.config import (
     OTEL_ENABLED,
     OTEL_SERVICE_NAME,
@@ -12,6 +11,8 @@ from app.config import (
     LANGFUSE_HOST,
 )
 from app.telemetry import logger
+
+F = TypeVar("F", bound=Callable[..., Any])
 
 if TYPE_CHECKING:
     from fastapi import FastAPI

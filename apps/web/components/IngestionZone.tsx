@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useRef, useState } from "react";
-import { apiUpload } from "@/lib/api";
+import React, { useRef, useState, useEffect } from "react";
+import { apiUpload, fetchCapabilities, type ServerCapabilities } from "@/lib/api";
 
 type IngestionZoneProps = {
   onUploadSuccess: (snapshotId: string, fileName: string) => void;
@@ -9,7 +9,15 @@ type IngestionZoneProps = {
 
 export function IngestionZone({ onUploadSuccess }: IngestionZoneProps) {
   const [isUploading, setIsUploading] = useState(false);
+  const [capabilities, setCapabilities] = useState<ServerCapabilities | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch server capabilities on mount
+  useEffect(() => {
+    fetchCapabilities()
+      .then(setCapabilities)
+      .catch((err) => console.error("Failed to fetch capabilities:", err));
+  }, []);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -33,11 +41,16 @@ export function IngestionZone({ onUploadSuccess }: IngestionZoneProps) {
     }
   };
 
+  // Determine accept attribute and button text based on parser capabilities
+  const isPdfOnly = capabilities?.parser_provider === "pypdf";
+  const acceptFormats = isPdfOnly ? ".pdf" : ".pdf,.png,.jpg,.jpeg,.tiff,.tif";
+  const buttonText = isPdfOnly ? "Upload PDF" : "Upload PDF/Image";
+
   return (
     <div className="flex items-center gap-4">
       <input
         type="file"
-        accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif"
+        accept={acceptFormats}
         onChange={handleUpload}
         ref={fileInputRef}
         className="hidden"
@@ -52,7 +65,7 @@ export function IngestionZone({ onUploadSuccess }: IngestionZoneProps) {
         ) : (
            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
         )}
-        {isUploading ? "Indexing..." : "Upload PDF/Image"}
+        {isUploading ? "Indexing..." : buttonText}
       </button>
     </div>
   );
