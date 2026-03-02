@@ -1,6 +1,6 @@
 # Evidence-Bound: Technical Architecture
 
-> **For Technical Investors** | Last Updated: January 2026
+> **For Technical Investors** | Last Updated: February 2026
 
 ---
 
@@ -16,7 +16,7 @@
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                         API GATEWAY LAYER                                │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
-│  │ Auth/SSO    │  │ Rate Limit  │  │ Tenant      │  │ Audit       │    │
+│  │ JWT Auth    │  │ Rate Limit  │  │ Tenant      │  │ Audit       │    │
 │  │ Middleware  │  │ Middleware  │  │ Resolution  │  │ Logging     │    │
 │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘    │
 └─────────────────────────────────┬───────────────────────────────────────┘
@@ -47,7 +47,7 @@
           ▼                       ▼                       ▼
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   POSTGRESQL    │    │  SEARCH INDEX   │    │   LLM PROVIDER  │
-│  (Data Store)   │    │ (Azure/pgvector)│    │ (Azure OpenAI)  │
+│  (Data Store)   │    │ (Azure/pgvector)│    │ (Multi-provider)│
 └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
@@ -60,12 +60,12 @@
 | **Frontend** | Next.js 14 + TypeScript | SSR, React ecosystem, Vercel deployment |
 | **API** | FastAPI + Python 3.11 | Async performance, type hints, OpenAPI |
 | **Database** | PostgreSQL 15 | ACID compliance, JSON support, pgvector ready |
-| **Search** | Azure AI Search | Hybrid BM25+vector, semantic reranker |
-| **Embeddings** | Azure OpenAI (text-embedding-3-large) | 3072 dimensions, multilingual |
-| **LLM** | Azure OpenAI (GPT-4o) | Enterprise SLA, data residency |
-| **Document Parsing** | Marker / LlamaParse | High-fidelity PDF extraction |
+| **Search** | Azure AI Search / pgvector | Hybrid BM25+vector, configurable provider |
+| **Embeddings** | Azure OpenAI / Local | text-embedding-3-large (3072D) or hash-based |
+| **LLM** | Azure OpenAI / Anthropic / Gemini / Ollama | Multi-provider support via config |
+| **Document Parsing** | Marker / LlamaParse / PyPDF | Configurable parser (NFR-036) |
 | **Observability** | OpenTelemetry + Langfuse | Distributed tracing, LLM-specific metrics |
-| **Auth** | NextAuth.js + Google OAuth | Enterprise SSO ready |
+| **Auth** | JWT + OIDC (Microsoft/Google) | Refresh tokens, SSO, account lockout |
 
 ---
 
@@ -144,9 +144,9 @@ Returns confidence score (0.0-1.0) used by policy engine.
 │ tenant_id       │     │ doc_id (FK)     │     │ tenant_id       │
 │ matter_id       │     │ tenant_id       │     │ matter_id       │
 │ docs_snapshot_id│     │ matter_id       │     │ embedding_json  │
-│ file_name       │     │ page_num        │     │ indexed_at_utc  │
-│ sha256          │     │ chunk_text      │     │ index_version   │
-│ uploaded_at     │     │ char_start/end  │     └─────────────────┘
+│ doc_name        │     │ page_num        │     │ indexed_at_utc  │
+│ doc_sha256      │     │ chunk_text      │     │ index_version   │
+│ storage_path    │     │ char_start/end  │     └─────────────────┘
 └─────────────────┘     └─────────────────┘
 
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
@@ -156,9 +156,33 @@ Returns confidence score (0.0-1.0) used by policy engine.
 │ tenant_id       │     │ session_id (FK) │     │ tenant_id       │
 │ matter_id       │     │ tenant_id       │     │ matter_id       │
 │ docs_snapshot_id│     │ role            │     │ tokens_in/out   │
-│ created_at      │     │ content         │     │ latency_ms      │
-│ user_id         │     │ citations_json  │     │ cost_est        │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
+│ created_at_utc  │     │ content         │     │ latency_ms      │
+└─────────────────┘     │ citations_json  │     │ cost_est        │
+                        │ evidence_json   │     │ trace_metadata  │
+                        └─────────────────┘     └─────────────────┘
+
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│      users      │     │matter_assignments│     │ refresh_tokens  │
+├─────────────────┤     ├─────────────────┤     ├─────────────────┤
+│ user_id (PK)    │────<│ assignment_id   │     │ token_id (PK)   │
+│ tenant_id       │     │ user_id (FK)    │     │ user_id (FK)    │
+│ email           │     │ tenant_id       │     │ tenant_id       │
+│ role            │     │ matter_id       │     │ token_hash      │
+│ password_hash   │     │ granted_by      │     │ expires_at_utc  │
+│ auth_provider   │     │ granted_at_utc  │     │ revoked_at_utc  │
+│ is_active       │     └─────────────────┘     └─────────────────┘
+│ failed_login_ct │
+│ locked_until_utc│     ┌─────────────────┐     ┌─────────────────┐
+└─────────────────┘     │   sso_states    │     │  audit_events   │
+                        ├─────────────────┤     ├─────────────────┤
+                        │ state_token (PK)│     │ event_id (PK)   │
+                        │ provider        │     │ tenant_id       │
+                        │ tenant_id       │     │ matter_id       │
+                        │ code_verifier   │     │ user_id         │
+                        │ nonce           │     │ event_type      │
+                        │ expires_at_utc  │     │ event_json      │
+                        └─────────────────┘     │ created_at_utc  │
+                                                └─────────────────┘
 ```
 
 ### Tenant Isolation Pattern
@@ -171,39 +195,73 @@ WHERE tenant_id = :tenant_id
   AND docs_snapshot_id = :snapshot_id
 ```
 
+**See [data-model.md](./architecture/data-model.md) for complete schemas.**
+
 ---
 
 ## Provider Abstraction
 
+**Status: ✅ Fully Implemented (NFR-032, NFR-034, NFR-035, NFR-036)**
+
 The architecture supports pluggable providers for deployment flexibility:
 
-### Current Implementation
+### Implemented Abstractions
+
 ```python
-# config.py - Provider selection
-PARSER_PROVIDER = "marker"       # marker | llamaparse | pypdf
-SEARCH_PROVIDER = "azure"        # azure | pgvector (planned)
-LLM_PROVIDER = "azure_openai"    # azure_openai | openai | anthropic (planned)
-EMBEDDING_PROVIDER = "azure"     # azure | openai (planned)
+# config.py - Provider selection (change via env vars only)
+LLM_PROVIDER = "azure_openai"      # azure_openai | anthropic | gemini | ollama
+SEARCH_PROVIDER = "local"          # local (pgvector) | azure
+EMBEDDINGS_MODE = "remote"         # remote (Azure) | local (hash-based)
+PARSER_PROVIDER = "marker"         # marker | llamaparse | pypdf
 ```
 
-### Abstraction Interfaces (Planned)
+### Provider Interfaces
 
 ```python
-# Target interface for search provider
-class SearchProvider(Protocol):
-    async def search(
+# LLM Provider (NFR-032) - app/llm/
+class LLMClient(Protocol):
+    async def complete(
         self,
-        query: str,
-        embedding: list[float],
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float = 0.0,
+    ) -> LLMResponse: ...
+
+# Implementations: AzureOpenAIClient, AnthropicClient, GeminiClient, OllamaClient
+
+# Search Provider (NFR-034) - app/search/
+class SearchClient(Protocol):
+    async def hybrid_search(
+        self,
+        query_text: str,
+        query_embedding: list[float],
         tenant_id: str,
         matter_id: str,
         top_k: int = 10,
-    ) -> list[ChunkResult]: ...
+    ) -> SearchResponse: ...
 
-# Implementations
-class AzureSearchProvider(SearchProvider): ...
-class PgVectorProvider(SearchProvider): ...
+# Implementations: AzureSearchClient, LocalSearchClient (pgvector)
+
+# Embedding Provider (NFR-035) - app/embedding/
+class EmbeddingClient(Protocol):
+    async def embed(
+        self,
+        texts: list[str],
+    ) -> EmbeddingResult: ...
+
+# Implementations: AzureOpenAIEmbeddingClient, LocalEmbeddingClient
+
+# Parser Provider (NFR-036) - app/parser/
+class ParserClient(Protocol):
+    async def parse(
+        self,
+        file_path: str,
+    ) -> ParseResult: ...
+
+# Implementations: MarkerClient, LlamaParseClient, PyPDFClient
 ```
+
+**No code changes needed** — swap providers via environment variables only.
 
 ---
 
@@ -245,7 +303,7 @@ class PgVectorProvider(SearchProvider): ...
 | **Production** | Container Apps (P1v3), PostgreSQL (GP D2s), AI Search (Standard S1) | ~$500-800 |
 | **Enterprise** | Dedicated VNet, Premium PostgreSQL, Reserved capacity | ~$2,000+ |
 
-### On-Premises Option (Planned)
+### On-Premises Deployment
 
 ```
 Customer Data Center
@@ -255,7 +313,16 @@ Customer Data Center
 │   └── Ingress Controller
 ├── PostgreSQL (+ pgvector extension)
 ├── MinIO (S3-compatible storage)
-└── Local LLM (Ollama/vLLM) OR VPN to cloud LLM
+└── Local LLM (Ollama) OR Anthropic/Gemini API via VPN
+```
+
+**Configuration:**
+```bash
+# On-prem deployment tier
+LLM_PROVIDER=ollama                    # Local Llama 3.2
+SEARCH_PROVIDER=local                  # PostgreSQL + pgvector
+EMBEDDINGS_MODE=local                  # Hash-based (or remote via VPN)
+PARSER_PROVIDER=marker                 # Marker (offline PDF parsing)
 ```
 
 ---
@@ -270,18 +337,60 @@ Customer Data Center
 | Storage | AES-256 encryption at rest |
 | Secrets | Azure Key Vault / env injection |
 | Logs | PII redaction before write |
+| Tokens | SHA256 hashes only (no plaintext) |
 
-### Authentication Flow
+### Authentication Flow (FR-050, FR-051)
 
 ```
-User → Google OAuth → NextAuth.js → Session Cookie → API Auth Middleware
-                                                            │
-                                                            ▼
-                                                    Tenant Resolution
-                                                            │
-                                                            ▼
-                                                    Request Processing
+┌──────────┐                                                    ┌──────────┐
+│  Client  │                                                    │   API    │
+└────┬─────┘                                                    └────┬─────┘
+     │                                                                │
+     │ 1. POST /auth/login (email, password)                         │
+     │───────────────────────────────────────────────────────────────>│
+     │                                                                │
+     │                                      2. Validate credentials   │
+     │                                         Check failed_login_ct  │
+     │                                         Check locked_until_utc │
+     │                                                                │
+     │ 3. Return JWT access token (15 min) + refresh token (7 days)  │
+     │<───────────────────────────────────────────────────────────────│
+     │                                                                │
+     │ 4. API request with Authorization: Bearer <access_token>      │
+     │───────────────────────────────────────────────────────────────>│
+     │                                                                │
+     │                                      5. Validate JWT signature │
+     │                                         Extract tenant_id      │
+     │                                         Check expiration       │
+     │                                                                │
+     │ 6. Response with data                                          │
+     │<───────────────────────────────────────────────────────────────│
+     │                                                                │
+     │ (After 15 min, access token expires)                           │
+     │                                                                │
+     │ 7. POST /auth/refresh (refresh_token)                          │
+     │───────────────────────────────────────────────────────────────>│
+     │                                                                │
+     │                                      8. Validate refresh token │
+     │                                         Check revoked_at_utc   │
+     │                                         Check expires_at_utc   │
+     │                                                                │
+     │ 9. Return new access token + refresh token                    │
+     │<───────────────────────────────────────────────────────────────│
 ```
+
+**SSO Flow (Microsoft/Google OIDC):**
+```
+User → /auth/sso/microsoft → OIDC Provider → Callback → Validate ID Token
+  → Create/Link User → Issue JWT + Refresh Token
+```
+
+**Security Features (FR-050):**
+- Password hashing: bcrypt (cost factor 12)
+- Account lockout: 5 failed attempts → 15 min lock
+- Refresh token rotation: New token on each refresh
+- Token revocation: All tokens revoked on password change
+- PKCE for SSO: Protects against authorization code interception
 
 ### Tenant Isolation Enforcement
 
@@ -289,12 +398,22 @@ User → Google OAuth → NextAuth.js → Session Cookie → API Auth Middleware
 # Middleware enforces tenant context on every request
 @app.middleware("http")
 async def tenant_middleware(request: Request, call_next):
-    tenant_id = resolve_tenant(request)
+    # Extract from JWT claims
+    token = extract_jwt(request)
+    tenant_id = token["tenant_id"]
+    user_id = token["sub"]
+
+    # Resolve matter from request (path/query)
     matter_id = resolve_matter(request)
+
+    # Verify user has matter access (FR-004)
+    if not user_has_matter_access(user_id, tenant_id, matter_id):
+        raise HTTPException(403, "Access denied")
 
     # Inject into request state - available to all handlers
     request.state.tenant_id = tenant_id
     request.state.matter_id = matter_id
+    request.state.user_id = user_id
 
     return await call_next(request)
 ```
@@ -313,23 +432,37 @@ Application
     │   ├── Metrics → Prometheus / Azure Monitor
     │   └── Logs → stdout → Azure Log Analytics
     │
-    └── Langfuse Integration
-        ├── LLM Call Traces
-        ├── Token Usage
-        ├── Latency Distributions
-        └── Model Performance
+    └── Langfuse Integration (NFR-045)
+        ├── LLM Call Traces (@observe decorators)
+        ├── Token Usage (gen_ai.usage.* metrics)
+        ├── Latency Distributions (llm.latency_ms)
+        └── Model Performance (by provider)
 ```
 
 ### Key Metrics Tracked
 
-| Metric | Purpose |
-|--------|---------|
-| `llm.latency_ms` | LLM response time |
-| `gen_ai.usage.prompt_tokens` | Input token count |
-| `gen_ai.usage.completion_tokens` | Output token count |
-| `retrieval.latency_ms` | Search latency |
-| `refusal_rate` | Percentage of refused queries |
-| `cache_hit_rate` | Embedding cache efficiency |
+| Metric | Purpose | OTEL Semantic Convention |
+|--------|---------|--------------------------|
+| `llm.latency_ms` | LLM response time | Custom |
+| `gen_ai.usage.prompt_tokens` | Input token count | GenAI |
+| `gen_ai.usage.completion_tokens` | Output token count | GenAI |
+| `gen_ai.request.model` | Model identifier | GenAI |
+| `gen_ai.system` | Provider name | GenAI |
+| `retrieval.latency_ms` | Search latency | Custom |
+| `refusal_rate` | Percentage of refused queries | Custom |
+| `cache_hit_rate` | Embedding cache efficiency | Custom |
+
+**Database Telemetry Table:**
+```sql
+-- All LLM calls logged to telemetry table (NFR-030)
+SELECT tenant_id, model_id,
+       SUM(tokens_in) as total_prompt_tokens,
+       SUM(tokens_out) as total_completion_tokens,
+       SUM(cost_est) as total_cost_usd
+FROM telemetry
+WHERE timestamp_utc >= NOW() - INTERVAL '30 days'
+GROUP BY tenant_id, model_id;
+```
 
 ---
 
@@ -360,19 +493,29 @@ Application
 ```bash
 # All must pass before merge
 ruff check apps/              # Linting
-mypy apps/api/app --strict    # Type checking
+mypy apps/api/app --strict    # Type checking (NFR-040)
 pytest tests/ -v              # Unit + integration
 pytest evals/ -v              # Golden query evals (>95% pass required)
 ```
 
 ### Test Coverage
 
-| Category | Coverage Target |
-|----------|-----------------|
-| Unit tests | >80% |
-| Integration tests | Critical paths |
-| Golden query evals | >95% pass rate |
-| LLM behavior tests | Adversarial prompts |
+| Category | Coverage Target | Current |
+|----------|-----------------|---------|
+| Unit tests | >80% | ~85% |
+| Integration tests | Critical paths | ✅ |
+| Golden query evals | >95% pass rate | ✅ |
+| LLM behavior tests | Adversarial prompts | ✅ |
+
+### Test-Driven Development (TDD)
+
+**Enforced via CLAUDE.md:**
+```
+RED    → Write test that fails (proves test works)
+GREEN  → Write minimum code to pass
+REFACTOR → Clean up, maintain passing tests
+COMMIT → Only after green
+```
 
 ---
 
@@ -382,21 +525,45 @@ pytest evals/ -v              # Golden query evals (>95% pass required)
 |------|------------|
 | LLM hallucination | Post-LLM citation validation, confidence gating |
 | Search relevance drift | Golden query evals in CI, reranker tuning |
-| Vendor lock-in | Provider abstraction interfaces |
-| Cost overrun | Token tracking, caching, query limits |
-| Data breach | Tenant isolation at DB layer, encryption |
+| Vendor lock-in | Provider abstraction interfaces (implemented) |
+| Cost overrun | Token tracking, caching, query limits, telemetry table |
+| Data breach | Tenant isolation at DB layer, encryption, audit log |
+| Account compromise | Account lockout, refresh token rotation, MFA (planned) |
 
 ---
 
 ## Roadmap (Technical)
 
-| Phase | Focus | Key Deliverables |
-|-------|-------|------------------|
-| **Phase 2** | Production hardening | SSO, export, observability |
-| **Phase 3** | Multi-tenancy | Admin dashboard, usage billing |
-| **Phase 4** | Deployment flexibility | On-prem, alternative LLMs |
-| **Phase 5** | Advanced features | Fine-tuned models, custom retrievers |
+| Phase | Focus | Status |
+|-------|-------|--------|
+| **Phase 2** | Production hardening | ✅ Complete (SSO, export, observability) |
+| **Phase 3** | Multi-tenancy | ✅ Complete (RBAC, matter-level permissions) |
+| **Phase 4** | Deployment flexibility | ✅ Complete (Provider abstraction) |
+| **Phase 5** | Advanced features | 🚧 In Progress (Fine-tuned models, custom retrievers) |
 
 ---
 
+## Implementation Status
+
+| Feature | Status | FRs |
+|---------|--------|-----|
+| Tenant isolation | ✅ | FR-001 |
+| Matter isolation | ✅ | FR-002 |
+| RBAC | ✅ | FR-003 |
+| Matter-level permissions | ✅ | FR-004 |
+| JWT authentication | ✅ | FR-050 |
+| OIDC SSO | ✅ | FR-051 |
+| Audit logging | ✅ | FR-040 |
+| Data retention policies | ✅ | FR-042 |
+| Provider abstraction (LLM) | ✅ | NFR-032 |
+| Provider abstraction (Search) | ✅ | NFR-034 |
+| Provider abstraction (Embedding) | ✅ | NFR-035 |
+| Provider abstraction (Parser) | ✅ | NFR-036 |
+| Type safety (mypy --strict) | ✅ | NFR-040 |
+| LLM telemetry | ✅ | NFR-030, NFR-045 |
+
+---
+
+*For detailed schemas, see [data-model.md](./architecture/data-model.md)*
+*For provider interfaces, see [interfaces.md](./architecture/interfaces.md)*
 *For feature descriptions, see [FEATURES.md](./FEATURES.md)*
