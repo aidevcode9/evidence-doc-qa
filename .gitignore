@@ -251,3 +251,4 @@ infra/provision.ps1
 *.key
 credentials.json
 secrets.json
+apps/web/tsconfig.tsbuildinfo
