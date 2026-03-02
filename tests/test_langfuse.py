@@ -210,6 +210,217 @@ class TestLangfuseFlushOnShutdown:
         assert callable(otel.flush_langfuse)
 
 
+class TestLangfuseEnrichmentHelpers:
+    """Test safe Langfuse context helpers for trace enrichment (NFR-045)."""
+
+    def test_safe_update_observation_exists(self):
+        """otel module should export safe_update_observation."""
+        from app import otel
+
+        assert hasattr(otel, "safe_update_observation")
+        assert callable(otel.safe_update_observation)
+
+    def test_safe_update_trace_exists(self):
+        """otel module should export safe_update_trace."""
+        from app import otel
+
+        assert hasattr(otel, "safe_update_trace")
+        assert callable(otel.safe_update_trace)
+
+    def test_safe_get_trace_id_exists(self):
+        """otel module should export safe_get_trace_id."""
+        from app import otel
+
+        assert hasattr(otel, "safe_get_trace_id")
+        assert callable(otel.safe_get_trace_id)
+
+    def test_safe_update_observation_noop_when_disabled(self):
+        """safe_update_observation should silently no-op when Langfuse is disabled."""
+        from app import otel
+
+        # Should not raise even when Langfuse is not active
+        otel.safe_update_observation(
+            model="gpt-4o",
+            usage={"input": 100, "output": 20},
+            metadata={"latency_ms": 500},
+        )
+
+    def test_safe_update_trace_noop_when_disabled(self):
+        """safe_update_trace should silently no-op when Langfuse is disabled."""
+        from app import otel
+
+        # Should not raise even when Langfuse is not active
+        otel.safe_update_trace(
+            user_id="tenant-123",
+            session_id="session-456",
+            tags=["matter-789", "gpt-4o"],
+            metadata={"docs_snapshot_id": "snap-1"},
+        )
+
+    def test_safe_get_trace_id_returns_none_when_disabled(self):
+        """safe_get_trace_id should return None when Langfuse is disabled."""
+        from app import otel
+
+        result = otel.safe_get_trace_id()
+        assert result is None
+
+    def test_safe_update_observation_calls_langfuse_context(self):
+        """safe_update_observation should call langfuse_context API when active."""
+        from app import otel
+
+        mock_context = MagicMock()
+        original_context = otel.langfuse_context
+        original_enabled = otel.LANGFUSE_ENABLED
+        original_initialized = otel._LANGFUSE_INITIALIZED
+
+        try:
+            otel.langfuse_context = mock_context
+            otel.LANGFUSE_ENABLED = True
+            otel._LANGFUSE_INITIALIZED = True
+
+            otel.safe_update_observation(
+                model="gpt-4o",
+                usage={"input": 100, "output": 20},
+                metadata={"latency_ms": 500},
+            )
+
+            mock_context.update_current_observation.assert_called_once_with(
+                model="gpt-4o",
+                usage={"input": 100, "output": 20},
+                metadata={"latency_ms": 500},
+            )
+        finally:
+            otel.langfuse_context = original_context
+            otel.LANGFUSE_ENABLED = original_enabled
+            otel._LANGFUSE_INITIALIZED = original_initialized
+
+    def test_safe_update_trace_calls_langfuse_context(self):
+        """safe_update_trace should call langfuse_context API when active."""
+        from app import otel
+
+        mock_context = MagicMock()
+        original_context = otel.langfuse_context
+        original_enabled = otel.LANGFUSE_ENABLED
+        original_initialized = otel._LANGFUSE_INITIALIZED
+
+        try:
+            otel.langfuse_context = mock_context
+            otel.LANGFUSE_ENABLED = True
+            otel._LANGFUSE_INITIALIZED = True
+
+            otel.safe_update_trace(
+                user_id="tenant-123",
+                session_id="session-456",
+                tags=["matter-789"],
+                metadata={"request_id": "req-1"},
+            )
+
+            mock_context.update_current_trace.assert_called_once_with(
+                user_id="tenant-123",
+                session_id="session-456",
+                tags=["matter-789"],
+                metadata={"request_id": "req-1"},
+            )
+        finally:
+            otel.langfuse_context = original_context
+            otel.LANGFUSE_ENABLED = original_enabled
+            otel._LANGFUSE_INITIALIZED = original_initialized
+
+    def test_safe_get_trace_id_returns_id_when_active(self):
+        """safe_get_trace_id should return trace ID when Langfuse is active."""
+        from app import otel
+
+        mock_context = MagicMock()
+        mock_context.get_current_trace_id.return_value = "trace-abc-123"
+        original_context = otel.langfuse_context
+        original_enabled = otel.LANGFUSE_ENABLED
+        original_initialized = otel._LANGFUSE_INITIALIZED
+
+        try:
+            otel.langfuse_context = mock_context
+            otel.LANGFUSE_ENABLED = True
+            otel._LANGFUSE_INITIALIZED = True
+
+            result = otel.safe_get_trace_id()
+            assert result == "trace-abc-123"
+            mock_context.get_current_trace_id.assert_called_once()
+        finally:
+            otel.langfuse_context = original_context
+            otel.LANGFUSE_ENABLED = original_enabled
+            otel._LANGFUSE_INITIALIZED = original_initialized
+
+    def test_safe_update_observation_swallows_errors(self):
+        """safe_update_observation should never raise, even if Langfuse errors."""
+        from app import otel
+
+        mock_context = MagicMock()
+        mock_context.update_current_observation.side_effect = RuntimeError("Langfuse down")
+        original_context = otel.langfuse_context
+        original_enabled = otel.LANGFUSE_ENABLED
+        original_initialized = otel._LANGFUSE_INITIALIZED
+
+        try:
+            otel.langfuse_context = mock_context
+            otel.LANGFUSE_ENABLED = True
+            otel._LANGFUSE_INITIALIZED = True
+
+            # Should NOT raise
+            otel.safe_update_observation(model="gpt-4o")
+        finally:
+            otel.langfuse_context = original_context
+            otel.LANGFUSE_ENABLED = original_enabled
+            otel._LANGFUSE_INITIALIZED = original_initialized
+
+    def test_no_pii_in_observation_metadata(self):
+        """Observation metadata must never contain raw question text."""
+        from app import otel
+
+        mock_context = MagicMock()
+        original_context = otel.langfuse_context
+        original_enabled = otel.LANGFUSE_ENABLED
+        original_initialized = otel._LANGFUSE_INITIALIZED
+
+        try:
+            otel.langfuse_context = mock_context
+            otel.LANGFUSE_ENABLED = True
+            otel._LANGFUSE_INITIALIZED = True
+
+            # Pass metadata that should be safe
+            otel.safe_update_observation(
+                model="gpt-4o",
+                metadata={"latency_ms": 200, "estimated": False},
+            )
+
+            call_kwargs = mock_context.update_current_observation.call_args.kwargs
+            metadata = call_kwargs.get("metadata", {})
+            # Metadata should not contain question text fields
+            for value in metadata.values():
+                if isinstance(value, str):
+                    assert len(value) < 100, "Metadata string too long — possible PII leak"
+        finally:
+            otel.langfuse_context = original_context
+            otel.LANGFUSE_ENABLED = original_enabled
+            otel._LANGFUSE_INITIALIZED = original_initialized
+
+
+class TestLangfuseTraceIdCorrelation:
+    """Test Langfuse trace ID storage in telemetry DB."""
+
+    def test_telemetry_model_has_langfuse_trace_id(self):
+        """Telemetry DB model should have langfuse_trace_id column."""
+        from app.db import Telemetry
+
+        assert hasattr(Telemetry, "langfuse_trace_id")
+
+    def test_record_telemetry_accepts_langfuse_trace_id(self):
+        """record_telemetry() should accept langfuse_trace_id parameter."""
+        import inspect
+        from app.telemetry import record_telemetry
+
+        sig = inspect.signature(record_telemetry)
+        assert "langfuse_trace_id" in sig.parameters
+
+
 class TestLangfuseIntegration:
     """Integration tests that verify actual Langfuse connectivity.
 

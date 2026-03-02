@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from app import evidence, otel, policy, retrieval, verification, ingestion
-from app.otel import get_observe_decorator
+from app.otel import get_observe_decorator, safe_update_trace, safe_get_trace_id
 from app.db import QAMessage, get_or_create_session, insert_qa_message
 from app.config import (
     MODEL_ID,
@@ -87,6 +87,14 @@ def execute_ask(
         "question_len": question_len,
     }
     trace_metadata = {k: v for k, v in trace_metadata.items() if v}
+
+    # Enrich Langfuse trace root with tenant/session context (NFR-045)
+    safe_update_trace(
+        user_id=tenant_id,
+        session_id=session_id,
+        tags=[t for t in [matter_id, MODEL_ID] if t],
+        metadata={"docs_snapshot_id": docs_snapshot_id, "request_id": request_id},
+    )
 
     if policy.is_injection_attempt(question):
         logger.warning(f"Policy Trigger [{request_id}]: Injection Attempt Detected")
@@ -649,6 +657,7 @@ def _record_request_internal(
         question_len=question_len,
         answer_len=answer_len,
         trace_metadata=trace_metadata,
+        langfuse_trace_id=safe_get_trace_id(),
     )
 
 

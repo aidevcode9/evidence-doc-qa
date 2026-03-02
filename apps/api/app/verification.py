@@ -15,7 +15,7 @@ from app.config import (
     AZURE_OPENAI_CHAT_ENDPOINT,
     MODEL_ID,
 )
-from app.otel import get_observe_decorator
+from app.otel import get_observe_decorator, safe_update_observation
 from app.telemetry import logger
 
 # Get Langfuse @observe decorator (or no-op fallback)
@@ -102,6 +102,19 @@ def verify_relevance(
         usage = _extract_usage(response, system_prompt, user_prompt, raw)
         status, span, reason = _parse_verifier_output(raw, chunk_text)
         latency_ms = int((time.perf_counter() - start_time) * 1000)
+        # Enrich Langfuse observation with model/token data (NFR-045)
+        safe_update_observation(
+            model=MODEL_ID,
+            usage={
+                "input": int(usage.get("prompt_tokens") or 0),
+                "output": int(usage.get("completion_tokens") or 0),
+            },
+            metadata={
+                "latency_ms": latency_ms,
+                "estimated": bool(usage.get("estimated")),
+                "verdict": "VERIFIED" if status == "verified" else "REJECTED",
+            },
+        )
         logger.info(
             "Verifier result: request_id=%s chunk_id=%s verdict=%s reason=%s finish_reason=%s latency_ms=%s",
             request_id or "unknown",

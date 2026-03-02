@@ -165,6 +165,80 @@ def setup_langfuse() -> None:
         logger.warning("Langfuse initialization failed: %s", exc)
 
 
+def safe_update_observation(
+    *,
+    model: str | None = None,
+    usage: dict[str, int] | None = None,
+    metadata: dict[str, object] | None = None,
+) -> None:
+    """Attach model/token/cost to current @observe span. No-op if Langfuse disabled.
+
+    Safe to call unconditionally — silently does nothing if Langfuse is not
+    active or if the underlying API call fails.
+    """
+    if not _LANGFUSE_INITIALIZED or langfuse_context is None:
+        return
+
+    try:
+        kwargs: dict[str, object] = {}
+        if model is not None:
+            kwargs["model"] = model
+        if usage is not None:
+            kwargs["usage"] = usage
+        if metadata is not None:
+            kwargs["metadata"] = metadata
+        langfuse_context.update_current_observation(**kwargs)
+    except Exception as exc:  # noqa: BLE001 - never break request pipeline
+        logger.debug("Langfuse update_current_observation failed: %s", exc)
+
+
+def safe_update_trace(
+    *,
+    user_id: str | None = None,
+    session_id: str | None = None,
+    tags: list[str] | None = None,
+    metadata: dict[str, object] | None = None,
+) -> None:
+    """Attach identity/session to current trace root. No-op if Langfuse disabled.
+
+    Safe to call unconditionally — silently does nothing if Langfuse is not
+    active or if the underlying API call fails.
+    """
+    if not _LANGFUSE_INITIALIZED or langfuse_context is None:
+        return
+
+    try:
+        kwargs: dict[str, object] = {}
+        if user_id is not None:
+            kwargs["user_id"] = user_id
+        if session_id is not None:
+            kwargs["session_id"] = session_id
+        if tags is not None:
+            kwargs["tags"] = tags
+        if metadata is not None:
+            kwargs["metadata"] = metadata
+        langfuse_context.update_current_trace(**kwargs)
+    except Exception as exc:  # noqa: BLE001 - never break request pipeline
+        logger.debug("Langfuse update_current_trace failed: %s", exc)
+
+
+def safe_get_trace_id() -> str | None:
+    """Get current Langfuse trace ID for DB correlation. None if disabled.
+
+    Safe to call unconditionally — returns None if Langfuse is not active
+    or if the underlying API call fails.
+    """
+    if not _LANGFUSE_INITIALIZED or langfuse_context is None:
+        return None
+
+    try:
+        trace_id: str = langfuse_context.get_current_trace_id()
+        return trace_id if trace_id else None
+    except Exception as exc:  # noqa: BLE001 - never break request pipeline
+        logger.debug("Langfuse get_current_trace_id failed: %s", exc)
+        return None
+
+
 def flush_langfuse() -> None:
     """Flush pending Langfuse traces on shutdown.
 

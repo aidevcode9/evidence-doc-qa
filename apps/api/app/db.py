@@ -89,6 +89,7 @@ class Telemetry(Base):
     refusal_code: Mapped[str | None] = mapped_column(String, nullable=True)
     failure_label: Mapped[str | None] = mapped_column(String, nullable=True)
     trace_metadata: Mapped[str | None] = mapped_column(Text, nullable=True)
+    langfuse_trace_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class QASession(Base):

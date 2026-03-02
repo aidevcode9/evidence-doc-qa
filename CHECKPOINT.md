@@ -4,6 +4,32 @@
 
 ---
 
+## [2026-03-01] NFR-045: Langfuse Cloud Production Integration (Enrichment)
+
+**Status:** ✅ Complete
+**Files changed:**
+- apps/api/app/otel.py (modified — added safe_update_observation, safe_update_trace, safe_get_trace_id)
+- apps/api/app/verification.py (modified — added Langfuse observation enrichment after LLM call)
+- apps/api/app/services/ask_service.py (modified — added trace root context + trace ID capture)
+- apps/api/app/db.py (modified — added langfuse_trace_id column to Telemetry)
+- apps/api/app/telemetry.py (modified — added langfuse_trace_id param + exposed in load_window_telemetry)
+- alembic/versions/0011_add_langfuse_trace_id.py (new — migration for langfuse_trace_id column)
+- tests/test_langfuse.py (modified — added 13 new tests in 2 test classes)
+
+**Verification:**
+- [x] `ruff check apps/` — passed
+- [x] `mypy apps/api/app --strict` — passed on changed files (8 pre-existing errors in security.py)
+- [x] `pytest tests/test_langfuse.py -v` — 24 passed, 2 failed (pre-existing email-validator), 3 skipped
+- [x] `/wsskeptic` adversarial review — 0 CRITICAL, 2 HIGH (fixed), 0 MEDIUM, 2 LOW (accepted)
+
+**Skeptic fixes applied:**
+- H1: Filter None values from Langfuse tags list (ask_service.py:95)
+- H2: Add langfuse_trace_id to load_window_telemetry output (telemetry.py:88)
+
+**Notes:** Previous NFR-045 work (01-24) added @observe decorator infrastructure but traces were empty in Langfuse Cloud — no model/token/cost data captured. This session adds the enrichment layer that makes traces actually useful in production. Deployment requires setting LANGFUSE_ENABLED=1 + Langfuse Cloud keys.
+
+---
+
 ## Session: 2026-01-21
 
 ### Pre-Flight Check

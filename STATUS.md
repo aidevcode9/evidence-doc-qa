@@ -1,6 +1,6 @@
 # STATUS.md
 
-Last updated: 2026-01-26
+Last updated: 2026-03-01
 
 ---
 
@@ -33,6 +33,9 @@ Last updated: 2026-01-26
 
 | Task | FR | Date |
 |------|-----|------|
+| **Langfuse Cloud production enrichment** | NFR-045 | 03-01 |
+| **Documentation audit + data-model sync** | DOCS | 03-01 |
+| **Missing sso_states migration (0010)** | INFRA | 03-01 |
 | **@observe decorators for LLM tracing** | NFR-045 | 01-24 |
 | **Langfuse LLM Observability** | NFR-045 | 01-24 |
 | **Frontend Login UI + Google SSO** | FR-053 | 01-25 |
@@ -155,10 +158,10 @@ Last updated: 2026-01-26
 
 | NFR | Requirement | Status |
 |-----|-------------|--------|
-| NFR-045 | Langfuse LLM observability integration | ✅ Complete (Phase 1 + 2) |
+| NFR-045 | Langfuse LLM observability integration | ✅ Complete (Infrastructure + Enrichment) |
 | NFR-046 | LLM trace debugging UI | 🔲 Pending (Langfuse dashboard) |
 
-**NFR-045 Complete:** Infrastructure + @observe decorators shipped. verify_relevance(), _call_openai(), execute_ask() all traced with PII-safe settings.
+**NFR-045 Complete:** Infrastructure + @observe decorators + trace enrichment shipped. Traces now include model name, token counts, latency, verdict, tenant/session context. DB correlation via langfuse_trace_id column. Deploy with LANGFUSE_ENABLED=1 + Langfuse Cloud keys.
 
 ---
 

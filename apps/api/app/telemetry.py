@@ -36,6 +36,7 @@ def record_telemetry(
     question_len: int = 0,
     answer_len: int = 0,
     trace_metadata: dict[str, Any] | None = None,
+    langfuse_trace_id: str | None = None,
 ) -> None:
     # Estimate tokens if not provided (approx 4 chars per token)
     est_in = tokens_in if tokens_in is not None else (question_len // 4 if question_len else 0)
@@ -60,6 +61,7 @@ def record_telemetry(
             refusal_code=refusal_code,
             failure_label=failure_label,
             trace_metadata=json.dumps(trace_metadata) if trace_metadata else None,
+            langfuse_trace_id=langfuse_trace_id,
         )
     )
 
@@ -83,6 +85,7 @@ def load_window_telemetry(hours: int = 24, limit: int = 500) -> list[dict[str, A
             "refusal_code": row.refusal_code,
             "failure_label": row.failure_label,
             "trace_metadata": json.loads(row.trace_metadata) if row.trace_metadata else None,
+            "langfuse_trace_id": row.langfuse_trace_id,
         }
         for row in rows
     ]
