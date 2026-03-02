@@ -171,11 +171,13 @@ CREATE TABLE telemetry (
     cache_hit          BOOLEAN NOT NULL,    -- Whether cache was used
     refusal_code       STRING NULL,         -- If request refused
     failure_label      STRING NULL,         -- If request failed
-    trace_metadata     TEXT NULL            -- OTEL/Langfuse trace IDs (JSON)
+    trace_metadata     TEXT NULL,           -- JSON blob: retrieval scores, cost breakdown, debug info
+    langfuse_trace_id  STRING NULL          -- NFR-045: Langfuse trace ID for cross-reference
 );
 
 CREATE INDEX ix_telemetry_tenant_id ON telemetry(tenant_id);
 CREATE INDEX ix_telemetry_matter_id ON telemetry(matter_id);
+CREATE INDEX ix_telemetry_langfuse ON telemetry(langfuse_trace_id);
 ```
 
 **Usage:** Track LLM costs, debug issues, correlate with Langfuse traces.
@@ -342,6 +344,7 @@ All tables tracked via Alembic migrations in `alembic/versions/`:
 | 0008 | audit_events |
 | 0009 | retention_policies |
 | 0010 | sso_states |
+| 0011 | (Added langfuse_trace_id to telemetry — NFR-045) |
 
 ---
 

@@ -239,6 +239,41 @@ def safe_get_trace_id() -> str | None:
         return None
 
 
+def redact_for_langfuse(
+    *,
+    question_len: int = 0,
+    answer_len: int = 0,
+    citation_count: int = 0,
+    evidence_grade: str | None = None,
+    evidence_label: str | None = None,
+    refusal_code: str | None = None,
+    verification_status: str | None = None,
+    doc_count: int | None = None,
+) -> dict[str, object]:
+    """Create PII-safe summary for Langfuse observation metadata.
+
+    Returns a dict with only safe metrics — never raw question text,
+    answer text, document snippets, or document names (which may contain
+    client names in a law firm context). Compliant with NFR-004.
+    """
+    summary: dict[str, object] = {
+        "question_len": question_len,
+        "answer_len": answer_len,
+        "citation_count": citation_count,
+    }
+    if evidence_grade is not None:
+        summary["evidence_grade"] = evidence_grade
+    if evidence_label is not None:
+        summary["evidence_label"] = evidence_label
+    if refusal_code is not None:
+        summary["refusal_code"] = refusal_code
+    if verification_status is not None:
+        summary["verification_status"] = verification_status
+    if doc_count is not None:
+        summary["doc_count"] = doc_count
+    return summary
+
+
 def flush_langfuse() -> None:
     """Flush pending Langfuse traces on shutdown.
 

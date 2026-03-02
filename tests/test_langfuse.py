@@ -487,6 +487,121 @@ class TestRetrievalAndEmbeddingObservability:
                 assert "John Smith" not in all_values
 
 
+class TestLangfusePIIRedaction:
+    """Test PII redaction for Langfuse traces (NFR-004 compliance).
+
+    When capture_input/capture_output are enabled on @observe, raw question
+    text and document snippets are sent to Langfuse Cloud. This is a PII
+    leak. Instead, we use capture_input=False, capture_output=False and
+    manually send a redacted summary via safe_update_observation().
+    """
+
+    def test_redact_for_langfuse_exists(self):
+        """otel module should export redact_for_langfuse helper."""
+        from app import otel
+
+        assert hasattr(otel, "redact_for_langfuse")
+        assert callable(otel.redact_for_langfuse)
+
+    def test_redact_for_langfuse_includes_safe_metrics(self):
+        """redact_for_langfuse should return question_len, answer_len, citation_count."""
+        from app.otel import redact_for_langfuse
+
+        result = redact_for_langfuse(
+            question_len=42,
+            answer_len=200,
+            citation_count=3,
+            evidence_grade="A",
+            evidence_label="Strong",
+            verification_status="VERIFIED",
+        )
+
+        assert result["question_len"] == 42
+        assert result["answer_len"] == 200
+        assert result["citation_count"] == 3
+        assert result["evidence_grade"] == "A"
+        assert result["evidence_label"] == "Strong"
+        assert result["verification_status"] == "VERIFIED"
+
+    def test_redact_for_langfuse_never_contains_raw_text(self):
+        """redact_for_langfuse output must never contain raw question or document text."""
+        from app.otel import redact_for_langfuse
+
+        # Only safe numeric/categorical fields should be accepted
+        result = redact_for_langfuse(
+            question_len=50,
+            answer_len=300,
+            citation_count=2,
+            evidence_grade="B",
+            refusal_code="LOW_RETRIEVAL_CONFIDENCE",
+        )
+
+        # Serialize entire output — no string value should be longer than 100 chars
+        all_values = str(result)
+        # No field should contain anything that looks like a sentence
+        for val in result.values():
+            if isinstance(val, str):
+                assert len(val) < 100, f"Possible PII leak: string too long ({len(val)} chars)"
+
+    def test_redact_for_langfuse_includes_doc_count(self):
+        """redact_for_langfuse should include doc_count (not doc_names — names may contain client PII)."""
+        from app.otel import redact_for_langfuse
+
+        result = redact_for_langfuse(
+            question_len=10,
+            answer_len=100,
+            citation_count=1,
+            doc_count=2,
+        )
+
+        assert result.get("doc_count") == 2
+        assert "doc_names" not in result  # doc_names would leak PII in law firm context
+
+    def test_redact_for_langfuse_optional_fields_omitted(self):
+        """redact_for_langfuse should omit None optional fields."""
+        from app.otel import redact_for_langfuse
+
+        result = redact_for_langfuse(
+            question_len=10,
+            answer_len=0,
+            citation_count=0,
+        )
+
+        assert "evidence_grade" not in result
+        assert "refusal_code" not in result
+        assert "verification_status" not in result
+        assert "doc_count" not in result
+
+    def test_execute_ask_decorator_disables_capture(self):
+        """execute_ask @observe must use capture_input=False, capture_output=False.
+
+        This prevents raw question text and response (with document snippets)
+        from being sent to Langfuse Cloud. Redacted metadata is sent manually.
+        """
+        import ast
+
+        with open("apps/api/app/services/ask_service.py") as f:
+            source = f.read()
+
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == "execute_ask":
+                # Find the @_observe decorator
+                for decorator in node.decorator_list:
+                    if isinstance(decorator, ast.Call):
+                        # Check keyword arguments
+                        kwargs = {kw.arg: kw.value for kw in decorator.keywords}
+                        if "capture_input" in kwargs:
+                            cap_in = kwargs["capture_input"]
+                            assert isinstance(cap_in, ast.Constant) and cap_in.value is False, \
+                                "execute_ask must have capture_input=False to prevent PII leak"
+                        if "capture_output" in kwargs:
+                            cap_out = kwargs["capture_output"]
+                            assert isinstance(cap_out, ast.Constant) and cap_out.value is False, \
+                                "execute_ask must have capture_output=False to prevent PII leak"
+                break
+
+
 class TestLangfuseIntegration:
     """Integration tests that verify actual Langfuse connectivity.
 

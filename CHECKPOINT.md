@@ -4,6 +4,32 @@
 
 ---
 
+## 2026-03-02 NFR-045: Langfuse PII Redaction
+
+**Status:** ✅ Complete
+**Files changed:**
+- apps/api/app/otel.py (modified — added `redact_for_langfuse()`)
+- apps/api/app/services/ask_service.py (modified — reverted `capture_input=True` → `False`, added redacted enrichment)
+- tests/test_langfuse.py (modified — added `TestLangfusePIIRedaction` class, 6 tests)
+- REQUIREMENTS.md (modified — NFR-045 acceptance criteria updated with PII redaction)
+- STATUS.md (modified — added PII redaction entry)
+
+**Verification:**
+- [x] `ruff check apps/` — passed
+- [x] `mypy apps/api/app --strict` — pre-existing errors only (slowapi import)
+- [x] `pytest tests/test_langfuse.py` — 33/33 passed (excluding pre-existing email_validator + credential-gated)
+- [x] `/wsskeptic` — PASS (0 CRITICAL, 0 HIGH, 1 MEDIUM fixed)
+
+**Skeptic MEDIUM fix:** Replaced `doc_names` with `doc_count` to prevent document filenames (which may contain client names in law firm context) from leaking to Langfuse Cloud.
+
+**Notes:**
+- `@observe` decorators still create trace spans with timing/hierarchy — `capture_input=False` only prevents raw function args from being sent
+- `redact_for_langfuse()` sends: question_len, answer_len, citation_count, evidence_grade, evidence_label, verification_status, refusal_code, doc_count
+- Both success and refusal paths enriched with redacted metadata
+- Production deployment: no action needed (already deployed with `capture_input=False` default; this session reverted the temporary `True` change)
+
+---
+
 ## 2026-03-01 NFR-045: Langfuse Pipeline Coverage + Doc Sync
 
 **Status:** ✅ Complete

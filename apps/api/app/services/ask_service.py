@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from app import evidence, otel, policy, retrieval, verification, ingestion
-from app.otel import get_observe_decorator, safe_update_trace, safe_get_trace_id
+from app.otel import get_observe_decorator, safe_update_trace, safe_update_observation, safe_get_trace_id, redact_for_langfuse
 from app.db import QAMessage, get_or_create_session, insert_qa_message
 from app.config import (
     MODEL_ID,
@@ -576,7 +576,18 @@ def execute_ask(
         debug_candidates=debug_candidates,
         version_snapshot=version_snapshot,
     )
-    
+
+    # Enrich Langfuse with PII-safe summary (NFR-004 compliant)
+    safe_update_observation(metadata=redact_for_langfuse(
+        question_len=question_len,
+        answer_len=len(answer_text),
+        citation_count=len(citations),
+        evidence_grade=grade,
+        evidence_label=label,
+        verification_status=verification_status,
+        doc_count=len(set(c.doc_id for c in citations)),
+    ))
+
     _record_request_internal(
         request_id=request_id,
         tenant_id=tenant_id,
@@ -693,6 +704,15 @@ def _emit_refusal(
         debug_candidates=debug_candidates,
         version_snapshot=version_snapshot,
     )
+
+    # Enrich Langfuse with PII-safe refusal summary (NFR-004 compliant)
+    safe_update_observation(metadata=redact_for_langfuse(
+        question_len=question_len,
+        answer_len=0,
+        citation_count=len(citations) if citations else 0,
+        refusal_code=str(refusal_code.value) if refusal_code else None,
+    ))
+
     _record_request_internal(
         request_id=request_id,
         tenant_id=tenant_id or "unknown",

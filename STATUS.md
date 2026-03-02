@@ -1,6 +1,6 @@
 # STATUS.md
 
-Last updated: 2026-03-01
+Last updated: 2026-03-02
 
 ---
 
@@ -33,6 +33,7 @@ Last updated: 2026-03-01
 
 | Task | FR | Date |
 |------|-----|------|
+| **Langfuse PII redaction (redact_for_langfuse + capture_input=False)** | NFR-045 | 03-02 |
 | **Langfuse pipeline coverage (@observe on retrieval + embeddings)** | NFR-045 | 03-01 |
 | **Doc sync: llm_calls → telemetry (16 refs across 6 files)** | DOCS | 03-01 |
 | **Deployment.md rewritten to match actual prod** | DOCS | 03-01 |
@@ -164,7 +165,7 @@ Last updated: 2026-03-01
 | NFR-045 | Langfuse LLM observability integration | ✅ Complete (Full Pipeline) |
 | NFR-046 | LLM trace debugging UI | 🔲 Pending (Langfuse dashboard) |
 
-**NFR-045 Complete:** Full pipeline traced: `execute_ask` → `hybrid_search` → `embed_texts_with_usage` → `verify_relevance` → `call_openai`. Model, tokens, latency, verdict, tenant/session context. DB correlation via `langfuse_trace_id`. Deploy with `LANGFUSE_ENABLED=1` + Langfuse Cloud keys.
+**NFR-045 Complete:** Full pipeline traced: `execute_ask` → `hybrid_search` → `embed_texts_with_usage` → `verify_relevance` → `call_openai`. Model, tokens, latency, verdict, tenant/session context. DB correlation via `langfuse_trace_id`. PII-safe: `capture_input=False, capture_output=False` on all decorators; `redact_for_langfuse()` sends safe metrics only (question_len, citation_count, evidence_grade — never raw text). Deploy with `LANGFUSE_ENABLED=1` + Langfuse Cloud keys.
 
 ---
 

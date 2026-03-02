@@ -299,7 +299,7 @@ Tests:
 
 | ID | Requirement | Acceptance Criteria |
 |----|-------------|---------------------|
-| NFR-045 | Langfuse Cloud integration for ALL LLM calls | Every LLM call logged to both `telemetry` table AND Langfuse; `langfuse_trace_id` stored for correlation; visual trace viewer accessible |
+| NFR-045 | Langfuse Cloud integration for ALL LLM calls | Every LLM call logged to both `telemetry` table AND Langfuse; `langfuse_trace_id` stored for correlation; visual trace viewer accessible; **PII-safe**: `capture_input=False, capture_output=False` on all `@observe` decorators; redacted summaries sent via `redact_for_langfuse()` (question_len, answer_len, citation_count, evidence_grade — never raw text or document names) |
 | NFR-046 | Self-hosted Langfuse option for Enterprise/On-Prem | Docker Compose config for self-hosted Langfuse; `LANGFUSE_HOST` points to internal URL; data stays in customer VPC |
 
 #### NFR-045 Setup (Langfuse Cloud)
