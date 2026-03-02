@@ -33,6 +33,9 @@ Last updated: 2026-03-01
 
 | Task | FR | Date |
 |------|-----|------|
+| **Langfuse pipeline coverage (@observe on retrieval + embeddings)** | NFR-045 | 03-01 |
+| **Doc sync: llm_calls → telemetry (16 refs across 6 files)** | DOCS | 03-01 |
+| **Deployment.md rewritten to match actual prod** | DOCS | 03-01 |
 | **Langfuse Cloud production enrichment** | NFR-045 | 03-01 |
 | **Documentation audit + data-model sync** | DOCS | 03-01 |
 | **Missing sso_states migration (0010)** | INFRA | 03-01 |
@@ -158,10 +161,10 @@ Last updated: 2026-03-01
 
 | NFR | Requirement | Status |
 |-----|-------------|--------|
-| NFR-045 | Langfuse LLM observability integration | ✅ Complete (Infrastructure + Enrichment) |
+| NFR-045 | Langfuse LLM observability integration | ✅ Complete (Full Pipeline) |
 | NFR-046 | LLM trace debugging UI | 🔲 Pending (Langfuse dashboard) |
 
-**NFR-045 Complete:** Infrastructure + @observe decorators + trace enrichment shipped. Traces now include model name, token counts, latency, verdict, tenant/session context. DB correlation via langfuse_trace_id column. Deploy with LANGFUSE_ENABLED=1 + Langfuse Cloud keys.
+**NFR-045 Complete:** Full pipeline traced: `execute_ask` → `hybrid_search` → `embed_texts_with_usage` → `verify_relevance` → `call_openai`. Model, tokens, latency, verdict, tenant/session context. DB correlation via `langfuse_trace_id`. Deploy with `LANGFUSE_ENABLED=1` + Langfuse Cloud keys.
 
 ---
 

@@ -20,7 +20,7 @@
 
 ### When touching any LLM/AI code:
 → **MANDATORY:** Verify telemetry wrapper is used (see LLM Telemetry section below).
-→ Check: Is `llm_calls` table being populated? Are OTEL spans emitting?
+→ Check: Is `telemetry` table being populated? Are OTEL spans emitting?
 → Add test for telemetry if missing.
 
 ### When implementing any feature:
@@ -192,14 +192,16 @@ async def traced_llm_call(
 ### Database Logging (Required for Audit)
 
 ```python
-# Log to llm_calls table per ARCHITECTURE.md
-await session.execute(
-    text("""
-        INSERT INTO llm_calls (id, session_id, provider, model, 
-                               prompt_tokens, completion_tokens, latency_ms, status)
-        VALUES (:id, :sid, :provider, :model, :pt, :ct, :latency, :status)
-    """),
-    {...}
+# Log to telemetry table per ARCHITECTURE.md
+from app.telemetry import record_telemetry
+
+record_telemetry(
+    request_id=request_id, tenant_id=tenant_id, matter_id=matter_id,
+    docs_snapshot_id=docs_snapshot_id, prompt_version=PROMPT_VERSION,
+    retrieval_version=RETRIEVAL_VERSION, model_id=MODEL_ID,
+    parser_mode=PARSER_MODE, timestamp_utc=timestamp_utc,
+    latency_ms=latency_ms, tokens_in=tokens_in, tokens_out=tokens_out,
+    cost_est=cost_est, langfuse_trace_id=safe_get_trace_id(),
 )
 ```
 
@@ -207,7 +209,7 @@ await session.execute(
 
 - [ ] All LLM calls use `traced_llm_call()` or equivalent wrapper
 - [ ] OTEL exporter configured (console for dev, OTLP for prod)
-- [ ] `llm_calls` table populated on each call
+- [ ] `telemetry` table populated on each call
 - [ ] Test exists: `tests/test_telemetry.py::test_llm_call_emits_span`
 - [ ] No raw client calls bypassing wrapper
 

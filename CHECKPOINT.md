@@ -4,6 +4,38 @@
 
 ---
 
+## 2026-03-01 NFR-045: Langfuse Pipeline Coverage + Doc Sync
+
+**Status:** ✅ Complete
+**Files changed:**
+- apps/api/app/retrieval.py (modified — @observe + _enrich_hybrid_observation)
+- apps/api/app/embeddings.py (modified — @observe + safe_update_observation)
+- tests/test_langfuse.py (modified — 4 new tests in TestRetrievalAndEmbeddingObservability)
+- tests/test_telemetry.py (modified — renamed TestLLMCallsTable → TestTelemetryTable)
+- CLAUDE.md (modified — llm_calls → telemetry, 4 refs)
+- REQUIREMENTS.md (modified — llm_calls → telemetry, 3 refs)
+- ARCHITECTURE.md (modified — llm_calls → telemetry, 1 ref)
+- docs/architecture/observability.md (rewritten — telemetry schema, Langfuse waterfall)
+- docs/architecture/README.md (modified — llm_calls → telemetry, 1 ref)
+- docs/architecture/deployment.md (rewritten — matches actual prod deployment)
+
+**Verification:**
+- [x] `ruff check apps/` — passed
+- [x] `mypy apps/api/app --strict` — 16 pre-existing errors (slowapi/email_validator stubs), changed files clean
+- [x] `pytest tests/ -v` — 351 passed, 56 failed (pre-existing), 29 errors (pre-existing)
+- [x] `pytest tests/test_langfuse.py::TestRetrievalAndEmbeddingObservability` — 4/4 passed
+- [x] `/wsskeptic` — 0 CRITICAL, 0 HIGH, 1 LOW (import order, fixed)
+- [x] Zero `llm_calls` references remaining (grep verified)
+
+**Langfuse waterfall after this:**
+```
+execute_ask → hybrid_search → embed_texts_with_usage → verify_relevance → call_openai
+```
+
+**Notes:** Deployment.md also rewritten this session (separate from NFR-045). LANGFUSE_ENABLED default changed to 1 in .env.example by user.
+
+---
+
 ## [2026-03-01] NFR-045: Langfuse Cloud Production Integration (Enrichment)
 
 **Status:** ✅ Complete

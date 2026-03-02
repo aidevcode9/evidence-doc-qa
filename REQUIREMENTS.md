@@ -269,7 +269,7 @@ Tests:
 
 | ID | Requirement | Acceptance Criteria |
 |----|-------------|---------------------|
-| NFR-030 | LLM provider/model recorded in audit log for every response | `llm_calls` table has provider, model, tokens, latency |
+| NFR-030 | LLM provider/model recorded in audit log for every response | `telemetry` table has model_id, tokens_in, tokens_out, latency_ms |
 | NFR-031 | On-prem local LLM displays "Local Model" badge in UI | Badge visible; docs state quality trade-offs |
 | NFR-032 | LLM provider abstracted behind `LLMClient` interface | Swap providers via config only, no code changes |
 | NFR-033 | Default providers by tier: Cloud (Azure OpenAI + Anthropic/Gemini fallback), VPC (Azure OpenAI), On-Prem (Ollama + Llama 3.2) | Each tier works with documented provider; 4 providers implemented: azure_openai, anthropic, gemini, ollama |
@@ -299,7 +299,7 @@ Tests:
 
 | ID | Requirement | Acceptance Criteria |
 |----|-------------|---------------------|
-| NFR-045 | Langfuse Cloud integration for ALL LLM calls | Every LLM call logged to both `llm_calls` table AND Langfuse; `langfuse_trace_id` stored for correlation; visual trace viewer accessible |
+| NFR-045 | Langfuse Cloud integration for ALL LLM calls | Every LLM call logged to both `telemetry` table AND Langfuse; `langfuse_trace_id` stored for correlation; visual trace viewer accessible |
 | NFR-046 | Self-hosted Langfuse option for Enterprise/On-Prem | Docker Compose config for self-hosted Langfuse; `LANGFUSE_HOST` points to internal URL; data stays in customer VPC |
 
 #### NFR-045 Setup (Langfuse Cloud)
@@ -339,7 +339,7 @@ For Enterprise/VPC/On-Prem deployments requiring data sovereignty:
 | doc_chunks | id, document_id, tenant_id, matter_id, page_number, char_start, char_end, text, embedding |
 | qa_sessions | id, tenant_id, matter_id, created_by |
 | qa_messages | id, session_id, role, content, citations_json |
-| llm_calls | id, session_id, message_id, provider, model, prompt_tokens, completion_tokens, latency_ms, langfuse_trace_id |
+| telemetry | request_id, tenant_id, matter_id, docs_snapshot_id, model_id, tokens_in, tokens_out, latency_ms, cost_est, langfuse_trace_id |
 | audit_events | id, tenant_id, matter_id, user_id, event_type, event_json |
 | usage_daily | tenant_id, date, queries_count, pages_ingested, llm_tokens_prompt, llm_tokens_completion |
 

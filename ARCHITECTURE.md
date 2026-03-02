@@ -18,7 +18,7 @@
 |--------|---------|--------------|
 | [docs/architecture/data-model.md](docs/architecture/data-model.md) | DB schemas (tenants, docs, chunks, Q&A, audit) | Adding tables, understanding isolation |
 | [docs/architecture/interfaces.md](docs/architecture/interfaces.md) | LLM, Embedding, Search, Parser abstractions | Implementing NFR-032/034/035/036 |
-| [docs/architecture/observability.md](docs/architecture/observability.md) | LLM tracking, llm_calls table, Langfuse | NFR-030, debugging LLM calls |
+| [docs/architecture/observability.md](docs/architecture/observability.md) | LLM tracking, telemetry table, Langfuse | NFR-030, debugging LLM calls |
 | [docs/architecture/deployment.md](docs/architecture/deployment.md) | Tiers, Docker, Kubernetes, env vars | Deploying, switching providers |
 | [docs/architecture/migrations.md](docs/architecture/migrations.md) | Alembic commands and patterns | Schema changes |
 

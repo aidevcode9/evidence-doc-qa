@@ -15,7 +15,7 @@
 |--------|---------|--------------|
 | [data-model.md](data-model.md) | DB schemas (tenants, docs, chunks, Q&A) | Adding tables, understanding isolation |
 | [interfaces.md](interfaces.md) | LLM, Embedding, Search, Parser abstractions | Implementing new providers |
-| [observability.md](observability.md) | LLM tracking, Langfuse, llm_calls table | Adding telemetry, debugging LLM calls |
+| [observability.md](observability.md) | LLM tracking, Langfuse, telemetry table | Adding telemetry, debugging LLM calls |
 | [deployment.md](deployment.md) | Tiers, Docker, Kubernetes, env vars | Deploying, switching providers |
 | [migrations.md](migrations.md) | Alembic commands and patterns | Schema changes |
 

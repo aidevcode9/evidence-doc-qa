@@ -140,38 +140,37 @@ class TestLLMTelemetry:
         pass  # TODO: Implement with real telemetry wrapper
 
 
-class TestLLMCallsTable:
-    """Tests for llm_calls database logging."""
+class TestTelemetryTable:
+    """Tests for telemetry database logging."""
 
     @pytest.mark.asyncio
-    async def test_llm_call_logged_to_database(self, mock_llm_client):
-        """Every LLM call must create a record in llm_calls table."""
+    async def test_request_logged_to_database(self, mock_llm_client):
+        """Every request must create a record in telemetry table."""
         # This tests NFR-030: LLM provider/model recorded in audit log
-        
-        # from app.telemetry import traced_llm_call
+
+        # from app.telemetry import record_telemetry
         # from app.db import get_db_session
-        
-        # response = await traced_llm_call(
-        #     client=mock_llm_client,
-        #     prompt="Test prompt",
-        #     model="gpt-4o",
-        #     session_id="test-session-123",
+
+        # record_telemetry(
+        #     request_id="test-request-123", tenant_id="t1", matter_id="m1",
+        #     docs_snapshot_id="snap-1", prompt_version="v3.1.0",
+        #     retrieval_version="v3.1.0", model_id="gpt-4o",
+        #     parser_mode="tier0", timestamp_utc="2026-03-01T00:00:00Z",
+        #     latency_ms=500, tokens_in=100, tokens_out=50,
         # )
-        
+
         # Verify database record
         # async with get_db_session() as session:
         #     result = await session.execute(
-        #         text("SELECT * FROM llm_calls WHERE session_id = :sid"),
-        #         {"sid": "test-session-123"}
+        #         text("SELECT * FROM telemetry WHERE request_id = :rid"),
+        #         {"rid": "test-request-123"}
         #     )
         #     row = result.fetchone()
-        #     
+        #
         #     assert row is not None
-        #     assert row.provider == "azure_openai"
-        #     assert row.model == "gpt-4o"
-        #     assert row.prompt_tokens == 100
-        #     assert row.completion_tokens == 50
-        #     assert row.status == "success"
+        #     assert row.model_id == "gpt-4o"
+        #     assert row.tokens_in == 100
+        #     assert row.tokens_out == 50
         pass  # TODO: Implement with real database
 
 
