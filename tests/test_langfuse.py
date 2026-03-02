@@ -4,6 +4,7 @@ TDD: These tests define the expected Langfuse integration behavior.
 """
 
 import os
+from typing import Any
 from unittest.mock import patch, MagicMock
 import pytest
 
@@ -419,6 +420,71 @@ class TestLangfuseTraceIdCorrelation:
 
         sig = inspect.signature(record_telemetry)
         assert "langfuse_trace_id" in sig.parameters
+
+
+class TestRetrievalAndEmbeddingObservability:
+    """Test @observe decorators on retrieval and embedding functions (NFR-045)."""
+
+    def test_hybrid_search_calls_safe_update_observation(self):
+        """hybrid_search should enrich Langfuse observation with search metadata."""
+        mock_usage: dict[str, Any] = {"prompt_tokens": 10, "total_tokens": 10, "estimated": False, "source": "local"}
+        with patch("app.retrieval.embed_texts_with_usage", return_value=([[0.1] * 16], mock_usage)), \
+             patch("app.retrieval._azure_enabled", return_value=False), \
+             patch("app.retrieval._load_index_records", return_value=[]), \
+             patch("app.retrieval._fallback_overlap", return_value=[]), \
+             patch("app.retrieval.safe_update_observation") as mock_obs:
+            from app import retrieval
+
+            retrieval.hybrid_search("test question", None, "t1", "m1")
+
+            mock_obs.assert_called_once()
+            call_kwargs = mock_obs.call_args.kwargs
+            metadata = call_kwargs.get("metadata", {})
+            assert "mode" in metadata
+            assert "result_count" in metadata
+
+    def test_embed_texts_calls_safe_update_observation(self):
+        """embed_texts_with_usage should enrich Langfuse observation with embedding metadata."""
+        with patch("app.embeddings.safe_update_observation") as mock_obs:
+            from app import embeddings
+
+            embeddings.embed_texts_with_usage(["hello world"])
+
+            mock_obs.assert_called_once()
+            call_kwargs = mock_obs.call_args.kwargs
+            metadata = call_kwargs.get("metadata", {})
+            assert "embeddings_mode" in metadata
+            assert "text_count" in metadata
+
+    def test_hybrid_search_observation_no_pii(self):
+        """hybrid_search observation must never contain raw question text."""
+        mock_usage: dict[str, Any] = {"prompt_tokens": 5, "total_tokens": 5, "estimated": False, "source": "local"}
+        sensitive_question = "What is John Smith's salary at 123 Main Street?"
+
+        with patch("app.retrieval.embed_texts_with_usage", return_value=([[0.1] * 16], mock_usage)), \
+             patch("app.retrieval._azure_enabled", return_value=False), \
+             patch("app.retrieval._load_index_records", return_value=[]), \
+             patch("app.retrieval._fallback_overlap", return_value=[]), \
+             patch("app.retrieval.safe_update_observation") as mock_obs:
+            from app import retrieval
+
+            retrieval.hybrid_search(sensitive_question, None, "t1", "m1")
+
+            if mock_obs.called:
+                all_values = str(mock_obs.call_args.kwargs)
+                assert sensitive_question not in all_values
+
+    def test_embed_texts_observation_no_pii(self):
+        """embed_texts_with_usage observation must never contain raw text content."""
+        with patch("app.embeddings.safe_update_observation") as mock_obs:
+            from app import embeddings
+
+            embeddings.embed_texts_with_usage(["Confidential document about John Smith"])
+
+            if mock_obs.called:
+                all_values = str(mock_obs.call_args.kwargs)
+                assert "Confidential" not in all_values
+                assert "John Smith" not in all_values
 
 
 class TestLangfuseIntegration:

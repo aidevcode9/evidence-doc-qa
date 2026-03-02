@@ -1,6 +1,7 @@
 import json
 import math
 import re
+import time as _time
 import urllib.request
 import urllib.error
 from collections import Counter
@@ -17,9 +18,13 @@ from app.config import (
     TOP_K_BM25,
     TOP_K_VECTOR,
 )
+
 from app.db import load_chunks, load_index_records
 from app.embeddings import embed_texts_with_usage
+from app.otel import get_observe_decorator, safe_update_observation
 from app.telemetry import logger
+
+_observe = get_observe_decorator()
 
 # Type aliases for clarity
 ChunkRecord = dict[str, Any]
@@ -29,6 +34,19 @@ UsageInfo = dict[str, Any]
 _BM25_CACHE: dict[str, BM25Stats] = {}
 
 
+def _enrich_hybrid_observation(mode: str, result_count: int, start: float) -> None:
+    """Enrich Langfuse observation with search metadata (NFR-045). No PII."""
+    latency_ms = int((_time.perf_counter() - start) * 1000)
+    safe_update_observation(
+        metadata={
+            "mode": mode,
+            "result_count": result_count,
+            "latency_ms": latency_ms,
+        },
+    )
+
+
+@_observe(name="hybrid_search", capture_input=False, capture_output=False)
 def hybrid_search(
     question: str,
     docs_snapshot_id: str | None,
@@ -49,12 +67,14 @@ def hybrid_search(
     Returns:
         List of matching chunks, optionally with usage info
     """
+    _start = _time.perf_counter()
     embeddings, embedding_usage = embed_texts_with_usage([question])
     query_embedding = embeddings[0]
     if _azure_enabled():
         logger.info(f"Retrieval: Routing to Azure AI Search (Snapshot: {docs_snapshot_id}, Tenant: {tenant_id})")
         results = _azure_search(question, docs_snapshot_id, query_embedding, tenant_id, matter_id)
         if results:
+            _enrich_hybrid_observation("azure", len(results), _start)
             return (results, embedding_usage) if return_usage else results
         logger.info("Retrieval: Azure returned zero hits. Falling back to local index.")
 
@@ -62,6 +82,7 @@ def hybrid_search(
     records = _load_index_records(docs_snapshot_id, tenant_id, matter_id)
     if not records:
         fallback = _fallback_overlap(question, docs_snapshot_id, tenant_id, matter_id)
+        _enrich_hybrid_observation("local_fallback", len(fallback), _start)
         return (fallback, embedding_usage) if return_usage else fallback
 
     query_tokens = _tokenize(question)
@@ -102,6 +123,7 @@ def hybrid_search(
         rec["rrf_rank"] = idx
 
     logger.info(f"Local Hybrid Search: Found {len(fused)} fused results")
+    _enrich_hybrid_observation("local", len(fused), _start)
     return (fused, embedding_usage) if return_usage else fused
 
 

@@ -13,8 +13,11 @@ from app.config import (
     EMBEDDINGS_DIM,
     EMBEDDINGS_MODE,
 )
+from app.otel import get_observe_decorator, safe_update_observation
 
 logger = logging.getLogger("docqa")
+
+_observe = get_observe_decorator()
 
 UsageInfo = dict[str, int | bool | str]
 
@@ -24,11 +27,24 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     return embeddings
 
 
+@_observe(name="embed_texts_with_usage", capture_input=False, capture_output=False)
 def embed_texts_with_usage(texts: list[str]) -> tuple[list[list[float]], UsageInfo]:
     if EMBEDDINGS_MODE != "local":
-        return _azure_openai_embeddings_with_usage(texts)
+        result = _azure_openai_embeddings_with_usage(texts)
+        # Enrich Langfuse observation with embedding metadata (NFR-045)
+        safe_update_observation(
+            model=AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT or "text-embedding-3-large",
+            usage={"input": int(result[1].get("prompt_tokens") or 0)},
+            metadata={"embeddings_mode": "remote", "text_count": len(texts)},
+        )
+        return result
     embeddings = [_hash_embed(text) for text in texts]
-    return embeddings, {"prompt_tokens": 0, "total_tokens": 0, "estimated": False, "source": "local"}
+    usage: UsageInfo = {"prompt_tokens": 0, "total_tokens": 0, "estimated": False, "source": "local"}
+    # Enrich Langfuse observation for local embeddings (NFR-045)
+    safe_update_observation(
+        metadata={"embeddings_mode": "local", "text_count": len(texts)},
+    )
+    return embeddings, usage
 
 
 def _hash_embed(text: str) -> list[float]:
