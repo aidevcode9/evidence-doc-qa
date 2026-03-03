@@ -64,7 +64,7 @@ jobs:
               "AZURE_SEARCH_INDEX=${{ secrets.AZURE_SEARCH_INDEX }}" \
               "DOCQA_MODEL_ID=${{ secrets.DOCQA_MODEL_ID }}" \
               "METRICS_ADMIN_TOKEN=${{ secrets.METRICS_ADMIN_TOKEN }}" \
-              "PARSER_PROVIDER=marker" \
+              "PARSER_PROVIDER=pypdf" \
               "EMBEDDINGS_MODE=remote" \
               "DOCQA_OTEL_ENABLED=1" \
               "OTEL_SERVICE_NAME=docqa-api" \
@@ -84,4 +84,4 @@ jobs:
               "LANGFUSE_ENABLED=1" \
               "LANGFUSE_PUBLIC_KEY=${{ secrets.LANGFUSE_PUBLIC_KEY }}" \
               "LANGFUSE_SECRET_KEY=${{ secrets.LANGFUSE_SECRET_KEY }}" \
-              "LANGFUSE_HOST=https://cloud.langfuse.com"
+              "LANGFUSE_HOST=https://us.cloud.langfuse.com"
