@@ -20,8 +20,8 @@ Evidence-Bound is a production-ready RAG (Retrieval-Augmented Generation) system
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Next.js UI    │────▶│   FastAPI API   │────▶│  Azure OpenAI   │
-│   (Vercel)      │     │ (Container Apps)│     │  (GPT-4o)       │
+│   Next.js UI    │────▶│   FastAPI API  │────▶│  Azure OpenAI   │
+│   (Vercel)      │     │ (Container Apps)│     │  (GPT-5-mini)   │
 └─────────────────┘     └────────┬────────┘     └─────────────────┘
                                  │
                     ┌────────────┼────────────┐
