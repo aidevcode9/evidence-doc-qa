@@ -6,6 +6,7 @@ import { IngestionZone } from "@/components/IngestionZone";
 import { ChatInterface } from "@/components/ChatInterface";
 import { EvidencePanel } from "@/components/EvidencePanel";
 import { DocumentViewer } from "@/components/DocumentViewer";
+import { UserMenu } from "@/components/UserMenu";
 import { getAuthHeaders, getApiUrl } from "@/lib/api";
 
 export default function DocQAPage() {
@@ -131,7 +132,10 @@ export default function DocQAPage() {
                 </h1>
             </div>
         </div>
-        <IngestionZone onUploadSuccess={handleUploadSuccess} />
+        <div className="flex items-center gap-3">
+          <IngestionZone onUploadSuccess={handleUploadSuccess} />
+          <UserMenu />
+        </div>
       </header>
 
       {/* Main Grid */}

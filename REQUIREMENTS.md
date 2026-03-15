@@ -235,6 +235,28 @@ Tests:
 - [ ] Test: pypdf mode returns error for scanned/image PDFs
 - [ ] Test: Marker import failure doesn't crash app when pypdf mode
 
+| FR-056 | User menu with sign out | Header avatar with initials dropdown showing user name, email, role badge, and sign out action; redirects to /login on logout |
+
+#### FR-056 Implementation Checklist (User Menu + Sign Out)
+
+Frontend — UserMenu Component:
+- [ ] Avatar circle with user initials (32px, top-right header)
+- [ ] Click opens glass dropdown (bg-zinc-900/95 backdrop-blur-md)
+- [ ] Display: user name, email, role badge (color-coded)
+- [ ] "Sign out" action calls POST /api/auth/logout then redirects to /login?logged_out=1
+- [ ] Click outside or Escape closes dropdown
+- [ ] Auth bypass mode: show "Demo Mode" badge instead of real user info
+- [ ] Responsive: works on mobile (dropdown doesn't overflow)
+
+Frontend — Login Page:
+- [ ] Show "Signed out successfully" message when ?logged_out=1 query param present
+
+Tests:
+- [ ] Test: UserMenu renders initials from JWT claims
+- [ ] Test: Sign out calls /api/auth/logout
+- [ ] Test: Dropdown closes on outside click
+- [ ] Test: Demo mode shows fallback badge
+
 ---
 
 ## Non-Functional Requirements

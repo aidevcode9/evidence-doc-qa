@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-03-15 FR-056: User Menu with Sign Out
+
+**Status:** ✅ Complete
+**Files changed:**
+- apps/web/components/UserMenu.tsx (new)
+- apps/web/app/page.tsx (modified — added UserMenu to header)
+- apps/web/app/login/page.tsx (modified — added signed-out banner)
+
+**Verification:**
+- [x] `npx tsc --noEmit` — passed
+- [x] `npx next build` — passed
+- [x] `pytest tests/ -v` — 357 passed (56 fail + 29 errors pre-existing SSO/rate-limit)
+- [x] Skeptic review — APPROVED (0 critical, 0 high, 2 low)
+
+**Notes:** Frontend-only change. Backend logout already existed. Uses /api/auth/me for user info (httpOnly cookie not readable client-side). Demo mode fallback when auth bypass enabled.
+
+---
+
 ## 2026-03-02 NFR-045: Langfuse PII Redaction
 
 **Status:** ✅ Complete

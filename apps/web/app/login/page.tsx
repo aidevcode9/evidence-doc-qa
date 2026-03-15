@@ -33,11 +33,21 @@ export default function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [capabilities, setCapabilities] = useState<ServerCapabilities | null>(null);
+  const [loggedOut, setLoggedOut] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const safeNextPath = getSafeRedirectUrl(params.get("next"));
     setNextPath(safeNextPath);
+
+    if (params.get("logged_out") === "1") {
+      setLoggedOut(true);
+      // Auto-dismiss after 5 seconds
+      const timer = setTimeout(() => setLoggedOut(false), 5000);
+      // Clean URL without triggering navigation
+      window.history.replaceState({}, "", "/login");
+      return () => clearTimeout(timer);
+    }
 
     const storedUser = localStorage.getItem("docqa_user");
     if (storedUser) {
@@ -133,6 +143,14 @@ export default function LoginPage() {
       <main className="flex-1 relative flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-grid-pattern opacity-20 pointer-events-none" />
         <div className="relative w-full max-w-md mx-auto p-6">
+          {loggedOut && (
+            <div className="mb-4 text-sm text-green-400 border border-green-500/30 bg-green-500/10 rounded-xl px-4 py-3 flex items-center gap-2">
+              <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              Signed out successfully.
+            </div>
+          )}
           <div className="bg-zinc-900/70 border border-white/10 rounded-2xl p-6 shadow-2xl backdrop-blur">
             <div className="mb-6">
               <div className="text-xs uppercase tracking-[0.3em] text-blue-400/70 mb-2">
