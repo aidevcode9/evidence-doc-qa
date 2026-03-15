@@ -15,14 +15,12 @@ Last updated: 2026-03-15
 
 | Task | FR | Branch | Started | Notes |
 |------|-----|--------|---------|-------|
-| — | — | — | — | Ready for Phase 7 Polish |
+| — | — | — | — | Phase 7 in progress |
 
 ## Next
 
 | Task | FR | Depends On | Notes |
 |------|-----|------------|-------|
-| Document deduplication | FR-011 | — | SHA256 content hash |
-| Metadata extraction | FR-014 | — | Title, date, author |
 | Semantic reranker | FR-015 | — | Cross-encoder scoring |
 | Follow-up questions | FR-022 | — | Contextual suggestions |
 | Citation highlighting | FR-033 | — | Highlight text in viewer |
@@ -31,6 +29,8 @@ Last updated: 2026-03-15
 
 | Task | FR | Date |
 |------|-----|------|
+| **Document deduplication (SHA256 matter-level)** | FR-011 | 03-15 |
+| **Metadata extraction (title, author, page_count)** | FR-014 | 03-15 |
 | **User menu with sign out** | FR-056 | 03-15 |
 | **Fix LANGFUSE_HOST + PARSER_PROVIDER in CI workflow** | INFRA | 03-15 |
 | **Auth bypass mode for demos (validated)** | FR-054 | 03-15 |

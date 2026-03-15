@@ -1,3 +1,4 @@
+import json
 import os
 from typing import Any
 
@@ -45,12 +46,21 @@ async def get_doc_metadata(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
+    # FR-014: Include parsed metadata (title, author, page_count, etc.)
+    metadata: dict[str, Any] = {}
+    if doc.metadata_json:
+        try:
+            metadata = json.loads(doc.metadata_json)
+        except (json.JSONDecodeError, TypeError):
+            metadata = {}
+
     return {
         "doc_id": doc.doc_id,
         "doc_name": doc.doc_name,
         "doc_sha256": doc.doc_sha256,
         "docs_snapshot_id": doc.docs_snapshot_id,
         "ingested_at_utc": doc.ingested_at_utc,
+        "metadata": metadata,
     }
 
 
