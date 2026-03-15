@@ -1,6 +1,6 @@
 # STATUS.md
 
-Last updated: 2026-03-02
+Last updated: 2026-03-15
 
 ---
 
@@ -15,14 +15,12 @@ Last updated: 2026-03-02
 
 | Task | FR | Branch | Started | Notes |
 |------|-----|--------|---------|-------|
-| — | — | — | — | Phase 5 complete. Ready for demo. |
+| — | — | — | — | Ready for Phase 7 Polish |
 
 ## Next
 
 | Task | FR | Depends On | Notes |
 |------|-----|------------|-------|
-| **Auth bypass mode for demos** | FR-054 | — | AUTH_BYPASS_ENABLED=true skips Google OAuth |
-| **PyPDF-only mode (slim container)** | FR-055 | — | PARSER_PROVIDER=pypdf, no torch/marker deps |
 | Document deduplication | FR-011 | — | SHA256 content hash |
 | Metadata extraction | FR-014 | — | Title, date, author |
 | Semantic reranker | FR-015 | — | Cross-encoder scoring |
@@ -33,6 +31,10 @@ Last updated: 2026-03-02
 
 | Task | FR | Date |
 |------|-----|------|
+| **User menu with sign out** | FR-056 | 03-15 |
+| **Fix LANGFUSE_HOST + PARSER_PROVIDER in CI workflow** | INFRA | 03-15 |
+| **Auth bypass mode for demos (validated)** | FR-054 | 03-15 |
+| **PyPDF-only mode (validated)** | FR-055 | 03-15 |
 | **Langfuse PII redaction (redact_for_langfuse + capture_input=False)** | NFR-045 | 03-02 |
 | **Langfuse pipeline coverage (@observe on retrieval + embeddings)** | NFR-045 | 03-01 |
 | **Doc sync: llm_calls → telemetry (16 refs across 6 files)** | DOCS | 03-01 |
