@@ -28,6 +28,7 @@ class Document(Base):
     storage_path: Mapped[str] = mapped_column(String, nullable=False)
     ingested_at_utc: Mapped[str] = mapped_column(String, nullable=False)
     docs_snapshot_id: Mapped[str] = mapped_column(String, nullable=False)
+    metadata_json: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class Chunk(Base):
@@ -340,6 +341,28 @@ def get_document(doc_id: str, tenant_id: str) -> Document | None:
         stmt = select(Document).where(
             Document.doc_id == doc_id,
             Document.tenant_id == tenant_id,
+        )
+        return session.scalars(stmt).first()
+
+
+def get_document_by_sha256(
+    tenant_id: str, matter_id: str, doc_sha256: str
+) -> Document | None:
+    """Find a document by content hash within a matter (FR-011 dedup).
+
+    Args:
+        tenant_id: Tenant ID for isolation (FR-001).
+        matter_id: Matter ID for isolation (FR-002).
+        doc_sha256: SHA256 hash of the document content.
+
+    Returns:
+        Document if a matching hash exists in the same matter, else None.
+    """
+    with session_scope() as session:
+        stmt = select(Document).where(
+            Document.tenant_id == tenant_id,
+            Document.matter_id == matter_id,
+            Document.doc_sha256 == doc_sha256,
         )
         return session.scalars(stmt).first()
 

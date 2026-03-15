@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-03-15 FR-011: Document Deduplication + FR-014: Metadata Extraction
+
+**Status:** ✅ Complete
+**Files changed:**
+- apps/api/app/db.py (modified — added get_document_by_sha256, metadata_json column)
+- apps/api/app/services/document_service.py (modified — dedup check, metadata storage)
+- apps/api/app/routers/docs.py (modified — return metadata in GET response)
+- alembic/versions/0012_add_dedup_unique_constraint.py (new)
+- alembic/versions/0013_add_metadata_json.py (new)
+- tests/test_dedup.py (new — 9 tests)
+- tests/test_metadata.py (new — 7 tests)
+
+**Verification:**
+- [x] `ruff check` — passed
+- [x] `pytest tests/test_dedup.py tests/test_metadata.py -v` — 16/16 passed
+- [x] Skeptic review — APPROVED WITH FIXES (3 low, all fixed)
+
+**Skeptic fixes applied:**
+- Removed doc_name from 409 error (PII leak risk)
+- Added `default=str` to json.dumps for metadata safety
+- Race condition documented (DB constraint is safety net)
+
+---
+
 ## 2026-03-15 FR-056: User Menu with Sign Out
 
 **Status:** ✅ Complete

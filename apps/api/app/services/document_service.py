@@ -1,3 +1,4 @@
+import json
 import uuid
 from typing import Any, TYPE_CHECKING
 
@@ -5,7 +6,7 @@ from fastapi import UploadFile, HTTPException
 
 from app import ingestion, indexing
 from app.config import MAX_UPLOAD_SIZE_BYTES, MAX_UPLOAD_SIZE_MB, MIN_EXTRACTED_TEXT_CHARS
-from app.db import Chunk, Document, insert_chunks, insert_document
+from app.db import Chunk, Document, get_document_by_sha256, insert_chunks, insert_document
 from app.parsers import get_parser_client
 from app.telemetry import logger
 
@@ -61,8 +62,25 @@ async def process_document_upload(
             f"Supported: {', '.join(sorted(parser.supported_extensions))}",
         )
 
-    doc_id = uuid.uuid4().hex
     doc_sha256 = ingestion.compute_sha256(data)
+
+    # FR-011: Check for duplicate within same matter before parsing
+    existing = get_document_by_sha256(tenant_id, matter_id, doc_sha256)
+    if existing is not None:
+        logger.info(
+            f"Duplicate detected: sha256={doc_sha256[:12]}, "
+            f"existing_doc_id={existing.doc_id}, matter_id={matter_id}"
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Duplicate document. This file already exists in this matter "
+                f"(doc_id={existing.doc_id}, "
+                f"snapshot={existing.docs_snapshot_id})."
+            ),
+        )
+
+    doc_id = uuid.uuid4().hex
     docs_snapshot_id = ingestion.docs_snapshot_id_for(doc_sha256)
     storage_path = ingestion.save_raw_pdf(doc_id, filename, data)
 
@@ -121,6 +139,9 @@ async def process_document_upload(
         )
         for row in chunk_rows
     )
+    # FR-014: Store parser metadata as JSON
+    metadata_json = json.dumps(parse_result.metadata, default=str) if parse_result.metadata else "{}"
+
     # Set tenant_id and matter_id for isolation (FR-001, FR-002)
     insert_document(
         Document(
@@ -132,6 +153,7 @@ async def process_document_upload(
             docs_snapshot_id=docs_snapshot_id,
             tenant_id=tenant_id,
             matter_id=matter_id,
+            metadata_json=metadata_json,
         )
     )
 
