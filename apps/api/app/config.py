@@ -50,6 +50,11 @@ TOP_K_VECTOR = int(_getenv("DOCQA_TOP_K_VECTOR", "5"))
 TOP_K_BM25 = int(_getenv("DOCQA_TOP_K_BM25", "5"))
 RRF_K = int(_getenv("DOCQA_RRF_K", "60"))
 
+# Reranker (FR-022)
+RERANKER_ENABLED = _is_truthy(_getenv("RERANKER_ENABLED", "0"))
+RERANKER_TOP_K = int(_getenv("RERANKER_TOP_K", "5"))
+RERANKER_CONFIDENCE_MIN = float(_getenv("RERANKER_CONFIDENCE_MIN", "0.30"))
+
 # EMBEDDINGS_MODE: "local" uses hash-based embeddings, "remote" uses Azure OpenAI
 # EMBEDDINGS_LOCAL is a legacy env var (truthy = local, falsy = remote)
 _embeddings_local_raw = os.getenv("EMBEDDINGS_LOCAL")  # None if not set

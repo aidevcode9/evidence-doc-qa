@@ -4,10 +4,10 @@ Last updated: 2026-03-15
 
 ---
 
-## Current Phase: 5 — Auth (COMPLETE)
+## Current Phase: 7 — Polish (COMPLETE)
 
-**Goal:** Production-ready authentication for senior technologist demo
-**Progress:** FR-050–053 ✅ All shipped
+**Goal:** Document dedup, metadata, async ingestion, reranker, cited-only export
+**Progress:** FR-011, FR-014, FR-015, FR-022, FR-033 ✅ All shipped
 
 ---
 
@@ -15,45 +15,27 @@ Last updated: 2026-03-15
 
 | Task | FR | Branch | Started | Notes |
 |------|-----|--------|---------|-------|
-| — | — | — | — | Phase 7 in progress |
+| — | — | — | — | Phase 7 complete, ready for Phase 8 |
 
 ## Next
 
 | Task | FR | Depends On | Notes |
 |------|-----|------------|-------|
-| Semantic reranker | FR-015 | — | Cross-encoder scoring |
-| Follow-up questions | FR-022 | — | Contextual suggestions |
-| Citation highlighting | FR-033 | — | Highlight text in viewer |
+| Security NFRs | NFR-001–022 | — | Phase 8 |
 
 ## Done (This Week)
 
 | Task | FR | Date |
 |------|-----|------|
+| **Async ingestion status (queued→processing→ready/failed)** | FR-015 | 03-15 |
+| **Optional local reranker (term+phrase analysis post-RRF)** | FR-022 | 03-15 |
+| **Cited-only packet export (PDF/DOCX)** | FR-033 | 03-15 |
 | **Document deduplication (SHA256 matter-level)** | FR-011 | 03-15 |
 | **Metadata extraction (title, author, page_count)** | FR-014 | 03-15 |
 | **User menu with sign out** | FR-056 | 03-15 |
 | **Fix LANGFUSE_HOST + PARSER_PROVIDER in CI workflow** | INFRA | 03-15 |
 | **Auth bypass mode for demos (validated)** | FR-054 | 03-15 |
 | **PyPDF-only mode (validated)** | FR-055 | 03-15 |
-| **Langfuse PII redaction (redact_for_langfuse + capture_input=False)** | NFR-045 | 03-02 |
-| **Langfuse pipeline coverage (@observe on retrieval + embeddings)** | NFR-045 | 03-01 |
-| **Doc sync: llm_calls → telemetry (16 refs across 6 files)** | DOCS | 03-01 |
-| **Deployment.md rewritten to match actual prod** | DOCS | 03-01 |
-| **Langfuse Cloud production enrichment** | NFR-045 | 03-01 |
-| **Documentation audit + data-model sync** | DOCS | 03-01 |
-| **Missing sso_states migration (0010)** | INFRA | 03-01 |
-| **@observe decorators for LLM tracing** | NFR-045 | 01-24 |
-| **Langfuse LLM Observability** | NFR-045 | 01-24 |
-| **Frontend Login UI + Google SSO** | FR-053 | 01-25 |
-| **GitHub Actions SSO env vars** | INFRA | 01-25 |
-| **Centralized API client + proxy route** | FR-050 | 01-25 |
-| **Container Apps healthy** | INFRA | 01-25 |
-| **CI workflow fixed (evidence_shared)** | INFRA | 01-25 |
-| **Container Apps migration** | INFRA | 01-24 |
-| **CI fixes (tenant_id, EMBEDDINGS_MODE, seed dedup)** | INFRA | 01-24 |
-| **Modularized ARCHITECTURE.md** | DOCS | 01-24 |
-| **Phase 6 Audit complete (59 tests)** | FR-040–043 | 01-22 |
-| **Phase 5 Auth backend complete (64 tests)** | FR-050–052 | 01-22 |
 
 ## Blocked
 
@@ -240,6 +222,20 @@ Last updated: 2026-03-15
 
 ---
 
+## Phase 7 Progress
+
+| FR | Requirement | Status |
+|----|-------------|--------|
+| FR-011 | Document deduplication (SHA256) | ✅ Shipped |
+| FR-014 | Metadata extraction (title, author, pages) | ✅ Shipped |
+| FR-015 | Async ingestion status tracking | ✅ Shipped |
+| FR-022 | Optional reranker (local term+phrase) | ✅ Shipped |
+| FR-033 | Cited-only packet export (PDF/DOCX) | ✅ Shipped |
+
+**Phase 7 Complete:** 5/5 Polish features shipped. Async upload with status polling, configurable local reranker, cited exhibits export. All wsskeptic-reviewed.
+
+---
+
 ## Upcoming Phases (Reference)
 
 | Phase | FRs/NFRs | Goal |
@@ -249,7 +245,7 @@ Last updated: 2026-03-15
 | 4. Provider Abstraction | NFR-032, NFR-034, NFR-035, NFR-036 | Config-driven Parser/Search/LLM/Embeddings |
 | 5. Auth | FR-050–053 | Login, SSO, admin, frontend UI |
 | 6. Audit | FR-040–043 | Logging, retention, deletion |
-| 7. Polish | FR-011, FR-014, FR-015, FR-022, FR-033 | Dedup, metadata, reranker |
+| 7. Polish | FR-011, FR-014, FR-015, FR-022, FR-033 | ✅ Complete |
 | 8. NFRs | NFR-001–022 | Security, perf, reliability |
 
 ---

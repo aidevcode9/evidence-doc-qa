@@ -29,6 +29,10 @@ class Document(Base):
     ingested_at_utc: Mapped[str] = mapped_column(String, nullable=False)
     docs_snapshot_id: Mapped[str] = mapped_column(String, nullable=False)
     metadata_json: Mapped[str | None] = mapped_column(String, nullable=True)
+    # FR-015: Async ingestion status tracking
+    status: Mapped[str] = mapped_column(String, nullable=False, default="queued", server_default="queued")
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
 
 class Chunk(Base):
@@ -365,6 +369,46 @@ def get_document_by_sha256(
             Document.doc_sha256 == doc_sha256,
         )
         return session.scalars(stmt).first()
+
+
+VALID_INGESTION_STATUSES = {"queued", "processing", "ready", "failed"}
+
+
+def update_document_status(
+    doc_id: str,
+    status: str,
+    *,
+    tenant_id: str | None = None,
+    error_message: str | None = None,
+    increment_retry: bool = False,
+) -> None:
+    """Update document ingestion status (FR-015).
+
+    Args:
+        doc_id: Document ID.
+        status: New status ('queued', 'processing', 'ready', 'failed').
+        tenant_id: Tenant ID for isolation (FR-001). Required for external callers.
+        error_message: Error details (for 'failed' status).
+        increment_retry: If True, increment retry_count by 1.
+    """
+    if status not in VALID_INGESTION_STATUSES:
+        raise ValueError(f"Invalid status: {status}")
+
+    with session_scope() as session:
+        if tenant_id is not None:
+            stmt = select(Document).where(
+                Document.doc_id == doc_id,
+                Document.tenant_id == tenant_id,
+            )
+            doc = session.scalars(stmt).first()
+        else:
+            doc = session.get(Document, doc_id)
+        if doc is not None:
+            doc.status = status
+            doc.error_message = error_message
+            if increment_retry:
+                doc.retry_count = (doc.retry_count or 0) + 1
+            session.commit()
 
 
 def load_chunks(
