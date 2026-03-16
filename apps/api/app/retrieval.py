@@ -122,9 +122,57 @@ def hybrid_search(
     for idx, rec in enumerate(fused, start=1):
         rec["rrf_rank"] = idx
 
+    # FR-022: Apply optional reranker post-RRF
+    fused = _apply_reranker(question, fused)
+
     logger.info(f"Local Hybrid Search: Found {len(fused)} fused results")
     _enrich_hybrid_observation("local", len(fused), _start)
     return (fused, embedding_usage) if return_usage else fused
+
+
+def _apply_reranker(question: str, results: list[ChunkRecord]) -> list[ChunkRecord]:
+    """Apply optional reranker to local search results (FR-022).
+
+    Converts ChunkRecords to SearchResults, reranks, then maps scores back.
+    When RERANKER_ENABLED=false, returns results unchanged.
+    """
+    from app.reranker import get_reranker_client
+
+    reranker = get_reranker_client()
+    if reranker is None:
+        return results
+    if not results:
+        return results
+
+    from app.config import RERANKER_TOP_K
+    from app.search.base import SearchResult
+
+    # Convert to SearchResult for reranker interface
+    search_results = [
+        SearchResult(
+            chunk_id=rec["chunk_id"],
+            doc_id=rec["doc_id"],
+            text=rec["chunk_text"],
+            score=rec.get("rrf_score", 0.0),
+            page_number=rec.get("page_num", 1),
+        )
+        for rec in results
+    ]
+
+    reranked = reranker.rerank(question, search_results, top_k=RERANKER_TOP_K)
+
+    # Build lookup from chunk_id → original record (preserves all fields)
+    rec_by_id = {rec["chunk_id"]: rec for rec in results}
+
+    # Rebuild results in reranked order, injecting reranker_score
+    reranked_records: list[ChunkRecord] = []
+    for sr in reranked:
+        rec = rec_by_id.get(sr.chunk_id)
+        if rec is not None:
+            rec["reranker_score"] = sr.score
+            reranked_records.append(rec)
+
+    return reranked_records
 
 
 def _azure_enabled() -> bool:

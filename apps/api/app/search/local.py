@@ -149,11 +149,42 @@ class LocalSearchClient(SearchClient):
             for rec in fused
         ]
 
+        # FR-022: Apply optional reranker post-RRF
+        results = self._apply_reranker(query, results, top_k)
+
         return SearchResponse(
             results=results,
             provider=self.provider,
             embedding_usage={},
         )
+
+    def _apply_reranker(
+        self,
+        query: str,
+        results: list[SearchResult],
+        top_k: int,
+    ) -> list[SearchResult]:
+        """Apply optional reranker to results (FR-022).
+
+        When RERANKER_ENABLED=true, re-scores results using the configured
+        reranker client. Stores reranker_score in result metadata.
+        When disabled, returns results unchanged.
+        """
+        from app.reranker import get_reranker_client
+
+        reranker = get_reranker_client()
+        if reranker is None:
+            return results
+
+        from app.config import RERANKER_TOP_K
+
+        reranked = reranker.rerank(query, results, top_k=min(top_k, RERANKER_TOP_K))
+
+        # Inject reranker_score into metadata for confidence gating
+        for result in reranked:
+            result.metadata["reranker_score"] = result.score
+
+        return reranked
 
     def _load_index_records(
         self,

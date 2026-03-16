@@ -6,6 +6,7 @@ from app.config import (
     CONFIDENCE_THRESHOLD,
     AZURE_RERANK_MIN,
     AZURE_SEARCH_SCORE_MIN,
+    RERANKER_CONFIDENCE_MIN,
 )
 from app.db import get_doc_name
 from app.schemas import DebugCandidate
@@ -26,6 +27,9 @@ def retrieval_score_key(results: list[ChunkDict]) -> str:
 def confidence_score_key(results: list[ChunkDict]) -> str:
     if not results:
         return "rrf_score"
+    # FR-022: Reranker score takes priority when present
+    if results[0].get("reranker_score") is not None:
+        return "reranker_score"
     if "azure_search_score" in results[0]:
         if results[0].get("azure_reranker_score") is not None:
             return "azure_reranker_score"
@@ -34,6 +38,8 @@ def confidence_score_key(results: list[ChunkDict]) -> str:
 
 
 def confidence_threshold(score_key: str) -> float:
+    if score_key == "reranker_score":
+        return RERANKER_CONFIDENCE_MIN
     if score_key == "azure_reranker_score":
         return AZURE_RERANK_MIN
     if score_key == "azure_search_score":
