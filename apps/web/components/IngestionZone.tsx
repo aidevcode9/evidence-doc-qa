@@ -90,7 +90,15 @@ export function IngestionZone({ onUploadSuccess }: IngestionZoneProps) {
       const res = await apiUpload("/v1/docs/upload", formData);
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: "Upload failed" }));
-        throw new Error(err.detail || "Upload failed");
+        if (res.status === 409 && err.detail?.existing_doc_name) {
+          setStatus("failed");
+          setErrorMessage(`Already uploaded as "${err.detail.existing_doc_name}".`);
+          return;
+        }
+        const message = typeof err.detail === "string"
+          ? err.detail
+          : err.detail?.message || "Upload failed";
+        throw new Error(message);
       }
       const data = await res.json();
 

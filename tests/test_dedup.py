@@ -193,8 +193,8 @@ class TestDedupInUpload:
             assert "doc_id" in result
 
     @pytest.mark.asyncio
-    async def test_dedup_409_includes_existing_doc_info(self):
-        """409 response should include existing doc_id and snapshot for client use."""
+    async def test_dedup_409_returns_structured_detail(self):
+        """409 detail must be a dict with existing_doc_id, existing_doc_name, message."""
         from app.services.document_service import process_document_upload
 
         pdf_bytes = b"%PDF-1.4 duplicate info test"
@@ -223,5 +223,8 @@ class TestDedupInUpload:
                     mock_file, tenant_id="t1", matter_id="m1"
                 )
             detail = exc_info.value.detail
-            assert "orig-id" in str(detail)
-            assert "snap_orig" in str(detail)
+            assert isinstance(detail, dict)
+            assert detail["existing_doc_id"] == "orig-id"
+            assert detail["existing_doc_name"] == "original.pdf"
+            assert detail["existing_snapshot_id"] == "snap_orig"
+            assert "already exists" in detail["message"].lower()
