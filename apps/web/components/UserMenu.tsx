@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import type { User } from "@/lib/auth";
+import { fetchCapabilities } from "@/lib/api";
 
 const ROLE_COLORS: Record<string, string> = {
   admin: "bg-blue-500/20 text-blue-400 border-blue-500/30",
@@ -26,16 +27,25 @@ export function UserMenu() {
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetch("/api/auth/me")
-      .then((res) => {
-        if (!res.ok) {
+    fetchCapabilities()
+      .then((caps) => {
+        if (caps.auth_bypass_enabled) {
           setIsDemo(true);
-          return null;
+          return;
         }
-        return res.json();
-      })
-      .then((data) => {
-        if (data?.user) setUser(data.user);
+        // Only call /api/auth/me when auth is active (JWT mode)
+        fetch("/api/auth/me")
+          .then((res) => {
+            if (!res.ok) {
+              setIsDemo(true);
+              return null;
+            }
+            return res.json();
+          })
+          .then((data) => {
+            if (data?.user) setUser(data.user);
+          })
+          .catch(() => setIsDemo(true));
       })
       .catch(() => setIsDemo(true));
   }, []);

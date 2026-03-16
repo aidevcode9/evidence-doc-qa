@@ -194,8 +194,8 @@ class TestDedupInUpload:
 
     @pytest.mark.asyncio
     async def test_dedup_409_includes_existing_doc_info(self):
-        """409 response should include existing doc_id and snapshot for client use."""
-        from app.services.document_service import process_document_upload
+        """409 response should include existing doc_id, doc_name, and snapshot."""
+        from app.services.document_service import process_document_upload_async
 
         pdf_bytes = b"%PDF-1.4 duplicate info test"
         sha = hashlib.sha256(pdf_bytes).hexdigest()
@@ -219,9 +219,48 @@ class TestDedupInUpload:
             from fastapi import HTTPException
 
             with pytest.raises(HTTPException) as exc_info:
-                await process_document_upload(
+                await process_document_upload_async(
                     mock_file, tenant_id="t1", matter_id="m1"
                 )
             detail = exc_info.value.detail
-            assert "orig-id" in str(detail)
-            assert "snap_orig" in str(detail)
+            assert detail["existing_doc_id"] == "orig-id"
+            assert detail["existing_doc_name"] == "original.pdf"
+            assert detail["existing_snapshot_id"] == "snap_orig"
+
+    @pytest.mark.asyncio
+    async def test_dedup_409_returns_structured_detail(self):
+        """409 detail must be a dict with existing_doc_id, existing_doc_name, message."""
+        from app.services.document_service import process_document_upload_async
+
+        pdf_bytes = b"%PDF-1.4 structured detail test"
+        sha = hashlib.sha256(pdf_bytes).hexdigest()
+
+        existing_doc = Document(
+            doc_id="orig-id",
+            tenant_id="t1",
+            matter_id="m1",
+            doc_sha256=sha,
+            doc_name="Contract_v2.pdf",
+            storage_path="/tmp/contract.pdf",
+            ingested_at_utc="2026-01-01T00:00:00Z",
+            docs_snapshot_id="snap_orig",
+        )
+
+        mock_file = AsyncMock()
+        mock_file.read.return_value = pdf_bytes
+        mock_file.filename = "dup.pdf"
+
+        with patch("app.services.document_service.get_document_by_sha256", return_value=existing_doc):
+            from fastapi import HTTPException
+
+            with pytest.raises(HTTPException) as exc_info:
+                await process_document_upload_async(
+                    mock_file, tenant_id="t1", matter_id="m1"
+                )
+            detail = exc_info.value.detail
+            # Must be a dict for structured JSON response
+            assert isinstance(detail, dict)
+            assert detail["existing_doc_id"] == "orig-id"
+            assert detail["existing_doc_name"] == "Contract_v2.pdf"
+            assert "message" in detail
+            assert "already exists" in detail["message"].lower()
