@@ -84,4 +84,6 @@ jobs:
               "LANGFUSE_ENABLED=1" \
               "LANGFUSE_PUBLIC_KEY=${{ secrets.LANGFUSE_PUBLIC_KEY }}" \
               "LANGFUSE_SECRET_KEY=${{ secrets.LANGFUSE_SECRET_KEY }}" \
-              "LANGFUSE_HOST=https://us.cloud.langfuse.com"
+              "LANGFUSE_HOST=https://us.cloud.langfuse.com" \
+              "AUTH_MODE=headers" \
+              "AUTH_BYPASS_ENABLED=true"
