@@ -1,6 +1,7 @@
+import re
 from enum import Enum
-from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from typing import List, Optional
+from pydantic import BaseModel, field_validator
 
 
 class RefusalCode(str, Enum):
@@ -26,6 +27,24 @@ class AskRequest(BaseModel):
     docs_snapshot_id: Optional[str] = None
     top_k: Optional[int] = 8
     include_debug: Optional[bool] = False
+
+    @field_validator("docs_snapshot_id")
+    @classmethod
+    def validate_docs_snapshot_id(cls, v: Optional[str]) -> Optional[str]:
+        """SECURITY: Prevent OData filter injection via docs_snapshot_id.
+
+        This value is interpolated into Azure Search OData $filter strings.
+        Without validation, an attacker could inject filter clauses to bypass
+        tenant isolation (e.g., "' or tenant_id eq 'victim-tenant").
+        """
+        if v is None:
+            return v
+        # Same pattern as _is_valid_identifier in context.py:
+        # alphanumeric with hyphens and underscores, max 64 chars.
+        if not re.match(r"^[a-zA-Z0-9][-_a-zA-Z0-9]{0,63}$", v):
+            msg = "docs_snapshot_id must be alphanumeric with hyphens/underscores (max 64 chars)"
+            raise ValueError(msg)
+        return v
 
 
 class Citation(BaseModel):

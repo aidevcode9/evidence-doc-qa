@@ -91,7 +91,10 @@ class TestViewDoc:
             mock_doc.doc_name = "contract.pdf"
             mock_doc.storage_path = temp_path
 
-            with patch("app.routers.docs.get_document", return_value=mock_doc):
+            # Patch RAW_DIR to temp file's parent so confinement check passes
+            temp_dir = os.path.dirname(temp_path)
+            with patch("app.routers.docs.get_document", return_value=mock_doc), \
+                 patch("app.config.RAW_DIR", temp_dir):
                 from app.routers.docs import view_doc
 
                 context = make_context()
@@ -152,7 +155,10 @@ class TestViewDoc:
                 mock_doc.doc_name = f"image{ext}"
                 mock_doc.storage_path = temp_path
 
-                with patch("app.routers.docs.get_document", return_value=mock_doc):
+                # Patch RAW_DIR to temp file's parent so confinement check passes
+                temp_dir = os.path.dirname(temp_path)
+                with patch("app.routers.docs.get_document", return_value=mock_doc), \
+                     patch("app.config.RAW_DIR", temp_dir):
                     from app.routers.docs import view_doc
 
                     context = make_context()

@@ -16,17 +16,19 @@ type StatusResponse = {
 
 type IngestionZoneProps = {
   onUploadSuccess: (snapshotId: string, fileName: string) => void;
+  onToast?: (message: string, variant?: "info" | "warning" | "error") => void;
 };
 
 const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_ATTEMPTS = 150; // 5 minutes max
 
-export function IngestionZone({ onUploadSuccess }: IngestionZoneProps) {
+export function IngestionZone({ onUploadSuccess, onToast }: IngestionZoneProps) {
   const [status, setStatus] = useState<IngestionStatus>("idle");
   const [docId, setDocId] = useState<string | null>(null);
   const [docName, setDocName] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string>("");
-  const [retryCount, setRetryCount] = useState(0);
+
+
   const [capabilities, setCapabilities] = useState<ServerCapabilities | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pollCountRef = useRef(0);
@@ -61,7 +63,8 @@ export function IngestionZone({ onUploadSuccess }: IngestionZoneProps) {
         } else if (data.status === "failed") {
           setStatus("failed");
           setErrorMessage(data.error_message || "Processing failed.");
-          setRetryCount(data.retry_count || 0);
+
+
           clearInterval(interval);
         } else if (data.status === "processing") {
           setStatus("processing");
@@ -91,8 +94,16 @@ export function IngestionZone({ onUploadSuccess }: IngestionZoneProps) {
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: "Upload failed" }));
         if (res.status === 409 && err.detail?.existing_doc_name) {
-          setStatus("failed");
-          setErrorMessage(`Already uploaded as "${err.detail.existing_doc_name}".`);
+          // Document already exists — treat as success so user can ask questions
+          const existingSnapshot = err.detail.existing_snapshot_id;
+          const existingName = err.detail.existing_doc_name;
+          if (existingSnapshot) {
+            onUploadSuccess(existingSnapshot, existingName);
+          }
+          if (onToast) {
+            onToast(`Already uploaded as "${existingName}"`, "warning");
+          }
+          setStatus("idle");
           return;
         }
         const message = typeof err.detail === "string"
@@ -140,7 +151,6 @@ export function IngestionZone({ onUploadSuccess }: IngestionZoneProps) {
     setDocId(null);
     setDocName("");
     setErrorMessage("");
-    setRetryCount(0);
   }, []);
 
   const isPdfOnly = capabilities?.parser_provider === "pypdf";

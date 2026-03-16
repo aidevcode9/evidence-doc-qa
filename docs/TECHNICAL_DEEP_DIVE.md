@@ -1,13 +1,14 @@
 # Evidence-Bound: Technical Deep Dive
 
-> How Evidence-Grounded Document Q&A Works Under the Hood
+> How Evidence-Grounded Document Q&A Works Under the Hood — From RAG Pipeline to Production Engineering
 
-**Audience:** Engineers, architects, and technical evaluators who want to understand the system internals.
+**Audience:** Senior AI engineers, architects, and technical evaluators who want to understand both the retrieval/verification pipeline and the production hardening that makes this system enterprise-ready.
 
 ---
 
 ## Table of Contents
 
+**Core RAG Pipeline**
 1. [System Overview](#system-overview)
 2. [Request Flow Architecture](#request-flow-architecture)
 3. [Retrieval Pipeline](#retrieval-pipeline)
@@ -15,8 +16,17 @@
 5. [Citation Validation](#citation-validation)
 6. [Security & Policy Enforcement](#security--policy-enforcement)
 7. [Provider Abstractions](#provider-abstractions)
-8. [Observability](#observability)
-9. [Data Model](#data-model)
+
+**Production Engineering**
+8. [Observability Stack](#observability-stack)
+9. [Performance & Latency Controls](#performance--latency-controls)
+10. [Caching Architecture](#caching-architecture)
+11. [Cost Tracking & Estimation](#cost-tracking--estimation)
+12. [Rate Limiting & Concurrency](#rate-limiting--concurrency)
+13. [PII Redaction](#pii-redaction)
+14. [Graceful Degradation](#graceful-degradation)
+15. [Test Architecture](#test-architecture)
+16. [Data Model](#data-model)
 
 ---
 
@@ -581,65 +591,466 @@ EMBEDDINGS_MODE=local        # local | remote
 
 ---
 
-## Observability
+## Observability Stack
 
-### OpenTelemetry Integration
+The system runs three parallel observability layers, each serving a different audience and failure mode:
 
-Located in [otel.py:78-127](../apps/api/app/otel.py#L78-L127):
+| Layer | Tool | Purpose | Audience |
+|-------|------|---------|----------|
+| **LLM Tracing** | Langfuse | Token usage, prompt debugging, model comparison | AI/ML engineers |
+| **Infrastructure** | OpenTelemetry + Azure Monitor | Request latency, error rates, resource utilization | DevOps/SRE |
+| **Business Metrics** | PostgreSQL `telemetry` table + `/v1/metrics` | Cost, refusal rates, cache performance | Product/Business |
 
-```python
-@contextmanager
-def span(name: str, **attrs: Any) -> Generator[Any, None, None]:
-    """Create an OTEL span with attributes."""
-    if not _TRACER or not OTEL_ENABLED:
-        yield None
-        return
-    with _TRACER.start_as_current_span(name) as s:
-        for key, value in attrs.items():
-            if value is not None:
-                s.set_attribute(key, value)
-        yield s
+### Layer 1: Langfuse LLM Observability
 
-def setup_otel(app: FastAPI) -> None:
-    """Initialize OpenTelemetry with Azure Monitor exporter."""
-    resource = Resource.create({SERVICE_NAME: OTEL_SERVICE_NAME})
-    provider = TracerProvider(resource=resource)
-    exporter = AzureMonitorTraceExporter(connection_string=connection_string)
-    provider.add_span_processor(BatchSpanProcessor(exporter))
-    trace.set_tracer_provider(provider)
+Every `/ask` request creates a Langfuse trace with nested observations — a waterfall of every sub-operation:
 
-    FastAPIInstrumentor.instrument_app(app)
-    URLLibInstrumentor().instrument()
+```
+execute_ask                     (trace root — tenant/session context)
+  |-- hybrid_search             (mode, result_count, latency)
+  |   +-- embed_texts_with_usage  (model, tokens, embeddings_mode)
+  +-- verify_relevance          (model, tokens, verdict)
+      +-- call_openai           (generation span — model, tokens)
 ```
 
-### Langfuse LLM Observability
-
-Located in [otel.py:130-189](../apps/api/app/otel.py#L130-L189):
+The `@observe` decorator from Langfuse wraps each function. When Langfuse is disabled, a no-op decorator is substituted — zero overhead, no code changes:
 
 ```python
+# otel.py — decorator factory with graceful fallback
 def get_observe_decorator():
-    """Get Langfuse @observe decorator or no-op fallback."""
     if observe is not None and LANGFUSE_ENABLED:
         return observe
-    return _noop_observe  # Graceful degradation
+    return _noop_observe  # Identity decorator, no tracing
 
-# Usage in ask_service.py:
+# ask_service.py — used identically whether Langfuse is on or off
+_observe = get_observe_decorator()
+
 @_observe(name="execute_ask", capture_input=False, capture_output=False)
-def execute_ask(payload: AskRequest, ...) -> AskResponse:
+def execute_ask(payload, ...) -> AskResponse:
     ...
-
-# Usage in verification.py:
-@_observe(name="verify_relevance", capture_input=False, capture_output=False)
-def verify_relevance(question: str, chunk_text: str, ...) -> tuple:
-    ...
-
-def flush_langfuse() -> None:
-    """Flush traces on shutdown - BOTH decorator context AND client."""
-    if langfuse_context is not None:
-        langfuse_context.flush()  # @observe decorator buffer
-    if _langfuse_client is not None:
-        _langfuse_client.flush()  # Manual tracing buffer
 ```
+
+Trace metadata is enriched via `safe_update_observation()` and `safe_update_trace()` — both are no-ops if Langfuse is disabled, and wrapped in try/except to never break the request pipeline.
+
+### Layer 2: OpenTelemetry + Azure Monitor
+
+Five custom OTEL metrics are emitted on every request via `record_request_metrics()`:
+
+```python
+# otel.py — custom metrics (NFR-022)
+"docqa.request.count"       # Counter: total requests, labeled by component/refusal/cache
+"docqa.request.latency_ms"  # Histogram: latency distribution per component
+"docqa.tokens.total"        # Counter: tokens consumed (input/output, per component)
+"docqa.cache.hit"           # Counter: cache hit count by cache type
+"docqa.cost.usd"            # Counter: estimated cost in USD per component
+```
+
+LLM calls additionally set GenAI semantic convention attributes on the active span:
+
+```python
+# otel.py — set_genai_span_attributes()
+span.set_attribute("gen_ai.system", "azure_openai")
+span.set_attribute("gen_ai.request.model", "gpt-4o")
+span.set_attribute("gen_ai.usage.prompt_tokens", 800)
+span.set_attribute("gen_ai.usage.completion_tokens", 50)
+span.set_attribute("llm.latency_ms", 1200)
+span.set_attribute("llm.request_id", "req-abc123")
+```
+
+### Layer 3: Telemetry Table + Metrics Endpoint
+
+Every request writes a row to the `telemetry` PostgreSQL table with full request metadata:
+
+```python
+# telemetry.py — record_telemetry()
+insert_telemetry(Telemetry(
+    request_id, tenant_id, matter_id, docs_snapshot_id,
+    prompt_version, retrieval_version, model_id, parser_mode,
+    timestamp_utc, latency_ms, tokens_in, tokens_out, cost_est,
+    cache_hit, refusal_code, failure_label, trace_metadata,  # JSON blob
+    langfuse_trace_id,                                       # Cross-links to Langfuse
+))
+```
+
+The `GET /v1/metrics` endpoint computes aggregates over a 24-hour window:
+
+```json
+{
+  "p50_latency_ms": 1200,
+  "p95_latency_ms": 4500,
+  "p99_latency_ms": 6800,
+  "max_latency_ms": 9200,
+  "total_requests": 342,
+  "avg_cost_per_query": 0.0042,
+  "refusals_by_code": {"LOW_RETRIEVAL_CONFIDENCE": 12, "INJECTION_DETECTED": 2},
+  "cache_hit_rate": 0.15,
+  "latency_by_component": {
+    "retrieval_ms": 450.2,
+    "verification_ms": 2100.5,
+    "llm_ms": 2100.5,
+    "overhead_ms": 35.1
+  }
+}
+```
+
+---
+
+## Performance & Latency Controls
+
+### End-to-End Timing
+
+Every request is timed with `time.perf_counter()` from the first line of `execute_ask()`:
+
+```python
+# ask_service.py
+start_time = time.perf_counter()
+# ... entire pipeline ...
+latency_ms = int((time.perf_counter() - start_time) * 1000)
+```
+
+This captures the true wall-clock time including all sub-operations, serialization, and overhead. The value is recorded in both the `telemetry` table and OTEL metrics on every request — including refusals and cache hits.
+
+### Sub-Component Latency Breakdown
+
+Each pipeline phase is individually timed and stored in `trace_metadata.latency_breakdown`:
+
+```python
+# ask_service.py — sub-component timing (NFR-011)
+retrieval_start = time.perf_counter()
+results, embedding_usage = retrieval.hybrid_search(...)
+retrieval_ms = int((time.perf_counter() - retrieval_start) * 1000)
+
+verification_start = time.perf_counter()
+# ... verification loop (1-3 LLM calls) ...
+verification_ms = int((time.perf_counter() - verification_start) * 1000)
+
+# Stored per-request for analysis
+trace_metadata["latency_breakdown"] = {
+    "retrieval_ms": retrieval_ms,       # Embedding + search (200-1500ms)
+    "verification_ms": verification_ms, # LLM relevance check (500-3000ms)
+    "llm_ms": verification_ms,          # Primary LLM call
+    "overhead_ms": total - (retrieval + verification),  # Serialization, caching
+}
+```
+
+### Latency Target
+
+| Metric | Target | Config | Default |
+|--------|--------|--------|---------|
+| p95 end-to-end | < 8000ms | `DOCQA_LATENCY_TARGET_MS` | 8000 |
+
+The verification step dominates latency (1-3 LLM calls to validate chunk relevance). The latency budget:
+
+```
+Retrieval (embedding + search):  200-1500ms  (~30%)
+Verification (LLM):             500-3000ms  (~55%)
+Evidence grading:                    <10ms   (~0%)
+Overhead:                         10-50ms    (~1%)
+                                ────────────
+Total p95 target:                   <8000ms
+```
+
+### Percentile Calculation
+
+The `compute_metrics()` function uses linear interpolation for percentiles:
+
+```python
+# telemetry.py — _percentile()
+def _percentile(values: list[int], pct: int) -> int:
+    k = (len(values) - 1) * (pct / 100)
+    f, c = int(k), min(int(k) + 1, len(values) - 1)
+    if f == c: return values[f]
+    return int(values[f] * (c - k) + values[c] * (k - f))
+```
+
+---
+
+## Caching Architecture
+
+Two independent LRU caches reduce cost and latency:
+
+### Embedding Cache
+
+**Problem:** Identical questions produce identical embeddings, but Azure OpenAI charges per token.
+
+```python
+# cache.py — EmbeddingCache
+class EmbeddingCache:
+    """LRU cache for question embeddings. Thread-safe."""
+    def __init__(self, max_size: int = 5000):
+        self._cache: OrderedDict[str, list[float]] = OrderedDict()
+        self._lock = threading.Lock()  # Thread-safe under concurrent requests
+```
+
+| Setting | Default | Config |
+|---------|---------|--------|
+| Enabled | Yes | `EMBEDDING_CACHE_ENABLED` |
+| Max entries | 5000 | `EMBEDDING_CACHE_MAX_SIZE` |
+| TTL | None (deterministic) | N/A |
+| Key | SHA-256 of question text | N/A |
+
+No TTL needed because the same text always produces the same embedding. The `stats()` method exposes hits, misses, and size via `/v1/metrics`.
+
+### Query Result Cache
+
+**Problem:** Repeated identical questions waste LLM tokens and latency.
+
+```python
+# cache.py — QueryResultCache
+class QueryResultCache:
+    """LRU cache for Q&A responses with tenant isolation and TTL."""
+    def _make_key(self, tenant_id, matter_id, docs_snapshot_id, question_hash):
+        return f"{tenant_id}:{matter_id}:{docs_snapshot_id}:{question_hash}"
+```
+
+| Setting | Default | Config |
+|---------|---------|--------|
+| Enabled | No (opt-in) | `QUERY_CACHE_ENABLED` |
+| Max entries | 500 | `QUERY_CACHE_MAX_SIZE` |
+| TTL | 3600s | `QUERY_CACHE_TTL_SECONDS` |
+| Key | `tenant:matter:snapshot:question_hash` | N/A |
+
+The key includes `docs_snapshot_id`, so re-indexing documents automatically invalidates stale cached answers. Tenant isolation is enforced at the key level — cross-tenant cache hits are structurally impossible.
+
+### Thread Safety
+
+Both caches use `threading.Lock` around all reads and writes. Under 50 concurrent requests (NFR-012), this has been validated with `ThreadPoolExecutor` tests. The lock granularity is per-cache — retrieval and caching never block each other.
+
+### Per-Instance Tradeoffs
+
+Caches are in-memory per-process. Under horizontal scaling:
+- Each Azure Container Apps replica warms its own cache independently
+- Cache hit rate decreases with more replicas (acceptable tradeoff for availability)
+- No shared state means no cache invalidation complexity
+
+---
+
+## Cost Tracking & Estimation
+
+Every request tracks cost at component level, stored in `trace_metadata.cost_breakdown`:
+
+```python
+# services/cost.py
+def estimate_cost(prompt_tokens, completion_tokens, input_per_1k, output_per_1k):
+    return (prompt_tokens / 1000) * input_per_1k + (completion_tokens / 1000) * output_per_1k
+
+# Per-component breakdown accumulated during request
+cost_breakdown = {
+    "embeddings": {"prompt_tokens": 50, "cost_est": 0.000005, "source": "azure_openai"},
+    "azure_search": {"cost_est": 0.001},
+    "verification": {"prompt_tokens": 800, "completion_tokens": 50, "cost_est": 0.0004},
+}
+```
+
+Cost rates are configurable via environment:
+
+| Cost Item | Config | Default |
+|-----------|--------|---------|
+| LLM input (per 1K tokens) | `DOCQA_MODEL_COST_INPUT_PER_1K` | $0.0004 |
+| LLM output (per 1K tokens) | `DOCQA_MODEL_COST_OUTPUT_PER_1K` | $0.0016 |
+| Embeddings (per 1K tokens) | `DOCQA_EMBEDDINGS_COST_PER_1K` | $0.0001 |
+| Azure Search (per query) | `AZURE_SEARCH_COST_PER_QUERY` | $0.001 |
+
+When real token counts aren't available (e.g., cached embeddings), the system estimates at ~4 chars per token and flags `"usage_fallback": true` in the trace metadata — so downstream analytics know the cost is approximate.
+
+The `avg_cost_per_query` metric in `/v1/metrics` aggregates across the 24-hour window.
+
+---
+
+## Rate Limiting & Concurrency
+
+### Rate Limiting via slowapi
+
+Rate limits are applied per-IP using [slowapi](https://github.com/laurentS/slowapi) decorators:
+
+```python
+# routers/ask.py
+@router.post("/v1/ask")
+@limiter.limit(RATE_LIMIT_QUERY)   # 20/minute per IP
+async def ask(request: Request, ...):
+    ...
+
+# routers/docs.py
+@router.post("/v1/docs/upload")
+@limiter.limit(RATE_LIMIT_UPLOAD)  # 10/minute per IP
+async def upload_doc(request: Request, ...):
+    ...
+```
+
+| Endpoint | Default Limit | Config |
+|----------|---------------|--------|
+| `/v1/ask` | 20/minute | `RATE_LIMIT_QUERY` |
+| `/v1/docs/upload` | 10/minute | `RATE_LIMIT_UPLOAD` |
+| All other routes | 100/minute | `RATE_LIMIT_DEFAULT` |
+| Kill switch | On | `RATE_LIMIT_ENABLED` |
+
+Exceeded limits return `HTTP 429` with `Retry-After` header. The limiter is conditionally created — when `RATE_LIMIT_ENABLED=0`, decorators are no-ops and no 429s are ever returned.
+
+### Concurrency Model
+
+FastAPI runs on uvicorn. Sync route handlers (most of ours) execute in a thread pool managed by Starlette. The system handles 50+ concurrent requests without deadlocks:
+
+```python
+# Validated by test_performance.py::TestConcurrentRequests
+with ThreadPoolExecutor(max_workers=50) as executor:
+    futures = [executor.submit(make_request) for _ in range(50)]
+    results = [f.result() for f in as_completed(futures)]
+assert len(results) == 50
+assert all(code == 200 for code in results)
+```
+
+### Horizontal Scaling
+
+| Setting | Value | Rationale |
+|---------|-------|-----------|
+| Min replicas | 1 | Always-on for latency |
+| Max replicas | 4 | Handles 50+ concurrent users |
+| Scale trigger | Concurrent requests > 15 | Proactive scale-out |
+| CPU/instance | 2 vCPU | Sync processing headroom |
+| Memory/instance | 4 GiB | Embedding cache fits |
+
+---
+
+## PII Redaction
+
+Law firm document Q&A handles confidential client data. The system enforces PII safety at every observability boundary:
+
+### What's Never Logged
+
+| Data | Where Blocked | How |
+|------|---------------|-----|
+| Raw question text | Langfuse, OTEL spans, structured logs | `capture_input=False` on all `@observe` decorators |
+| Raw answer text | Langfuse, OTEL spans, structured logs | `capture_output=False` on all `@observe` decorators |
+| Document content/snippets | Langfuse metadata | Excluded from `redact_for_langfuse()` |
+| Document names | Langfuse metadata | May contain client names; excluded from metadata |
+| Client/tenant names | All logs | Only `tenant_id` (UUID) is logged, never names |
+
+### What IS Logged (Safe Metrics Only)
+
+```python
+# otel.py — redact_for_langfuse()
+def redact_for_langfuse(*, question_len, answer_len, citation_count,
+                        evidence_grade, evidence_label, refusal_code,
+                        verification_status, doc_count) -> dict:
+    return {
+        "question_len": question_len,       # Length, not content
+        "answer_len": answer_len,           # Length, not content
+        "citation_count": citation_count,   # Count, not text
+        "evidence_grade": evidence_grade,   # "A"/"B"/"C"
+        "evidence_label": evidence_label,   # "Strong"/"Moderate"/"Weak"
+        "refusal_code": refusal_code,       # Enum value
+        "verification_status": verification_status,
+        "doc_count": doc_count,             # Count, not names
+    }
+```
+
+This is compliant with NFR-004 (No PII in logs). The principle: log **metrics about** the data, never the data itself.
+
+---
+
+## Graceful Degradation
+
+Every external dependency is optional. The system runs with or without each one:
+
+| Dependency | When Missing | Mechanism |
+|------------|--------------|-----------|
+| **Langfuse** | `@observe` becomes identity decorator; `safe_update_*` are no-ops | `get_observe_decorator()` returns `_noop_observe` |
+| **OTEL SDK** | `span()` yields `None`; `record_request_metrics()` is no-op | Conditional `if _TRACER` / `if _REQUEST_COUNTER` checks |
+| **Azure Monitor** | OTEL spans collected but not exported | `setup_otel()` returns early if no connection string |
+| **Azure AI Search** | Falls back to local pgvector hybrid search | `_azure_enabled()` check in `retrieval.py` |
+| **Embedding cache** | Embeddings computed on every request (higher cost, same correctness) | `EMBEDDING_CACHE_ENABLED=0` |
+| **Query cache** | Full pipeline runs on every request (higher cost, same correctness) | `QUERY_CACHE_ENABLED=0` |
+| **Rate limiting** | No 429s returned; unlimited requests | `RATE_LIMIT_ENABLED=0` |
+
+The pattern is consistent: every `safe_*` function wraps calls in `try/except` that logs debug-level and continues. The request pipeline **never breaks** due to an observability failure.
+
+```python
+# Pattern used throughout otel.py — defensive, never breaks
+def safe_update_observation(*, model=None, usage=None, metadata=None):
+    if not _LANGFUSE_INITIALIZED or langfuse_context is None:
+        return  # No-op
+    try:
+        langfuse_context.update_current_observation(**kwargs)
+    except Exception as exc:
+        logger.debug("Langfuse update failed: %s", exc)  # Log and continue
+```
+
+---
+
+## Test Architecture
+
+### Test Categories
+
+| Category | Location | Purpose | Run In CI |
+|----------|----------|---------|-----------|
+| Unit tests | `tests/test_*.py` | Component correctness | Yes |
+| Performance tests | `tests/test_performance.py` | Latency targets, concurrency, rate limits | Yes |
+| Telemetry tests | `tests/test_telemetry.py` | Metrics computation, OTEL spans | Yes |
+| Rate limit tests | `tests/test_rate_limit.py` | slowapi integration | Yes |
+| Cache tests | `tests/test_cache.py` | Thread-safety, LRU eviction, TTL | Yes |
+| Golden queries | `evals/golden.jsonl` | Retrieval/answer quality regression | Yes |
+| Load tests | `tests/loadtest/locustfile.py` | 50-user sustained load | Manual only |
+
+### Performance Test Suite (`test_performance.py`)
+
+Eight tests covering NFR-011 (latency) and NFR-012 (concurrency):
+
+```python
+# Config validation
+test_latency_target_config_exists       # LATENCY_TARGET_MS == 8000
+
+# Metrics computation
+test_compute_metrics_p50_p95_p99_calculation  # Percentile math on 100 rows
+test_compute_metrics_empty_rows               # Zero defaults on empty window
+test_compute_metrics_latency_by_component     # Component averaging
+
+# Endpoint integration
+test_metrics_endpoint_returns_enhanced_fields  # /v1/metrics response shape
+
+# Pipeline integration
+test_latency_breakdown_stored                  # trace_metadata has latency_breakdown
+
+# Concurrency (NFR-012)
+test_concurrent_requests_no_crash              # 50 ThreadPoolExecutor requests
+
+# Rate limiting
+test_rate_limit_returns_429                    # 429 after exceeding limit
+```
+
+### TDD Enforcement
+
+All features follow RED → GREEN → REFACTOR:
+
+1. **RED**: Write failing test that proves the test works
+2. **GREEN**: Write minimum code to pass
+3. **REFACTOR**: Clean up while maintaining green
+
+Example from NFR-011: `test_latency_breakdown_stored` was written before the sub-component timing code in `ask_service.py`. The test mocks the entire ask pipeline, calls `execute_ask()`, and asserts that `record_telemetry` was called with `trace_metadata` containing a `latency_breakdown` dict with `retrieval_ms`, `verification_ms`, `llm_ms`, and `overhead_ms` — all non-negative integers.
+
+### Load Testing
+
+For manual performance validation against staging/production:
+
+```bash
+# Install
+pip install locust
+
+# Run against staging (50 users, 5 users/sec spawn rate)
+locust -f tests/loadtest/locustfile.py --host=https://YOUR_API_URL -u 50 -r 5
+
+# Headless mode for CI integration
+locust -f tests/loadtest/locustfile.py --host=https://YOUR_API_URL \
+    -u 50 -r 5 --run-time 5m --headless --csv results/loadtest
+```
+
+Baseline targets:
+
+| Scenario | Users | Expected p95 |
+|----------|-------|-------------|
+| Light | 1 | < 4000ms |
+| Normal | 10 | < 6000ms |
+| Peak (NFR-012 target) | 50 | < 8000ms |
+| Stress | 100 | < 12000ms (graceful degradation) |
 
 ---
 
@@ -784,11 +1195,22 @@ POST /v1/ask
 
 Evidence-Bound enforces evidence-grounded answers through:
 
-1. **Hybrid Retrieval** - BM25 + vector + semantic reranking finds relevant chunks
-2. **Confidence Gating** - Low-confidence results trigger refusal
-3. **LLM Verification** - Second pass confirms chunk answers the question
-4. **Citation Validation** - Spans must exist verbatim in source text
-5. **Adversarial Detection** - Negation mismatch, injection patterns, blocklists
-6. **Tenant Isolation** - Every query filtered by tenant_id + matter_id
+**Core RAG Pipeline**
+1. **Hybrid Retrieval** — BM25 + vector + semantic reranking finds relevant chunks
+2. **Confidence Gating** — Low-confidence results trigger refusal
+3. **LLM Verification** — Second pass confirms chunk answers the question
+4. **Citation Validation** — Spans must exist verbatim in source text
+5. **Adversarial Detection** — Negation mismatch, injection patterns, homoglyph normalization, blocklists
+6. **Tenant Isolation** — Every query filtered by tenant_id + matter_id
 
-The system refuses to answer rather than risk hallucination or fabricated citations.
+**Production Engineering**
+7. **Three-Layer Observability** — Langfuse (LLM tracing) + OpenTelemetry (infrastructure) + telemetry table (business metrics)
+8. **Sub-Component Latency Tracking** — Per-request breakdown: retrieval, verification, LLM, overhead (p50/p95/p99)
+9. **Thread-Safe LRU Caching** — Embedding cache (5K entries) + query result cache (tenant-isolated, TTL, auto-invalidated on re-index)
+10. **Per-Request Cost Estimation** — Component-level cost breakdown with configurable rates
+11. **Rate Limiting** — Per-IP slowapi decorators on all routes (20/min query, 10/min upload)
+12. **PII Redaction** — Raw questions, answers, and document names never reach logs or traces
+13. **Graceful Degradation** — Every external dependency is optional; the pipeline never breaks due to observability failures
+14. **Performance Test Suite** — 8 automated tests: percentile math, concurrency (50 threads), rate limit enforcement, latency breakdown validation
+
+The system refuses to answer rather than risk hallucination or fabricated citations. And when it does answer, every aspect of the request — latency, cost, tokens, cache behavior, and evidence quality — is tracked, measured, and available for audit.

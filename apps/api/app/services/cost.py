@@ -1,9 +1,13 @@
+import os
 from typing import Any
 
 
 CostEntry = dict[str, int | float | bool | str | None]
 CostBreakdown = dict[str, CostEntry]
 TraceMetadata = dict[str, Any]
+
+# Configurable estimate for Azure Search cost per query (default $0.001)
+AZURE_SEARCH_COST_PER_QUERY = float(os.getenv("AZURE_SEARCH_COST_PER_QUERY", "0.001"))
 
 
 def estimate_cost(

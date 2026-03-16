@@ -312,6 +312,127 @@ def get_latest_docs_snapshot_id(tenant_id: str) -> str | None:
         return row[0] if row else None
 
 
+def get_latest_snapshot_for_matter(tenant_id: str, matter_id: str) -> str | None:
+    """Get the most recent docs_snapshot_id for a specific matter.
+
+    Like get_latest_docs_snapshot_id but scoped to a single matter to prevent
+    cross-matter snapshot leakage.
+
+    Args:
+        tenant_id: Tenant ID for isolation (FR-001)
+        matter_id: Matter ID for isolation (FR-002)
+
+    Returns:
+        The most recent docs_snapshot_id or None if no documents exist
+    """
+    with session_scope() as session:
+        stmt = (
+            select(Document.docs_snapshot_id)
+            .where(
+                Document.tenant_id == tenant_id,
+                Document.matter_id == matter_id,
+                Document.status == "ready",
+            )
+            .order_by(Document.ingested_at_utc.desc())
+        )
+        row = session.execute(stmt).first()
+        return row[0] if row else None
+
+
+def list_matters_for_tenant(
+    tenant_id: str, user_id: str, user_role: str
+) -> list[dict[str, Any]]:
+    """List distinct matters with doc counts for a tenant.
+
+    Admin users see all matters. Non-admin users only see matters they
+    have access to via matter_assignments.
+
+    Args:
+        tenant_id: Tenant ID for isolation (FR-001)
+        user_id: User ID for access filtering
+        user_role: User role (admin sees all)
+
+    Returns:
+        List of dicts with matter_id, display_name, doc_count, latest_snapshot_id
+    """
+    with session_scope() as session:
+        if user_role == "admin":
+            stmt = text(
+                "SELECT matter_id, COUNT(*) as doc_count, "
+                "MAX(ingested_at_utc) as latest_ingested, "
+                "("
+                "  SELECT d2.docs_snapshot_id FROM documents d2 "
+                "  WHERE d2.tenant_id = :tenant_id "
+                "  AND d2.matter_id = documents.matter_id "
+                "  AND d2.status = 'ready' "
+                "  ORDER BY d2.ingested_at_utc DESC LIMIT 1"
+                ") as latest_snapshot_id "
+                "FROM documents "
+                "WHERE tenant_id = :tenant_id AND status = 'ready' "
+                "GROUP BY matter_id "
+                "ORDER BY latest_ingested DESC"
+            )
+            rows = session.execute(stmt, {"tenant_id": tenant_id}).all()
+        else:
+            stmt = text(
+                "SELECT d.matter_id, COUNT(*) as doc_count, "
+                "MAX(d.ingested_at_utc) as latest_ingested, "
+                "("
+                "  SELECT d2.docs_snapshot_id FROM documents d2 "
+                "  WHERE d2.tenant_id = :tenant_id "
+                "  AND d2.matter_id = d.matter_id "
+                "  AND d2.status = 'ready' "
+                "  ORDER BY d2.ingested_at_utc DESC LIMIT 1"
+                ") as latest_snapshot_id "
+                "FROM documents d "
+                "JOIN matter_assignments ma ON d.matter_id = ma.matter_id "
+                "  AND ma.tenant_id = :tenant_id AND ma.user_id = :user_id "
+                "WHERE d.tenant_id = :tenant_id AND d.status = 'ready' "
+                "GROUP BY d.matter_id "
+                "ORDER BY latest_ingested DESC"
+            )
+            rows = session.execute(
+                stmt, {"tenant_id": tenant_id, "user_id": user_id}
+            ).all()
+
+        return [
+            {
+                "matter_id": row[0],
+                "doc_count": row[1],
+                "display_name": row[0].replace("-", " ").title(),
+                "latest_snapshot_id": row[3],
+            }
+            for row in rows
+        ]
+
+
+def list_documents_for_matter(
+    tenant_id: str, matter_id: str
+) -> list[Document]:
+    """List all documents for a specific matter.
+
+    Returns all statuses (ready, queued, processing, failed) so the UI
+    can show document status.
+
+    Args:
+        tenant_id: Tenant ID for isolation (FR-001)
+        matter_id: Matter ID for isolation (FR-002)
+
+    Returns:
+        List of Document objects ordered by ingestion time (newest first)
+    """
+    with session_scope() as session:
+        stmt = (
+            select(Document)
+            .where(
+                Document.tenant_id == tenant_id,
+                Document.matter_id == matter_id,
+            )
+            .order_by(Document.ingested_at_utc.desc())
+        )
+        return list(session.execute(stmt).scalars().all())
+
+
 def get_doc_name(doc_id: str, tenant_id: str) -> str | None:
     """Get document name by ID with tenant isolation (FR-001).
 

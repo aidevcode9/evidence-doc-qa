@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
+from app.config import RATE_LIMIT_QUERY
 from app.context import RequestContext, get_request_context
+from app.rate_limit import limiter
 from app.rbac import has_permission
 from app.schemas import AskRequest, AskResponse
 from app.services.ask_service import execute_ask
@@ -11,6 +13,7 @@ router = APIRouter()
 @router.post("/v1/ask", response_model=AskResponse)
 def ask(
     payload: AskRequest,
+    request: Request,
     context: RequestContext = Depends(get_request_context),
     x_docqa_session: str | None = Header(default=None),
 ) -> AskResponse:
@@ -27,3 +30,8 @@ def ask(
         tenant_id=context.tenant_id,
         matter_id=context.matter_id,
     )
+
+
+# Apply shared rate limiter if enabled (NFR-012)
+if limiter is not None:
+    ask = limiter.limit(RATE_LIMIT_QUERY)(ask)

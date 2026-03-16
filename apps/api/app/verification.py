@@ -15,7 +15,7 @@ from app.config import (
     AZURE_OPENAI_CHAT_ENDPOINT,
     MODEL_ID,
 )
-from app.otel import get_observe_decorator, safe_update_observation
+from app.otel import get_observe_decorator, safe_update_observation, set_genai_span_attributes
 from app.telemetry import logger
 
 # Get Langfuse @observe decorator (or no-op fallback)
@@ -114,6 +114,15 @@ def verify_relevance(
                 "estimated": bool(usage.get("estimated")),
                 "verdict": "VERIFIED" if status == "verified" else "REJECTED",
             },
+        )
+        # Set OTEL GenAI semantic convention attributes (NFR-022)
+        set_genai_span_attributes(
+            system="azure_openai",
+            model=MODEL_ID or "unknown",
+            prompt_tokens=int(usage.get("prompt_tokens") or 0),
+            completion_tokens=int(usage.get("completion_tokens") or 0),
+            latency_ms=latency_ms,
+            request_id=request_id,
         )
         logger.info(
             "Verifier result: request_id=%s chunk_id=%s verdict=%s reason=%s finish_reason=%s latency_ms=%s",

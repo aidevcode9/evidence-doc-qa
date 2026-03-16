@@ -6,7 +6,8 @@ from typing import Any
 from fastapi import HTTPException
 
 from app import evidence, otel, policy, retrieval, verification, ingestion
-from app.otel import get_observe_decorator, safe_update_trace, safe_update_observation, safe_get_trace_id, redact_for_langfuse
+from app.cache import QueryResultCache
+from app.otel import get_observe_decorator, safe_update_trace, safe_update_observation, safe_get_trace_id, redact_for_langfuse, record_request_metrics
 from app.db import QAMessage, get_or_create_session, insert_qa_message
 from app.config import (
     MODEL_ID,
@@ -24,8 +25,11 @@ from app.config import (
     AZURE_RERANK_MIN,
     INDEX_VERSION,
     MAX_QUERY_LENGTH,
+    QUERY_CACHE_ENABLED,
+    QUERY_CACHE_MAX_SIZE,
+    QUERY_CACHE_TTL_SECONDS,
 )
-from app.db import get_latest_docs_snapshot_id
+from app.db import get_latest_snapshot_for_matter
 from app.schemas import AskRequest, AskResponse, Citation, DebugCandidate, EvidenceSupport, RefusalCode
 from app.telemetry import logger, record_telemetry
 from app.services import cost, rag
@@ -36,6 +40,18 @@ _observe = get_observe_decorator()
 
 ChunkDict = dict[str, Any]
 VersionSnapshot = dict[str, str]
+
+# Singleton query cache
+_query_cache: QueryResultCache | None = (
+    QueryResultCache(max_size=QUERY_CACHE_MAX_SIZE, ttl_seconds=QUERY_CACHE_TTL_SECONDS)
+    if QUERY_CACHE_ENABLED
+    else None
+)
+
+
+def get_query_cache() -> QueryResultCache | None:
+    """Return the singleton query cache (for metrics endpoint)."""
+    return _query_cache
 
 
 @_observe(name="execute_ask", capture_input=False, capture_output=False)
@@ -59,10 +75,40 @@ def execute_ask(
         )
 
     request_id = str(uuid.uuid4())
-    docs_snapshot_id = payload.docs_snapshot_id or get_latest_docs_snapshot_id(tenant_id=tenant_id) or "none"
+    docs_snapshot_id = payload.docs_snapshot_id or get_latest_snapshot_for_matter(tenant_id=tenant_id, matter_id=matter_id) or "none"
     question_len = len(question)
     question_hash = rag.hash_text(question) if question else None
-    
+
+    # Query cache check (Cost Reduction)
+    if _query_cache is not None and question_hash:
+        cached = _query_cache.get(tenant_id, matter_id, docs_snapshot_id, question_hash)
+        if cached is not None:
+            logger.info(f"Cache hit [{request_id}]: returning cached response")
+            cached_response = AskResponse(**cached)
+            cached_response.request_id = request_id
+            _record_request_internal(
+                request_id=request_id,
+                tenant_id=tenant_id,
+                matter_id=matter_id,
+                docs_snapshot_id=docs_snapshot_id,
+                version_snapshot={
+                    "request_id": request_id,
+                    "docs_snapshot_id": docs_snapshot_id,
+                    "prompt_version": PROMPT_VERSION,
+                    "verifier_prompt_version": verification.VERIFIER_PROMPT_VERSION,
+                    "retrieval_version": RETRIEVAL_VERSION,
+                    "model_id": MODEL_ID,
+                    "parser_mode": PARSER_MODE,
+                },
+                refusal_code=None,
+                failure_label=None,
+                start_time=start_time,
+                question_len=question_len,
+                answer_len=len(cached_response.answer_text or ""),
+                cache_hit=True,
+            )
+            return cached_response
+
     tokens_in = 0
     tokens_out = 0
     cost_est = 0.0
@@ -117,6 +163,7 @@ def execute_ask(
             matter_id=matter_id,
         )
 
+    retrieval_start = time.perf_counter()
     with otel.span("retrieval", docs_snapshot_id=docs_snapshot_id) as retrieval_span:
         search_result = retrieval.hybrid_search(
             question,
@@ -138,7 +185,15 @@ def execute_ask(
                 "retrieval.mode",
                 "azure" if "azure_search_score" in results[0] else "local",
             )
+    retrieval_ms = int((time.perf_counter() - retrieval_start) * 1000)
     
+    # Azure Search cost (Cost Reduction visibility)
+    azure_search_cost = cost.AZURE_SEARCH_COST_PER_QUERY
+    cost_est += azure_search_cost
+    cost.merge_cost_breakdown(
+        cost_breakdown, "azure_search", 0, 0, azure_search_cost, False, "azure_search",
+    )
+
     if not embedding_usage:
         embedding_usage = {}
     embed_prompt_tokens = int(embedding_usage.get("prompt_tokens") or 0)
@@ -255,6 +310,7 @@ def execute_ask(
     verification_reasons: dict[str, str] = {}
     last_verifier_reason = None
     
+    verification_start = time.perf_counter()
     if verification.is_enabled():
         verification_rejected = True
         trace_metadata = {
@@ -390,6 +446,7 @@ def execute_ask(
                 matter_id=matter_id,
             )
         verified_chunk = candidates[0]
+    verification_ms = int((time.perf_counter() - verification_start) * 1000)
 
     if verification_status == "VERIFIED" and verified_chunk:
         verifier_result = {
@@ -588,6 +645,15 @@ def execute_ask(
         doc_count=len(set(c.doc_id for c in citations)),
     ))
 
+    # Sub-component latency breakdown (NFR-011)
+    total_ms = int((time.perf_counter() - start_time) * 1000)
+    overhead_ms = max(0, total_ms - (retrieval_ms + verification_ms))
+    trace_metadata["latency_breakdown"] = {
+        "retrieval_ms": retrieval_ms,
+        "verification_ms": verification_ms,
+        "overhead_ms": overhead_ms,
+    }
+
     _record_request_internal(
         request_id=request_id,
         tenant_id=tenant_id,
@@ -621,6 +687,13 @@ def execute_ask(
             version_snapshot=version_snapshot,
         )
 
+    # Cache successful response (Cost Reduction)
+    if _query_cache is not None and question_hash and response.refusal_code is None:
+        _query_cache.put(
+            tenant_id, matter_id, docs_snapshot_id, question_hash,
+            response.model_dump(),
+        )
+
     logger.info(f"Success [{request_id}]: Response returned with {len(citations)} citation(s) from {primary_citation.doc_name}")
     return response
 
@@ -640,6 +713,7 @@ def _record_request_internal(
     tokens_in: int = 0,
     tokens_out: int = 0,
     cost_est: float = 0.0,
+    cache_hit: bool = False,
     trace_metadata: TraceMetadata | None = None,
 ) -> None:
     latency_ms = int((time.perf_counter() - start_time) * 1000)
@@ -647,6 +721,14 @@ def _record_request_internal(
         trace_metadata = {"question_len": question_len, "answer_len": answer_len}
     else:
         trace_metadata = {**trace_metadata, "question_len": question_len, "answer_len": answer_len}
+
+    # Ensure latency_breakdown exists for all requests (NFR-011)
+    if "latency_breakdown" not in trace_metadata:
+        trace_metadata["latency_breakdown"] = {
+            "retrieval_ms": 0,
+            "verification_ms": 0,
+            "overhead_ms": latency_ms,
+        }
 
     record_telemetry(
         request_id=request_id,
@@ -662,13 +744,24 @@ def _record_request_internal(
         tokens_in=tokens_in,
         tokens_out=tokens_out,
         cost_est=cost_est,
-        cache_hit=False,
+        cache_hit=cache_hit,
         refusal_code=refusal_code,
         failure_label=failure_label,
         question_len=question_len,
         answer_len=answer_len,
         trace_metadata=trace_metadata,
         langfuse_trace_id=safe_get_trace_id(),
+    )
+
+    # Record OTEL custom metrics (NFR-022)
+    record_request_metrics(
+        latency_ms=latency_ms,
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        cost_est=cost_est,
+        cache_hit=cache_hit,
+        component="ask",
+        refusal_code=str(refusal_code.value) if refusal_code else None,
     )
 
 

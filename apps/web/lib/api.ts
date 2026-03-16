@@ -13,6 +13,27 @@
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+let _currentMatterId =
+  (typeof window !== "undefined" && localStorage.getItem("docqa_matter")) ||
+  "demo-matter";
+
+/**
+ * Set the active matter and persist to localStorage.
+ */
+export function setCurrentMatter(matterId: string): void {
+  _currentMatterId = matterId;
+  if (typeof window !== "undefined") {
+    localStorage.setItem("docqa_matter", matterId);
+  }
+}
+
+/**
+ * Get the active matter ID.
+ */
+export function getCurrentMatter(): string {
+  return _currentMatterId;
+}
+
 /**
  * Get authentication headers for API requests.
  *
@@ -27,7 +48,18 @@ export function getAuthHeaders(): Record<string, string> {
   // Current hardcoded values are for demo/development only
   return {
     "X-Tenant-Id": "demo-tenant",
-    "X-Matter-Id": "demo-matter",
+    "X-Matter-Id": _currentMatterId,
+    "X-User-Id": "demo-user",
+    "X-User-Role": "admin",
+  };
+}
+
+/**
+ * Get tenant-only headers (no X-Matter-Id) for matter-listing endpoints.
+ */
+function getTenantHeaders(): Record<string, string> {
+  return {
+    "X-Tenant-Id": "demo-tenant",
     "X-User-Id": "demo-user",
     "X-User-Role": "admin",
   };
@@ -107,6 +139,53 @@ export async function fetchCapabilities(): Promise<ServerCapabilities> {
   const response = await fetch(`${API_URL}/healthz`);
   if (!response.ok) {
     throw new Error("Failed to fetch server capabilities");
+  }
+  return response.json();
+}
+
+/**
+ * Matter info returned by GET /v1/matters.
+ */
+export type MatterInfo = {
+  matter_id: string;
+  display_name: string;
+  doc_count: number;
+  latest_snapshot_id: string | null;
+};
+
+/**
+ * Document summary returned by GET /v1/matters/{id}/docs.
+ */
+export type DocSummary = {
+  doc_id: string;
+  doc_name: string;
+  status: string;
+  ingested_at_utc: string;
+  page_count: number | null;
+};
+
+/**
+ * Fetch all matters the user can access (uses tenant-only headers).
+ */
+export async function fetchMatters(): Promise<MatterInfo[]> {
+  const response = await fetch(`${API_URL}/v1/matters`, {
+    headers: getTenantHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error("Failed to fetch matters");
+  }
+  return response.json();
+}
+
+/**
+ * Fetch documents for a specific matter.
+ */
+export async function fetchMatterDocs(matterId: string): Promise<DocSummary[]> {
+  const response = await fetch(`${API_URL}/v1/matters/${encodeURIComponent(matterId)}/docs`, {
+    headers: getTenantHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error("Failed to fetch matter documents");
   }
   return response.json();
 }

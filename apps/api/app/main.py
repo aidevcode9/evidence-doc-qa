@@ -16,24 +16,22 @@ from app.config import (
 )
 from app.db import init_db
 from app.indexing import ensure_index
+from app.rate_limit import limiter as _shared_limiter
 from app.telemetry import logger
-from app.routers import health, ask, docs, metrics, export, auth, sso, admin, audit
+from app.routers import health, ask, docs, metrics, export, auth, sso, admin, audit, matters
 
 app = FastAPI(title="DocQ&A API", version="0.0.0")
 
 # Setup Tracing
 otel.setup_otel(app)
 
-# Rate Limiting (FR-052)
-if RATE_LIMIT_ENABLED:
+# Rate Limiting (NFR-012)
+if RATE_LIMIT_ENABLED and _shared_limiter is not None:
     from fastapi import Request
     from fastapi.responses import JSONResponse
-    from slowapi import Limiter
     from slowapi.errors import RateLimitExceeded
-    from slowapi.util import get_remote_address
 
-    limiter = Limiter(key_func=get_remote_address)
-    app.state.limiter = limiter
+    app.state.limiter = _shared_limiter
 
     async def _rate_limit_handler(
         request: Request,  # noqa: ARG001
@@ -68,6 +66,7 @@ app.include_router(ask.router)
 app.include_router(docs.router)
 app.include_router(metrics.router)
 app.include_router(export.router)
+app.include_router(matters.router)
 
 
 @app.on_event("startup")
