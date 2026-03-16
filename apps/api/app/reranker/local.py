@@ -10,29 +10,9 @@ No external API calls — runs entirely in-process.
 
 from __future__ import annotations
 
-import re
-
 from app.reranker.base import RerankerClient
 from app.search.base import SearchResult
-
-# Shared stopword set aligned with LocalSearchClient._STOP_WORDS
-_STOP_WORDS = {
-    "a", "an", "the", "and", "or", "but", "if", "then", "else", "when",
-    "at", "from", "by", "for", "with", "about", "against", "between",
-    "into", "through", "during", "before", "after", "above", "below",
-    "to", "up", "down", "in", "out", "on", "off", "over", "under",
-    "again", "further", "once", "here", "there", "where", "why", "how",
-    "all", "any", "both", "each", "few", "more", "most", "other", "some",
-    "such", "no", "nor", "not", "only", "own", "same", "so", "than",
-    "too", "very", "can", "will", "just", "should", "now", "of", "is",
-    "am", "are", "was", "were", "be", "been", "being", "have", "has",
-    "had", "do", "does", "did", "what", "who",
-}
-
-
-def _tokenize(text: str) -> list[str]:
-    """Lowercase tokenization for term matching."""
-    return re.findall(r"[a-z0-9]+", text.lower())
+from app.text_utils import STOP_WORDS, tokenize
 
 
 class LocalReranker(RerankerClient):
@@ -51,7 +31,7 @@ class LocalReranker(RerankerClient):
             return []
 
         # Pre-compute query analysis (once, not per-candidate)
-        content_tokens = [t for t in _tokenize(query) if t not in _STOP_WORDS]
+        content_tokens = [t for t in tokenize(query) if t not in STOP_WORDS]
         content_token_set = set(content_tokens)
         content_phrase = " ".join(content_tokens)
         has_phrase = len(content_tokens) > 1
@@ -64,7 +44,7 @@ class LocalReranker(RerankerClient):
             phrase_bonus = 0.5 if has_phrase and content_phrase in text_lower else 0.0
 
             # Term overlap ratio (0.0 - 0.4)
-            doc_tokens = set(_tokenize(result.text))
+            doc_tokens = set(tokenize(result.text))
             if content_token_set:
                 content_overlap = len(content_token_set & doc_tokens) / len(content_token_set)
             else:

@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import json
 import math
-import re
 from collections import Counter
 from typing import Any
 
 from app.db import load_chunks, load_index_records
 from app.search.base import SearchClient, SearchResponse, SearchResult
+from app.text_utils import STOP_WORDS, tokenize as _tokenize_raw
 
 
 class LocalSearchClient(SearchClient):
@@ -339,24 +339,9 @@ class LocalSearchClient(SearchClient):
 
         return score
 
-    # Stop words for tokenization
-    _STOP_WORDS = {
-        "a", "an", "the", "and", "or", "but", "if", "then", "else", "when",
-        "at", "from", "by", "for", "with", "about", "against", "between",
-        "into", "through", "during", "before", "after", "above", "below",
-        "to", "up", "down", "in", "out", "on", "off", "over", "under",
-        "again", "further", "once", "here", "there", "where", "why", "how",
-        "all", "any", "both", "each", "few", "more", "most", "other", "some",
-        "such", "no", "nor", "not", "only", "own", "same", "so", "than",
-        "too", "very", "can", "will", "just", "should", "now", "of", "is",
-        "am", "are", "was", "were", "be", "been", "being", "have", "has",
-        "had", "do", "does", "did",
-    }
-
     def _tokenize(self, text: str) -> list[str]:
         """Tokenize text, removing stop words."""
-        tokens = re.findall(r"[a-z0-9]+", text.lower())
-        return [t for t in tokens if t not in self._STOP_WORDS]
+        return [t for t in _tokenize_raw(text) if t not in STOP_WORDS]
 
     def _overlap_score(self, query_tokens: list[str], text: str) -> float:
         """Calculate token overlap score."""

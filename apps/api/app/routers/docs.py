@@ -32,8 +32,8 @@ def _sanitize_error_for_client(error_message: str | None) -> str:
 
 @router.post("/v1/docs/upload", status_code=202)
 async def upload_doc(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
     context: RequestContext = Depends(get_request_context),
 ) -> dict[str, Any]:
     """Upload a document for async processing (FR-001, FR-002, FR-003, FR-015).
@@ -119,7 +119,7 @@ async def get_doc_status(
 @router.post("/v1/docs/{doc_id}/retry")
 async def retry_doc_upload(
     doc_id: str,
-    background_tasks: BackgroundTasks = BackgroundTasks(),
+    background_tasks: BackgroundTasks,
     context: RequestContext = Depends(get_request_context),
 ) -> dict[str, Any]:
     """Retry a failed document upload (FR-015).
