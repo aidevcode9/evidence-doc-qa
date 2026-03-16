@@ -2,11 +2,13 @@ import json
 import os
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 
+from app.config import RATE_LIMIT_UPLOAD
 from app.context import RequestContext, get_request_context
 from app.db import get_document, update_document_status
+from app.rate_limit import limiter
 from app.rbac import has_permission
 from app.services.document_service import (
     process_document_background,
@@ -17,7 +19,6 @@ router = APIRouter()
 
 # FR-015: Maximum retry attempts before requiring manual intervention
 MAX_RETRY_COUNT = 3
-
 
 def _sanitize_error_for_client(error_message: str | None) -> str:
     """Return a safe error category without internal details."""
@@ -32,6 +33,7 @@ def _sanitize_error_for_client(error_message: str | None) -> str:
 
 @router.post("/v1/docs/upload", status_code=202)
 async def upload_doc(
+    request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     context: RequestContext = Depends(get_request_context),
@@ -74,6 +76,11 @@ async def upload_doc(
         "docs_snapshot_id": result["docs_snapshot_id"],
         "status": result["status"],
     }
+
+
+# Apply rate limiting decorator at module level if enabled (NFR-012)
+if limiter is not None:
+    upload_doc = limiter.limit(RATE_LIMIT_UPLOAD)(upload_doc)
 
 
 @router.get("/v1/docs/{doc_id}/status")
@@ -231,6 +238,18 @@ async def view_doc(
         raise HTTPException(
             status_code=404,
             detail="Document file not found on disk",
+        )
+
+    # SECURITY: Ensure storage_path is within RAW_DIR to prevent
+    # serving arbitrary files from the filesystem (path traversal).
+    from app.config import RAW_DIR
+
+    resolved_path = os.path.realpath(storage_path)
+    resolved_raw = os.path.realpath(RAW_DIR)
+    if not resolved_path.startswith(resolved_raw + os.sep) and resolved_path != resolved_raw:
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied",
         )
 
     # Determine media type from extension

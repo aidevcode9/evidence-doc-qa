@@ -30,7 +30,12 @@ def docs_snapshot_id_for(doc_sha256: str) -> str:
 
 
 def save_raw_pdf(doc_id: str, filename: str, data: bytes) -> str:
-    safe_name = filename.replace(" ", "_")
+    # SECURITY: Strip path separators and traversal sequences to prevent
+    # writing outside RAW_DIR (path traversal via crafted Content-Disposition).
+    base_name = os.path.basename(filename.replace("\\", "/"))
+    if not base_name:
+        base_name = "upload"
+    safe_name = base_name.replace(" ", "_")
     path = os.path.join(RAW_DIR, f"{doc_id}_{safe_name}")
     
     logger.info(f"Saving PDF locally: {path}")
