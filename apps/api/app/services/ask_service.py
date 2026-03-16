@@ -29,7 +29,7 @@ from app.config import (
     QUERY_CACHE_MAX_SIZE,
     QUERY_CACHE_TTL_SECONDS,
 )
-from app.db import get_latest_docs_snapshot_id
+from app.db import get_latest_snapshot_for_matter
 from app.schemas import AskRequest, AskResponse, Citation, DebugCandidate, EvidenceSupport, RefusalCode
 from app.telemetry import logger, record_telemetry
 from app.services import cost, rag
@@ -75,7 +75,7 @@ def execute_ask(
         )
 
     request_id = str(uuid.uuid4())
-    docs_snapshot_id = payload.docs_snapshot_id or get_latest_docs_snapshot_id(tenant_id=tenant_id) or "none"
+    docs_snapshot_id = payload.docs_snapshot_id or get_latest_snapshot_for_matter(tenant_id=tenant_id, matter_id=matter_id) or "none"
     question_len = len(question)
     question_hash = rag.hash_text(question) if question else None
 

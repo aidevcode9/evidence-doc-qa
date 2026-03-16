@@ -254,6 +254,101 @@ def _get_context_from_headers(
     )
 
 
+class TenantContext:
+    """Tenant + user context without matter scope.
+
+    Used by endpoints that don't require a matter_id, such as listing
+    all matters for a tenant (GET /v1/matters).
+
+    Attributes:
+        tenant_id: The tenant identifier for data isolation (FR-001)
+        user_id: The user identifier for RBAC (FR-003)
+        user_role: The user's role for permission checking (FR-003)
+    """
+
+    def __init__(
+        self,
+        tenant_id: str,
+        user_id: str,
+        user_role: Role,
+    ) -> None:
+        self.tenant_id = tenant_id
+        self.user_id = user_id
+        self.user_role = user_role
+
+
+def get_tenant_context(
+    x_tenant_id: str | None = Header(default=None, alias="X-Tenant-Id"),
+    x_user_id: str | None = Header(default=None, alias="X-User-Id"),
+    x_user_role: str | None = Header(default=None, alias="X-User-Role"),
+    authorization: str | None = Header(default=None, alias="Authorization"),
+) -> TenantContext:
+    """FastAPI dependency for tenant+user context without matter scope.
+
+    Used by matter-listing endpoints where the user hasn't selected a matter yet.
+
+    Supports both JWT and headers auth modes (same as get_request_context).
+    """
+    if AUTH_MODE == "jwt":
+        from app.security import decode_access_token
+
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Authorization header is required")
+        claims = decode_access_token(authorization[7:])
+        if claims is None:
+            raise HTTPException(status_code=401, detail="Invalid or expired access token")
+
+        user_id = claims.get("sub", "")
+        tenant_id = claims.get("tenant_id", "")
+        role_str = claims.get("role", "")
+        try:
+            role = Role(role_str.lower())
+        except ValueError:
+            valid_roles = [r.value for r in Role]
+            raise HTTPException(
+                status_code=401,
+                detail=f"Invalid role in token: {role_str}. Must be one of {valid_roles}",
+            )
+        if not _is_valid_identifier(tenant_id):
+            raise HTTPException(status_code=401, detail="Invalid tenant_id in token")
+        if not _is_valid_identifier(user_id):
+            raise HTTPException(status_code=401, detail="Invalid user_id in token")
+
+        return TenantContext(tenant_id=tenant_id, user_id=user_id, user_role=role)
+
+    # Headers mode
+    if not x_tenant_id or not x_tenant_id.strip():
+        raise HTTPException(status_code=400, detail="X-Tenant-Id header is required")
+    if not x_user_id or not x_user_id.strip():
+        raise HTTPException(status_code=401, detail="X-User-Id header is required for authentication")
+    if not x_user_role or not x_user_role.strip():
+        raise HTTPException(status_code=401, detail="X-User-Role header is required for authentication")
+
+    try:
+        role = Role(x_user_role.strip().lower())
+    except ValueError:
+        valid_roles = [r.value for r in Role]
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid role: {x_user_role}. Must be one of {valid_roles}",
+        )
+
+    tenant_id = x_tenant_id.strip()
+    user_id = x_user_id.strip()
+    if not _is_valid_identifier(tenant_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid tenant_id format: must be alphanumeric with optional hyphens (max 64 chars)",
+        )
+    if not _is_valid_identifier(user_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid user_id format: must be alphanumeric with optional hyphens (max 64 chars)",
+        )
+
+    return TenantContext(tenant_id=tenant_id, user_id=user_id, user_role=role)
+
+
 def get_request_context(
     x_tenant_id: str | None = Header(default=None, alias="X-Tenant-Id"),
     x_matter_id: str = Header(..., alias="X-Matter-Id"),

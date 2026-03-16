@@ -8,7 +8,17 @@ import { EvidencePanel } from "@/components/EvidencePanel";
 import { DocumentViewer } from "@/components/DocumentViewer";
 import { UserMenu } from "@/components/UserMenu";
 import { Toast } from "@/components/Toast";
-import { getAuthHeaders, getApiUrl } from "@/lib/api";
+import { CasePicker } from "@/components/CasePicker";
+import { DocumentStrip } from "@/components/DocumentStrip";
+import {
+  getAuthHeaders,
+  getApiUrl,
+  setCurrentMatter,
+  fetchMatters,
+  fetchMatterDocs,
+  MatterInfo,
+  DocSummary,
+} from "@/lib/api";
 
 export default function DocQAPage() {
   const [docsSnapshotId, setDocsSnapshotId] = useState<string>("");
@@ -19,6 +29,9 @@ export default function DocQAPage() {
   const [userProfile, setUserProfile] = useState<{ name: string; email: string } | null>(null);
   const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null);
   const [toast, setToast] = useState<{ message: string; variant: "info" | "warning" | "error" } | null>(null);
+  const [selectedMatter, setSelectedMatter] = useState<MatterInfo | null>(null);
+  const [documents, setDocuments] = useState<DocSummary[]>([]);
+  const [docsLoading, setDocsLoading] = useState(false);
 
   const handleToast = useCallback((message: string, variant: "info" | "warning" | "error" = "info") => {
     setToast({ message, variant });
@@ -33,6 +46,54 @@ export default function DocQAPage() {
   const handleCloseViewer = () => {
     setSelectedCitation(null);
   };
+
+  const loadDocsForMatter = useCallback(async (matterId: string) => {
+    setDocsLoading(true);
+    try {
+      const docs = await fetchMatterDocs(matterId);
+      setDocuments(docs);
+    } catch {
+      setDocuments([]);
+    } finally {
+      setDocsLoading(false);
+    }
+  }, []);
+
+  const handleMatterChange = useCallback(
+    (matter: MatterInfo) => {
+      setCurrentMatter(matter.matter_id);
+      setSelectedMatter(matter);
+      if (matter.latest_snapshot_id) {
+        setDocsSnapshotId(matter.latest_snapshot_id);
+      } else {
+        setDocsSnapshotId("");
+      }
+      setMessages([]);
+      // Generate new session for this case
+      const newSession = crypto.randomUUID();
+      localStorage.setItem("docqa_session", newSession);
+      setSessionId(newSession);
+      loadDocsForMatter(matter.matter_id);
+    },
+    [loadDocsForMatter]
+  );
+
+  const handleNewCase = useCallback((slug: string) => {
+    const newMatter: MatterInfo = {
+      matter_id: slug,
+      display_name: slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+      doc_count: 0,
+      latest_snapshot_id: null,
+    };
+    setCurrentMatter(slug);
+    setSelectedMatter(newMatter);
+    setDocsSnapshotId("");
+    setDocuments([]);
+    setMessages([]);
+    const newSession = crypto.randomUUID();
+    localStorage.setItem("docqa_session", newSession);
+    setSessionId(newSession);
+  }, []);
 
   useEffect(() => {
     // Generate or restore session ID for export functionality (FR-032)
@@ -54,7 +115,20 @@ export default function DocQAPage() {
         // Ignore invalid storage.
       }
     }
-  }, []);
+
+    // Load matters and auto-select saved or first matter
+    const savedMatterId = localStorage.getItem("docqa_matter");
+    fetchMatters()
+      .then((matterList) => {
+        if (matterList.length === 0) return;
+        const target =
+          matterList.find((m) => m.matter_id === savedMatterId) || matterList[0];
+        handleMatterChange(target);
+      })
+      .catch(() => {
+        // Backend not available — leave empty
+      });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleUploadSuccess = (snapshotId: string, fileName: string) => {
     setDocsSnapshotId(snapshotId);
@@ -66,6 +140,10 @@ export default function DocQAPage() {
         text: `Document "${fileName}" uploaded and indexed. Snapshot: ${snapshotId}.`,
       },
     ]);
+    // Refresh doc list and matters (doc count changed)
+    if (selectedMatter) {
+      loadDocsForMatter(selectedMatter.matter_id);
+    }
   };
 
   const handleAsk = async (question: string) => {
@@ -139,12 +217,20 @@ export default function DocQAPage() {
                     Evidence Bound <span className="opacity-40 font-normal text-sm ml-1">v3.1</span>
                 </h1>
             </div>
+            <CasePicker
+              onMatterChange={handleMatterChange}
+              onNewCase={handleNewCase}
+              activeMatterId={selectedMatter?.matter_id || null}
+            />
         </div>
         <div className="flex items-center gap-3">
           <IngestionZone onUploadSuccess={handleUploadSuccess} onToast={handleToast} />
           <UserMenu />
         </div>
       </header>
+
+      {/* Document strip below header */}
+      <DocumentStrip documents={documents} loading={docsLoading} />
 
       {/* Main Grid */}
       <main className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
