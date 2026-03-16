@@ -55,6 +55,13 @@ RERANKER_ENABLED = _is_truthy(_getenv("RERANKER_ENABLED", "0"))
 RERANKER_TOP_K = int(_getenv("RERANKER_TOP_K", "5"))
 RERANKER_CONFIDENCE_MIN = float(_getenv("RERANKER_CONFIDENCE_MIN", "0.30"))
 
+# Caching (Cost Reduction)
+EMBEDDING_CACHE_ENABLED = _is_truthy(_getenv("EMBEDDING_CACHE_ENABLED", "1"))
+EMBEDDING_CACHE_MAX_SIZE = int(_getenv("EMBEDDING_CACHE_MAX_SIZE", "5000"))
+QUERY_CACHE_ENABLED = _is_truthy(_getenv("QUERY_CACHE_ENABLED", "0"))
+QUERY_CACHE_MAX_SIZE = int(_getenv("QUERY_CACHE_MAX_SIZE", "500"))
+QUERY_CACHE_TTL_SECONDS = int(_getenv("QUERY_CACHE_TTL_SECONDS", "3600"))
+
 # EMBEDDINGS_MODE: "local" uses hash-based embeddings, "remote" uses Azure OpenAI
 # EMBEDDINGS_LOCAL is a legacy env var (truthy = local, falsy = remote)
 _embeddings_local_raw = os.getenv("EMBEDDINGS_LOCAL")  # None if not set

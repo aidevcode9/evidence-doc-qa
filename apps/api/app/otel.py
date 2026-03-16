@@ -274,6 +274,113 @@ def redact_for_langfuse(
     return summary
 
 
+def set_genai_span_attributes(
+    *,
+    system: str,
+    model: str,
+    prompt_tokens: int,
+    completion_tokens: int,
+    latency_ms: int,
+    request_id: str | None = None,
+) -> None:
+    """Set GenAI semantic convention attributes on current OTEL span (NFR-022).
+
+    No-op if OTEL is disabled or no current span exists.
+    """
+    if not OTEL_ENABLED:
+        return
+
+    try:
+        current_span = trace.get_current_span()
+        if current_span is None or not current_span.is_recording():
+            return
+
+        current_span.set_attribute("gen_ai.system", system)
+        current_span.set_attribute("gen_ai.request.model", model)
+        current_span.set_attribute("gen_ai.usage.prompt_tokens", prompt_tokens)
+        current_span.set_attribute("gen_ai.usage.completion_tokens", completion_tokens)
+        current_span.set_attribute("llm.latency_ms", latency_ms)
+        if request_id is not None:
+            current_span.set_attribute("llm.request_id", request_id)
+    except Exception as exc:  # noqa: BLE001 - never break request pipeline
+        logger.debug("set_genai_span_attributes failed: %s", exc)
+
+
+# ---------------------------------------------------------------------------
+# OTEL Custom Metrics (NFR-022)
+# ---------------------------------------------------------------------------
+
+_METER: Any = None
+_REQUEST_COUNTER: Any = None
+_LATENCY_HISTOGRAM: Any = None
+_TOKEN_COUNTER: Any = None
+_CACHE_HIT_COUNTER: Any = None
+_COST_COUNTER: Any = None
+
+try:
+    from opentelemetry import metrics as _otel_metrics
+
+    _METER = _otel_metrics.get_meter("docqa.api")
+    _REQUEST_COUNTER = _METER.create_counter(
+        "docqa.request.count",
+        description="Total API requests",
+    )
+    _LATENCY_HISTOGRAM = _METER.create_histogram(
+        "docqa.request.latency_ms",
+        description="Request latency in milliseconds",
+        unit="ms",
+    )
+    _TOKEN_COUNTER = _METER.create_counter(
+        "docqa.tokens.total",
+        description="Total tokens consumed",
+    )
+    _CACHE_HIT_COUNTER = _METER.create_counter(
+        "docqa.cache.hit",
+        description="Cache hit count",
+    )
+    _COST_COUNTER = _METER.create_counter(
+        "docqa.cost.usd",
+        description="Estimated cost in USD",
+    )
+except Exception:  # noqa: BLE001 - metrics SDK optional
+    pass
+
+
+def record_request_metrics(
+    *,
+    latency_ms: int,
+    tokens_in: int,
+    tokens_out: int,
+    cost_est: float,
+    cache_hit: bool,
+    component: str,
+    refusal_code: str | None = None,
+) -> None:
+    """Record OTEL custom metrics for a request (NFR-022).
+
+    Safe to call unconditionally — no-op if metrics SDK is unavailable.
+    """
+    try:
+        attrs = {"component": component}
+        if refusal_code:
+            attrs["refusal_code"] = refusal_code
+        attrs["cache_hit"] = str(cache_hit).lower()
+
+        if _REQUEST_COUNTER is not None:
+            _REQUEST_COUNTER.add(1, attrs)
+        if _LATENCY_HISTOGRAM is not None:
+            _LATENCY_HISTOGRAM.record(latency_ms, {"component": component})
+        if _TOKEN_COUNTER is not None:
+            _TOKEN_COUNTER.add(tokens_in, {"direction": "input", "component": component})
+            _TOKEN_COUNTER.add(tokens_out, {"direction": "output", "component": component})
+        if cache_hit and _CACHE_HIT_COUNTER is not None:
+            _CACHE_HIT_COUNTER.add(1, {"cache_type": component})
+        if _COST_COUNTER is not None and cost_est > 0:
+            _COST_COUNTER.add(cost_est, {"component": component})
+    except Exception as exc:  # noqa: BLE001 - never break request pipeline
+        logger.debug("record_request_metrics failed: %s", exc)
+
+
 def flush_langfuse() -> None:
     """Flush pending Langfuse traces on shutdown.
 
