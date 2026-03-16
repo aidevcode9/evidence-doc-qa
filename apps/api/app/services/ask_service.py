@@ -163,6 +163,7 @@ def execute_ask(
             matter_id=matter_id,
         )
 
+    retrieval_start = time.perf_counter()
     with otel.span("retrieval", docs_snapshot_id=docs_snapshot_id) as retrieval_span:
         search_result = retrieval.hybrid_search(
             question,
@@ -184,6 +185,7 @@ def execute_ask(
                 "retrieval.mode",
                 "azure" if "azure_search_score" in results[0] else "local",
             )
+    retrieval_ms = int((time.perf_counter() - retrieval_start) * 1000)
     
     # Azure Search cost (Cost Reduction visibility)
     azure_search_cost = cost.AZURE_SEARCH_COST_PER_QUERY
@@ -308,6 +310,7 @@ def execute_ask(
     verification_reasons: dict[str, str] = {}
     last_verifier_reason = None
     
+    verification_start = time.perf_counter()
     if verification.is_enabled():
         verification_rejected = True
         trace_metadata = {
@@ -443,6 +446,7 @@ def execute_ask(
                 matter_id=matter_id,
             )
         verified_chunk = candidates[0]
+    verification_ms = int((time.perf_counter() - verification_start) * 1000)
 
     if verification_status == "VERIFIED" and verified_chunk:
         verifier_result = {
@@ -641,6 +645,15 @@ def execute_ask(
         doc_count=len(set(c.doc_id for c in citations)),
     ))
 
+    # Sub-component latency breakdown (NFR-011)
+    total_ms = int((time.perf_counter() - start_time) * 1000)
+    overhead_ms = max(0, total_ms - (retrieval_ms + verification_ms))
+    trace_metadata["latency_breakdown"] = {
+        "retrieval_ms": retrieval_ms,
+        "verification_ms": verification_ms,
+        "overhead_ms": overhead_ms,
+    }
+
     _record_request_internal(
         request_id=request_id,
         tenant_id=tenant_id,
@@ -708,6 +721,14 @@ def _record_request_internal(
         trace_metadata = {"question_len": question_len, "answer_len": answer_len}
     else:
         trace_metadata = {**trace_metadata, "question_len": question_len, "answer_len": answer_len}
+
+    # Ensure latency_breakdown exists for all requests (NFR-011)
+    if "latency_breakdown" not in trace_metadata:
+        trace_metadata["latency_breakdown"] = {
+            "retrieval_ms": 0,
+            "verification_ms": 0,
+            "overhead_ms": latency_ms,
+        }
 
     record_telemetry(
         request_id=request_id,

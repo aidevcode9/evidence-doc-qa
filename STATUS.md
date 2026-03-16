@@ -4,10 +4,10 @@ Last updated: 2026-03-15
 
 ---
 
-## Current Phase: 7 — Polish (COMPLETE)
+## Current Phase: 8 — NFRs (Performance & Scaling)
 
-**Goal:** Document dedup, metadata, async ingestion, reranker, cited-only export
-**Progress:** FR-011, FR-014, FR-015, FR-022, FR-033 ✅ All shipped
+**Goal:** Query latency p95 < 8s, 50 concurrent users, rate limiting, metrics
+**Progress:** NFR-011, NFR-012 in progress
 
 ---
 
@@ -15,7 +15,8 @@ Last updated: 2026-03-15
 
 | Task | FR | Branch | Started | Notes |
 |------|-----|--------|---------|-------|
-| — | — | — | — | Phase 7 complete, ready for Phase 8 |
+| Query latency p95 < 8s (metrics, tracing, targets) | NFR-011 | main | 03-15 | Enhanced metrics endpoint, latency breakdown, OTEL custom metrics |
+| 50 concurrent users + horizontal scaling | NFR-012 | main | 03-15 | Rate limiting, async FastAPI, cache thread-safety, load testing |
 
 ## Next
 
@@ -27,6 +28,10 @@ Last updated: 2026-03-15
 
 | Task | FR | Date |
 |------|-----|------|
+| **409 duplicate upload UX fix (shows existing document name)** | FR-011 | 03-15 |
+| **401 demo mode console noise fix (fetchCapabilities pattern)** | FR-054 | 03-15 |
+| **Slash commands reorganization (wsauto, persona frontmatter)** | INFRA | 03-15 |
+| **NFR-022 observability + caching (OTEL metrics, Langfuse, cost tracking)** | NFR-022 | 03-15 |
 | **Async ingestion status (queued→processing→ready/failed)** | FR-015 | 03-15 |
 | **Optional local reranker (term+phrase analysis post-RRF)** | FR-022 | 03-15 |
 | **Cited-only packet export (PDF/DOCX)** | FR-033 | 03-15 |

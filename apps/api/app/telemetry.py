@@ -99,14 +99,20 @@ def compute_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "window_end_utc": now,
             "p50_latency_ms": 0,
             "p95_latency_ms": 0,
+            "p99_latency_ms": 0,
+            "max_latency_ms": 0,
+            "total_requests": 0,
             "avg_cost_per_query": 0.0,
             "refusals_by_code": {},
             "cache_hit_rate": 0.0,
+            "latency_by_component": {},
         }
 
     latencies = sorted(row["latency_ms"] for row in rows)
     p50 = _percentile(latencies, 50)
     p95 = _percentile(latencies, 95)
+    p99 = _percentile(latencies, 99)
+    max_latency = latencies[-1] if latencies else 0
     avg_cost = sum(row["cost_est"] for row in rows) / len(rows)
     refusal_counts: dict[str, int] = {}
     cache_hits = 0
@@ -118,6 +124,21 @@ def compute_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         if row["cache_hit"]:
             cache_hits += 1
 
+    # Aggregate latency_breakdown from trace_metadata (NFR-011)
+    component_totals: dict[str, float] = {}
+    component_counts: dict[str, int] = {}
+    for row in rows:
+        meta = row.get("trace_metadata") or {}
+        breakdown = meta.get("latency_breakdown") or {}
+        for comp, ms_val in breakdown.items():
+            if isinstance(ms_val, (int, float)):
+                component_totals[comp] = component_totals.get(comp, 0.0) + float(ms_val)
+                component_counts[comp] = component_counts.get(comp, 0) + 1
+    latency_by_component: dict[str, float] = {}
+    for comp in component_totals:
+        count = component_counts.get(comp, 1)
+        latency_by_component[comp] = round(component_totals[comp] / count, 1)
+
     window_end = rows[0]["timestamp_utc"]
     window_start = rows[-1]["timestamp_utc"]
     return {
@@ -125,9 +146,13 @@ def compute_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "window_end_utc": window_end,
         "p50_latency_ms": p50,
         "p95_latency_ms": p95,
+        "p99_latency_ms": p99,
+        "max_latency_ms": max_latency,
+        "total_requests": len(rows),
         "avg_cost_per_query": round(avg_cost, 6),
         "refusals_by_code": refusal_counts,
         "cache_hit_rate": round(cache_hits / len(rows), 4),
+        "latency_by_component": latency_by_component,
     }
 
 

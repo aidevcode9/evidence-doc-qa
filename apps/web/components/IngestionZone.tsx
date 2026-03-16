@@ -3,7 +3,7 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import { apiUpload, apiRequest, fetchCapabilities, type ServerCapabilities } from "@/lib/api";
 
-type IngestionStatus = "idle" | "uploading" | "queued" | "processing" | "ready" | "failed" | "duplicate";
+type IngestionStatus = "idle" | "uploading" | "queued" | "processing" | "ready" | "failed";
 
 type StatusResponse = {
   doc_id: string;
@@ -16,18 +16,18 @@ type StatusResponse = {
 
 type IngestionZoneProps = {
   onUploadSuccess: (snapshotId: string, fileName: string) => void;
+  onToast?: (message: string, variant?: "info" | "warning" | "error") => void;
 };
 
 const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_ATTEMPTS = 150; // 5 minutes max
 
-export function IngestionZone({ onUploadSuccess }: IngestionZoneProps) {
+export function IngestionZone({ onUploadSuccess, onToast }: IngestionZoneProps) {
   const [status, setStatus] = useState<IngestionStatus>("idle");
   const [docId, setDocId] = useState<string | null>(null);
   const [docName, setDocName] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string>("");
-  const [existingDocName, setExistingDocName] = useState<string>("");
-  const [retryCount, setRetryCount] = useState(0);
+
   const [capabilities, setCapabilities] = useState<ServerCapabilities | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pollCountRef = useRef(0);
@@ -62,7 +62,7 @@ export function IngestionZone({ onUploadSuccess }: IngestionZoneProps) {
         } else if (data.status === "failed") {
           setStatus("failed");
           setErrorMessage(data.error_message || "Processing failed.");
-          setRetryCount(data.retry_count || 0);
+
           clearInterval(interval);
         } else if (data.status === "processing") {
           setStatus("processing");
@@ -92,8 +92,16 @@ export function IngestionZone({ onUploadSuccess }: IngestionZoneProps) {
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: "Upload failed" }));
         if (res.status === 409 && err.detail?.existing_doc_name) {
-          setStatus("duplicate");
-          setExistingDocName(err.detail.existing_doc_name);
+          // Document already exists — treat as success so user can ask questions
+          const existingSnapshot = err.detail.existing_snapshot_id;
+          const existingName = err.detail.existing_doc_name;
+          if (existingSnapshot) {
+            onUploadSuccess(existingSnapshot, existingName);
+          }
+          if (onToast) {
+            onToast(`Already uploaded as "${existingName}"`, "warning");
+          }
+          setStatus("idle");
           return;
         }
         const message = typeof err.detail === "string"
@@ -141,8 +149,6 @@ export function IngestionZone({ onUploadSuccess }: IngestionZoneProps) {
     setDocId(null);
     setDocName("");
     setErrorMessage("");
-    setExistingDocName("");
-    setRetryCount(0);
   }, []);
 
   const isPdfOnly = capabilities?.parser_provider === "pypdf";
@@ -160,29 +166,6 @@ export function IngestionZone({ onUploadSuccess }: IngestionZoneProps) {
           </span>
           <span className="text-xs text-blue-400/60 truncate max-w-[120px]">{docName}</span>
         </div>
-      </div>
-    );
-  }
-
-  if (status === "duplicate") {
-    return (
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
-          <svg className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-            <line x1="12" y1="9" x2="12" y2="13" />
-            <line x1="12" y1="17" x2="12.01" y2="17" />
-          </svg>
-          <span className="text-xs text-amber-300">
-            Already uploaded as <strong className="text-amber-200">{existingDocName}</strong>
-          </span>
-        </div>
-        <button
-          onClick={handleDismiss}
-          className="text-xs text-gray-500 hover:text-gray-400 cursor-pointer"
-        >
-          Dismiss
-        </button>
       </div>
     );
   }

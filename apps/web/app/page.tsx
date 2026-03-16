@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Message, Citation } from "@/types";
 import { IngestionZone } from "@/components/IngestionZone";
 import { ChatInterface } from "@/components/ChatInterface";
 import { EvidencePanel } from "@/components/EvidencePanel";
 import { DocumentViewer } from "@/components/DocumentViewer";
 import { UserMenu } from "@/components/UserMenu";
+import { Toast } from "@/components/Toast";
 import { getAuthHeaders, getApiUrl } from "@/lib/api";
 
 export default function DocQAPage() {
@@ -17,6 +18,13 @@ export default function DocQAPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<{ name: string; email: string } | null>(null);
   const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null);
+  const [toast, setToast] = useState<{ message: string; variant: "info" | "warning" | "error" } | null>(null);
+
+  const handleToast = useCallback((message: string, variant: "info" | "warning" | "error" = "info") => {
+    setToast({ message, variant });
+  }, []);
+
+  const handleToastClose = useCallback(() => setToast(null), []);
 
   const handleCitationClick = (citation: Citation) => {
     setSelectedCitation(citation);
@@ -133,7 +141,7 @@ export default function DocQAPage() {
             </div>
         </div>
         <div className="flex items-center gap-3">
-          <IngestionZone onUploadSuccess={handleUploadSuccess} />
+          <IngestionZone onUploadSuccess={handleUploadSuccess} onToast={handleToast} />
           <UserMenu />
         </div>
       </header>
@@ -170,6 +178,15 @@ export default function DocQAPage() {
         <DocumentViewer
           citation={selectedCitation}
           onClose={handleCloseViewer}
+        />
+      )}
+
+      {/* Toast notifications */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          variant={toast.variant}
+          onClose={handleToastClose}
         />
       )}
     </div>

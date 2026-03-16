@@ -21,6 +21,7 @@
 | [docs/architecture/observability.md](docs/architecture/observability.md) | LLM tracking, telemetry table, Langfuse | NFR-030, debugging LLM calls |
 | [docs/architecture/deployment.md](docs/architecture/deployment.md) | Tiers, Docker, Kubernetes, env vars | Deploying, switching providers |
 | [docs/architecture/migrations.md](docs/architecture/migrations.md) | Alembic commands and patterns | Schema changes |
+| [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | Latency tracking, concurrency, scaling | NFR-011/012, load testing, metrics |
 
 ---
 
@@ -36,6 +37,15 @@
 | All LLM calls via TracedLLMClient | Ensures telemetry (NFR-030) |
 | `embedding_model` stored with vectors | Mixed-model deployments; future migrations |
 | pgvector over dedicated vector DB | Single database, less ops complexity |
+
+### Performance & Rate Limiting
+
+- **Enhanced metrics endpoint** (`/v1/metrics`): Returns p50/p95 latency, cache stats (embedding + query), and per-component cost breakdown over a 24-hour window.
+- **Rate limiting** via `slowapi` decorators: Per-IP limits configurable via `RATE_LIMIT_QUERY` (20/min), `RATE_LIMIT_UPLOAD` (10/min), `RATE_LIMIT_DEFAULT` (100/min). Returns HTTP 429 with `Retry-After` header.
+- **OTEL custom metrics**: `docqa.request.latency_ms` histogram, `docqa.request.count`, `docqa.tokens.total`, `docqa.cache.hit`, `docqa.cost.usd` -- all emitted to Azure Monitor.
+- **Latency target**: p95 < 8000ms (`DOCQA_LATENCY_TARGET_MS`), tracked per-request in the `telemetry` table.
+
+See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for full latency architecture, scaling strategy, and load testing guidance.
 
 ### Provider Defaults by Tier
 
