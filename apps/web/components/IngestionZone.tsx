@@ -28,6 +28,7 @@ export function IngestionZone({ onUploadSuccess, onToast }: IngestionZoneProps) 
   const [docName, setDocName] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string>("");
 
+
   const [capabilities, setCapabilities] = useState<ServerCapabilities | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pollCountRef = useRef(0);
@@ -62,6 +63,7 @@ export function IngestionZone({ onUploadSuccess, onToast }: IngestionZoneProps) 
         } else if (data.status === "failed") {
           setStatus("failed");
           setErrorMessage(data.error_message || "Processing failed.");
+
 
           clearInterval(interval);
         } else if (data.status === "processing") {

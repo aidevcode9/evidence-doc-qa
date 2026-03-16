@@ -20,6 +20,7 @@ router = APIRouter()
 # FR-015: Maximum retry attempts before requiring manual intervention
 MAX_RETRY_COUNT = 3
 
+
 def _sanitize_error_for_client(error_message: str | None) -> str:
     """Return a safe error category without internal details."""
     if not error_message:
