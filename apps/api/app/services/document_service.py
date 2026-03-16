@@ -138,7 +138,7 @@ async def process_document_background(
         tenant_id: Tenant ID for isolation (FR-001).
         matter_id: Matter ID for isolation (FR-002).
     """
-    update_document_status(doc_id, "processing")
+    update_document_status(doc_id, "processing", tenant_id=tenant_id)
 
     try:
         parse_result = await ingestion.parse_document(storage_path)
@@ -148,7 +148,8 @@ async def process_document_background(
             error_msg = error_msg.replace(storage_path, "[document]")
         logger.error(f"Background parse failed for doc_id={doc_id}: {exc}")
         update_document_status(
-            doc_id, "failed", error_message=f"PARSE_FAILED: {error_msg}"
+            doc_id, "failed", tenant_id=tenant_id,
+            error_message=f"PARSE_FAILED: {error_msg}",
         )
         return
 
@@ -194,7 +195,7 @@ async def process_document_background(
             if parse_result.metadata
             else "{}"
         )
-        update_document_status(doc_id, "ready")
+        update_document_status(doc_id, "ready", tenant_id=tenant_id)
 
         # Update metadata on the document record
         from app.db import session_scope
@@ -222,11 +223,11 @@ async def process_document_background(
             error_msg = error_msg.replace(storage_path, "[document]")
         logger.error(f"Background indexing failed for doc_id={doc_id}: {exc}")
         update_document_status(
-            doc_id, "failed", error_message=f"INDEX_FAILED: {error_msg}"
+            doc_id, "failed", tenant_id=tenant_id,
+            error_message=f"INDEX_FAILED: {error_msg}",
         )
 
 
-# Keep legacy synchronous function for backward compatibility
 async def process_document_upload(
     file: UploadFile,
     *,
@@ -235,148 +236,28 @@ async def process_document_upload(
 ) -> dict[str, Any]:
     """Process an uploaded document synchronously (legacy).
 
-    Handles PDF and image uploads (FR-010). Uses the configured parser
-    for text extraction including OCR for scanned documents (FR-012).
-
-    Args:
-        file: Uploaded file from FastAPI.
-        tenant_id: Tenant ID for isolation (FR-001).
-        matter_id: Matter ID for isolation (FR-002).
-
-    Returns:
-        Dict with doc_id, doc_sha256, docs_snapshot_id, and optional warnings.
-
-    Raises:
-        HTTPException: If file is empty, too large, unsupported type, or parsing fails.
+    Delegates to process_document_upload_async + process_document_background.
+    Kept for backward compatibility with existing tests.
     """
-    data = await file.read()
-    if not data:
-        raise HTTPException(status_code=400, detail="Empty upload.")
-
-    if len(data) > MAX_UPLOAD_SIZE_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE_MB}MB.",
-        )
-
-    filename = file.filename or "upload.pdf"
-    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-
-    parser = get_parser_client()
-    if ext not in parser.supported_extensions:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported file type: {ext}. "
-            f"Supported: {', '.join(sorted(parser.supported_extensions))}",
-        )
-
-    doc_sha256 = ingestion.compute_sha256(data)
-
-    # FR-011: Check for duplicate within same matter before parsing
-    existing = get_document_by_sha256(tenant_id, matter_id, doc_sha256)
-    if existing is not None:
-        logger.info(
-            f"Duplicate detected: sha256={doc_sha256[:12]}, "
-            f"existing_doc_id={existing.doc_id}, matter_id={matter_id}"
-        )
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"Duplicate document. This file already exists in this matter "
-                f"(doc_id={existing.doc_id}, "
-                f"snapshot={existing.docs_snapshot_id})."
-            ),
-        )
-
-    doc_id = uuid.uuid4().hex
-    docs_snapshot_id = ingestion.docs_snapshot_id_for(doc_sha256)
-    storage_path = ingestion.save_raw_pdf(doc_id, filename, data)
-
-    try:
-        parse_result = await ingestion.parse_document(storage_path)
-    except Exception as exc:
-        error_msg = str(exc)
-        if storage_path in error_msg:
-            error_msg = error_msg.replace(storage_path, "[document]")
-        logger.error(f"Parse failed for doc_id={doc_id}: {exc}")
-        raise HTTPException(status_code=400, detail=f"PARSE_FAILED: {error_msg}") from exc
-
-    chunk_rows = _build_chunk_rows_from_parse_result(
-        doc_id=doc_id,
-        doc_sha256=doc_sha256,
-        docs_snapshot_id=docs_snapshot_id,
-        parse_result=parse_result,
+    result = await process_document_upload_async(
+        file, tenant_id=tenant_id, matter_id=matter_id,
     )
 
-    total_text_chars = sum(len(row[9]) for row in chunk_rows)
-    warnings = []
-
-    if not chunk_rows or total_text_chars < MIN_EXTRACTED_TEXT_CHARS:
-        logger.warning(
-            f"Low text extraction for doc_id={doc_id}: "
-            f"chunks={len(chunk_rows)}, chars={total_text_chars}, "
-            f"provider={parse_result.provider}"
-        )
-        warnings.append(
-            f"Low text extracted ({total_text_chars} chars). "
-            "Document may be scanned/image-based with OCR issues. "
-            "Queries against this document may not return results."
-        )
-
-    insert_chunks(
-        Chunk(
-            chunk_id=row[0],
-            docs_snapshot_id=row[1],
-            doc_id=row[2],
-            doc_sha256=row[3],
-            page_num=row[4],
-            page_end=row[5],
-            chunk_index=row[6],
-            char_start=row[7],
-            char_end=row[8],
-            chunk_text=row[9],
-            parse_mode=row[10],
-            tenant_id=tenant_id,
-            matter_id=matter_id,
-        )
-        for row in chunk_rows
-    )
-    metadata_json = json.dumps(parse_result.metadata, default=str) if parse_result.metadata else "{}"
-
-    insert_document(
-        Document(
-            doc_id=doc_id,
-            doc_sha256=doc_sha256,
-            doc_name=filename,
-            storage_path=storage_path,
-            ingested_at_utc=ingestion.utc_now(),
-            docs_snapshot_id=docs_snapshot_id,
-            tenant_id=tenant_id,
-            matter_id=matter_id,
-            metadata_json=metadata_json,
-            status="ready",
-        )
-    )
-
-    indexing.index_chunk_rows(
-        doc_id=doc_id,
-        doc_name=filename,
-        docs_snapshot_id=docs_snapshot_id,
-        chunk_rows=chunk_rows,
+    await process_document_background(
+        doc_id=result["doc_id"],
+        doc_sha256=result["doc_sha256"],
+        docs_snapshot_id=result["docs_snapshot_id"],
+        storage_path=result["storage_path"],
+        filename=file.filename or "upload.pdf",
         tenant_id=tenant_id,
         matter_id=matter_id,
     )
 
-    result: dict[str, Any] = {
-        "doc_id": doc_id,
-        "doc_sha256": doc_sha256,
-        "docs_snapshot_id": docs_snapshot_id,
+    return {
+        "doc_id": result["doc_id"],
+        "doc_sha256": result["doc_sha256"],
+        "docs_snapshot_id": result["docs_snapshot_id"],
     }
-
-    if warnings:
-        result["warnings"] = warnings
-
-    return result
 
 
 def _build_chunk_rows_from_parse_result(

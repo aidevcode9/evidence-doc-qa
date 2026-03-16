@@ -461,12 +461,14 @@ def generate_cited_packet_pdf(
     elements.append(Spacer(1, 12))
 
     # Separator
-    line_data = [["" * 80]]
-    line_table = Table(line_data, colWidths=[7 * inch])
-    line_table.setStyle(
-        TableStyle([("LINEBELOW", (0, 0), (-1, -1), 1, colors.HexColor("#e2e8f0"))])
-    )
-    elements.append(line_table)
+    def _make_separator() -> Table:
+        t = Table([["" * 80]], colWidths=[7 * inch])
+        t.setStyle(
+            TableStyle([("LINEBELOW", (0, 0), (-1, -1), 1, colors.HexColor("#e2e8f0"))])
+        )
+        return t
+
+    elements.append(_make_separator())
     elements.append(Spacer(1, 12))
 
     # Extract exhibits
@@ -498,7 +500,7 @@ def generate_cited_packet_pdf(
                 ))
 
             elements.append(Spacer(1, 6))
-            elements.append(line_table)
+            elements.append(_make_separator())
             elements.append(Spacer(1, 6))
 
     # Footer

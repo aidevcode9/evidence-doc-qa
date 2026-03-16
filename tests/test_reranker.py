@@ -118,22 +118,32 @@ class TestLocalReranker:
 class TestRerankerFactory:
     """Factory function creates correct reranker based on config."""
 
+    def _reset_cache(self) -> None:
+        """Reset singleton cache so factory re-evaluates config."""
+        import app.reranker as _mod
+        _mod._cached_client = None
+        _mod._client_initialized = False
+
     def test_get_reranker_returns_local(self) -> None:
         """Default reranker should be local."""
         from app.reranker import get_reranker_client
 
+        self._reset_cache()
         with patch("app.reranker.RERANKER_ENABLED", True):
             client = get_reranker_client()
             assert client is not None
             assert client.provider == "local"
+        self._reset_cache()
 
     def test_get_reranker_returns_none_when_disabled(self) -> None:
         """When RERANKER_ENABLED=false, factory returns None."""
         from app.reranker import get_reranker_client
 
+        self._reset_cache()
         with patch("app.reranker.RERANKER_ENABLED", False):
             client = get_reranker_client()
             assert client is None
+        self._reset_cache()
 
 
 class TestRerankerInSearchPipeline:
