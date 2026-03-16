@@ -334,6 +334,264 @@ def generate_docx_export(
     return buffer.getvalue()
 
 
+###############################################################################
+# FR-033: Cited-Only Packet Export
+###############################################################################
+
+ExhibitDict = dict[str, Any]
+
+
+def extract_cited_exhibits(messages: list[QAMessage]) -> list[ExhibitDict]:
+    """Extract deduplicated exhibits from session citations.
+
+    Groups citations by document, collecting unique pages and snippets.
+    Returns a list of exhibit dicts sorted by doc_name.
+    """
+    # doc_id → exhibit info
+    exhibits: dict[str, ExhibitDict] = {}
+
+    for msg in messages:
+        if msg.role != "assistant" or not msg.citations_json:
+            continue
+        try:
+            citations = json.loads(msg.citations_json)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(citations, list):
+            continue
+
+        for cit in citations:
+            doc_id = cit.get("doc_id", "unknown")
+            if doc_id not in exhibits:
+                exhibits[doc_id] = {
+                    "doc_id": doc_id,
+                    "doc_name": cit.get("doc_name", "Unknown Document"),
+                    "pages": set(),
+                    "snippets": [],
+                    "_seen_chunks": set(),
+                }
+
+            # Collect pages
+            page = cit.get("page_num")
+            if page is not None:
+                exhibits[doc_id]["pages"].add(page)
+            page_end = cit.get("page_end")
+            if page_end is not None and page_end != page:
+                exhibits[doc_id]["pages"].add(page_end)
+
+            # Collect unique snippets (deduplicate by chunk_id)
+            chunk_id = cit.get("chunk_id", "")
+            if chunk_id and chunk_id not in exhibits[doc_id]["_seen_chunks"]:
+                exhibits[doc_id]["_seen_chunks"].add(chunk_id)
+                exhibits[doc_id]["snippets"].append({
+                    "text": cit.get("snippet", ""),
+                    "page_num": page or 0,
+                    "chunk_id": chunk_id,
+                })
+
+    # Convert sets to sorted lists, remove internal tracking
+    result: list[ExhibitDict] = []
+    for exhibit in sorted(exhibits.values(), key=lambda e: e["doc_name"]):
+        result.append({
+            "doc_id": exhibit["doc_id"],
+            "doc_name": exhibit["doc_name"],
+            "pages": sorted(exhibit["pages"]),
+            "snippets": exhibit["snippets"],
+        })
+    return result
+
+
+def generate_cited_packet_pdf(
+    session: QASession,
+    messages: list[QAMessage],
+) -> bytes:
+    """Generate PDF cited-only packet listing referenced exhibits/pages."""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        leftMargin=0.75 * inch,
+        rightMargin=0.75 * inch,
+        topMargin=0.75 * inch,
+        bottomMargin=0.75 * inch,
+    )
+
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        "CPTitle", parent=styles["Title"], fontSize=18, spaceAfter=6,
+    )
+    header_style = ParagraphStyle(
+        "CPHeader", parent=styles["Normal"], fontSize=10,
+        textColor=colors.gray, spaceAfter=12,
+    )
+    exhibit_title_style = ParagraphStyle(
+        "CPExhibitTitle", parent=styles["Normal"], fontSize=12,
+        fontName="Helvetica-Bold", textColor=colors.HexColor("#1a365d"),
+        spaceBefore=14, spaceAfter=4,
+    )
+    page_style = ParagraphStyle(
+        "CPPages", parent=styles["Normal"], fontSize=10,
+        textColor=colors.HexColor("#2d3748"), leftIndent=12, spaceAfter=4,
+    )
+    snippet_style = ParagraphStyle(
+        "CPSnippet", parent=styles["Normal"], fontSize=9,
+        textColor=colors.HexColor("#4a5568"), leftIndent=24, spaceAfter=4,
+    )
+    footer_style = ParagraphStyle(
+        "CPFooter", parent=styles["Normal"], fontSize=8,
+        textColor=colors.gray, spaceBefore=20,
+    )
+    empty_style = ParagraphStyle(
+        "CPEmpty", parent=styles["Normal"], fontSize=11,
+        textColor=colors.HexColor("#718096"), spaceBefore=20,
+    )
+
+    elements: list[Any] = []
+
+    # Title
+    elements.append(Paragraph("EVIDENCE BOUND - Cited Exhibits Packet", title_style))
+
+    # Header
+    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    session_short = session.session_id[:8] if len(session.session_id) > 8 else session.session_id
+    elements.append(Paragraph(
+        f"Session: {session_short} | Generated: {generated_at}", header_style,
+    ))
+    elements.append(Spacer(1, 12))
+
+    # Separator
+    def _make_separator() -> Table:
+        t = Table([["" * 80]], colWidths=[7 * inch])
+        t.setStyle(
+            TableStyle([("LINEBELOW", (0, 0), (-1, -1), 1, colors.HexColor("#e2e8f0"))])
+        )
+        return t
+
+    elements.append(_make_separator())
+    elements.append(Spacer(1, 12))
+
+    # Extract exhibits
+    exhibits = extract_cited_exhibits(messages)
+
+    if not exhibits:
+        elements.append(Paragraph("No cited exhibits found in this session.", empty_style))
+    else:
+        # Summary table
+        elements.append(Paragraph(
+            f"<b>{len(exhibits)}</b> document(s) cited in this session:",
+            page_style,
+        ))
+        elements.append(Spacer(1, 8))
+
+        for idx, exhibit in enumerate(exhibits, start=1):
+            pages_str = ", ".join(str(p) for p in exhibit["pages"])
+            elements.append(Paragraph(
+                f"Exhibit {idx}: {_escape_xml(exhibit['doc_name'])}",
+                exhibit_title_style,
+            ))
+            elements.append(Paragraph(f"Pages cited: {pages_str}", page_style))
+
+            for snippet in exhibit["snippets"]:
+                text = _escape_xml(snippet["text"][:300])
+                elements.append(Paragraph(
+                    f"p.{snippet['page_num']}: &quot;{text}...&quot;",
+                    snippet_style,
+                ))
+
+            elements.append(Spacer(1, 6))
+            elements.append(_make_separator())
+            elements.append(Spacer(1, 6))
+
+    # Footer
+    elements.append(Spacer(1, 20))
+    elements.append(Paragraph(
+        f"Docs Snapshot: {session.docs_snapshot_id}", footer_style,
+    ))
+
+    doc.build(elements)
+    return buffer.getvalue()
+
+
+def generate_cited_packet_docx(
+    session: QASession,
+    messages: list[QAMessage],
+) -> bytes:
+    """Generate DOCX cited-only packet listing referenced exhibits/pages."""
+    document = DocxDocument()
+
+    # Title
+    title = document.add_heading("EVIDENCE BOUND - Cited Exhibits Packet", level=0)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    # Header
+    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    session_short = session.session_id[:8] if len(session.session_id) > 8 else session.session_id
+    header_para = document.add_paragraph()
+    header_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    header_run = header_para.add_run(f"Session: {session_short} | Generated: {generated_at}")
+    header_run.font.size = Pt(10)
+    header_run.font.italic = True
+
+    document.add_paragraph()
+
+    # Extract exhibits
+    exhibits = extract_cited_exhibits(messages)
+
+    if not exhibits:
+        empty_para = document.add_paragraph()
+        empty_run = empty_para.add_run("No cited exhibits found in this session.")
+        empty_run.font.italic = True
+        empty_run.font.size = Pt(11)
+    else:
+        # Summary
+        summary = document.add_paragraph()
+        summary_run = summary.add_run(f"{len(exhibits)} document(s) cited in this session:")
+        summary_run.font.bold = True
+        summary_run.font.size = Pt(11)
+
+        document.add_paragraph()
+
+        for idx, exhibit in enumerate(exhibits, start=1):
+            pages_str = ", ".join(str(p) for p in exhibit["pages"])
+
+            # Exhibit header
+            ex_para = document.add_paragraph()
+            ex_run = ex_para.add_run(f"Exhibit {idx}: {exhibit['doc_name']}")
+            ex_run.font.bold = True
+            ex_run.font.size = Pt(12)
+
+            # Pages
+            pg_para = document.add_paragraph()
+            pg_para.paragraph_format.left_indent = Inches(0.25)
+            pg_run = pg_para.add_run(f"Pages cited: {pages_str}")
+            pg_run.font.size = Pt(10)
+
+            # Snippets
+            for snippet in exhibit["snippets"]:
+                sn_para = document.add_paragraph()
+                sn_para.paragraph_format.left_indent = Inches(0.5)
+                sn_ref = sn_para.add_run(f"p.{snippet['page_num']}: ")
+                sn_ref.font.bold = True
+                sn_ref.font.size = Pt(9)
+                sn_quote = sn_para.add_run(f'"{snippet["text"][:300]}..."')
+                sn_quote.font.italic = True
+                sn_quote.font.size = Pt(9)
+
+            document.add_paragraph("─" * 60)
+
+    # Footer
+    document.add_paragraph()
+    footer_para = document.add_paragraph()
+    footer_run = footer_para.add_run(f"Docs Snapshot: {session.docs_snapshot_id}")
+    footer_run.font.size = Pt(8)
+    footer_run.font.italic = True
+
+    buffer = io.BytesIO()
+    document.save(buffer)
+    return buffer.getvalue()
+
+
 def _escape_xml(text: str) -> str:
     """Escape special XML characters for PDF generation."""
     if not text:
