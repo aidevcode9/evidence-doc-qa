@@ -73,11 +73,15 @@ async def process_document_upload(
         )
         raise HTTPException(
             status_code=409,
-            detail=(
-                f"Duplicate document. This file already exists in this matter "
-                f"(doc_id={existing.doc_id}, "
-                f"snapshot={existing.docs_snapshot_id})."
-            ),
+            detail={
+                "message": (
+                    f"This document already exists in this matter "
+                    f"as \"{existing.doc_name}\"."
+                ),
+                "existing_doc_id": existing.doc_id,
+                "existing_doc_name": existing.doc_name,
+                "existing_snapshot_id": existing.docs_snapshot_id,
+            },
         )
 
     doc_id = uuid.uuid4().hex

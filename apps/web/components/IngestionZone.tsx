@@ -29,12 +29,22 @@ export function IngestionZone({ onUploadSuccess }: IngestionZoneProps) {
 
     try {
       const res = await apiUpload("/v1/docs/upload", formData);
-      if (!res.ok) throw new Error("Upload failed");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Upload failed" }));
+        if (res.status === 409 && err.detail?.existing_doc_name) {
+          alert(`This document already exists as "${err.detail.existing_doc_name}".`);
+          return;
+        }
+        const message = typeof err.detail === "string"
+          ? err.detail
+          : err.detail?.message || "Upload failed";
+        throw new Error(message);
+      }
       const data = await res.json();
       onUploadSuccess(data.docs_snapshot_id, file.name);
     } catch (err) {
       console.error(err);
-      alert("Failed to upload document.");
+      alert(err instanceof Error ? err.message : "Failed to upload document.");
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
