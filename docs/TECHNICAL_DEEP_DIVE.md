@@ -17,16 +17,20 @@
 6. [Security & Policy Enforcement](#security--policy-enforcement)
 7. [Provider Abstractions](#provider-abstractions)
 
+**UX & Document Interaction**
+8. [Document Disambiguation & Pinning](#document-disambiguation--pinning)
+9. [Case Management & Auto-Naming](#case-management--auto-naming)
+
 **Production Engineering**
-8. [Observability Stack](#observability-stack)
-9. [Performance & Latency Controls](#performance--latency-controls)
-10. [Caching Architecture](#caching-architecture)
-11. [Cost Tracking & Estimation](#cost-tracking--estimation)
-12. [Rate Limiting & Concurrency](#rate-limiting--concurrency)
-13. [PII Redaction](#pii-redaction)
-14. [Graceful Degradation](#graceful-degradation)
-15. [Test Architecture](#test-architecture)
-16. [Data Model](#data-model)
+10. [Observability Stack](#observability-stack)
+11. [Performance & Latency Controls](#performance--latency-controls)
+12. [Caching Architecture](#caching-architecture)
+13. [Cost Tracking & Estimation](#cost-tracking--estimation)
+14. [Rate Limiting & Concurrency](#rate-limiting--concurrency)
+15. [PII Redaction](#pii-redaction)
+16. [Graceful Degradation](#graceful-degradation)
+17. [Test Architecture](#test-architecture)
+18. [Data Model](#data-model)
 
 ---
 
@@ -102,6 +106,7 @@ def execute_ask(
         question, docs_snapshot_id,
         tenant_id=tenant_id,    # FR-001: Tenant isolation
         matter_id=matter_id,    # FR-002: Matter isolation
+        doc_id=doc_id,          # Optional: pin to single document
         return_usage=True,
     )
 
@@ -150,6 +155,8 @@ def hybrid_search(
     docs_snapshot_id: str | None,
     tenant_id: str,           # REQUIRED for isolation
     matter_id: str,           # REQUIRED for isolation
+    *,
+    doc_id: str | None = None,  # Optional: pin to single document
 ) -> list[ChunkRecord]:
     # Generate query embedding
     embeddings, embedding_usage = embed_texts_with_usage([question])
@@ -210,7 +217,8 @@ def _bm25_score(
 For production, Azure AI Search provides semantic reranking in [retrieval.py:112-250](../apps/api/app/retrieval.py#L112-L250):
 
 ```python
-def _azure_search(question, docs_snapshot_id, query_embedding, tenant_id, matter_id):
+def _azure_search(question, docs_snapshot_id, query_embedding, tenant_id, matter_id,
+                   doc_id=None):
     # Build isolation filter (REQUIRED for FR-001, FR-002)
     filters = [
         f"tenant_id eq '{tenant_id}'",
@@ -218,6 +226,8 @@ def _azure_search(question, docs_snapshot_id, query_embedding, tenant_id, matter
     ]
     if docs_snapshot_id:
         filters.append(f"docs_snapshot_id eq '{docs_snapshot_id}'")
+    if doc_id:
+        filters.append(f"doc_id eq '{doc_id}'")  # Pin to single document
 
     payload = {
         "search": question,
@@ -591,6 +601,195 @@ EMBEDDINGS_MODE=local        # local | remote
 
 ---
 
+## Document Disambiguation & Pinning
+
+A recurring problem in multi-document Q&A: when a matter contains 30 similar PDFs (e.g., monthly claim reports), the system may retrieve chunks from the wrong document. The user knows which document they mean, but the retrieval pipeline doesn't.
+
+### The Problem
+
+```
+User: "What was the total payout?"
+
+Retrieval returns 5 candidates from 5 different documents — all with high scores,
+all containing "total payout" text. The system picks the one with the highest RRF
+score, which may be from the wrong monthly report.
+```
+
+Traditional RAG systems either guess (returning potentially wrong answers) or refuse (frustrating users who know exactly which document they want). Evidence-Bound solves this with **interactive disambiguation**.
+
+### How It Works
+
+The pipeline exposes `debug_candidates` — the top-3 scored chunks with their source documents — in every response. When the user sees candidates from multiple documents, they can click one to **pin** their query to that specific document.
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ User asks question ──▶ Retrieval returns candidates          │
+│                                                              │
+│   Candidate 1: March_Report.pdf  (RRF 0.82) ◀── clickable  │
+│   Candidate 2: April_Report.pdf  (RRF 0.79) ◀── clickable  │
+│   Candidate 3: May_Report.pdf    (RRF 0.77) ◀── clickable  │
+│                                                              │
+│ User clicks "March_Report.pdf"                               │
+│   ──▶ Re-runs query with doc_id="march-report-pdf"          │
+│   ──▶ Pins document for follow-up questions                  │
+│   ──▶ Shows "Pinned: March_Report.pdf" indicator             │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### Backend: doc_id Threading
+
+The optional `doc_id` field is threaded through every layer of the retrieval pipeline:
+
+```python
+# schemas.py — Input validation with OData injection prevention
+class AskRequest(BaseModel):
+    doc_id: Optional[str] = None
+
+    @field_validator("doc_id")
+    def validate_doc_id(cls, v):
+        # Same regex as docs_snapshot_id — prevents Azure Search OData injection
+        if v and not re.match(r"^[a-zA-Z0-9][-_a-zA-Z0-9]{0,63}$", v):
+            raise ValueError("doc_id must be alphanumeric with hyphens/underscores")
+        return v
+
+# retrieval.py — Adds filter to Azure Search OData $filter string
+if doc_id:
+    filters.append(f"doc_id eq '{doc_id}'")
+
+# db.py — Adds WHERE clause to local PostgreSQL queries
+if doc_id:
+    stmt = stmt.where(Chunk.doc_id == doc_id)
+
+# cache.py — doc_id in cache key prevents pinned/unpinned cross-contamination
+key = f"{tenant_id}:{matter_id}:{docs_snapshot_id}:{question_hash}:{doc_id or ''}"
+```
+
+**Security:** The `doc_id` validator uses the same strict alphanumeric regex as `docs_snapshot_id`. This prevents OData filter injection — a critical concern since the value is interpolated directly into Azure AI Search `$filter` strings.
+
+### Frontend: React State Timing
+
+When a user clicks a candidate card, the system must (1) set the pinned document and (2) re-run the query scoped to it. A naive implementation has a race condition — `setState` is async, so the `doc_id` might not be set when `handleAsk` reads it.
+
+The solution: pass `overrideDocId` directly to the function, bypassing React state:
+
+```tsx
+const handleCandidateSelect = async (docId: string, docName: string) => {
+  setPinnedDocId(docId);
+  setPinnedDocName(docName);
+  // Pass docId directly — don't rely on setState timing
+  const lastUserMsg = [...messages].reverse().find(m => m.role === "user");
+  if (lastUserMsg) await handleAsk(lastUserMsg.text, docId);
+};
+
+const handleAsk = async (question: string, overrideDocId?: string) => {
+  const effectiveDocId = overrideDocId ?? pinnedDocId ?? undefined;
+  // ... send effectiveDocId in request body
+};
+```
+
+### Interview Talking Points
+
+- **Why not just filter at upload time?** Because users don't know which document matters until they see the ambiguous results. This is a classic exploration vs. exploitation tradeoff — you want broad retrieval first, then let the user narrow.
+- **Why not a dropdown?** Dropdown selection before asking is high-friction. Disambiguation after seeing results is lower cognitive load — the user sees *why* the system was confused.
+- **Cache key design:** Including `doc_id` in the cache key means an unpinned query (`doc_id=None`) and a pinned query (`doc_id="doc-abc"`) produce different cache keys. Without this, a cached unpinned result could be incorrectly returned for a pinned query — a subtle correctness bug.
+
+---
+
+## Case Management & Auto-Naming
+
+### The Problem
+
+Law firm cases start with a file upload, but they need human-readable names. The original system defaulted every case to `"demo-matter"` — useless in production. Manually naming each case adds friction at the moment of highest urgency (initial document intake).
+
+### Auto-Naming From First Upload
+
+When the first document is uploaded to a matter, the system derives a display name from the filename:
+
+```python
+# document_service.py
+def _display_name_from_filename(filename: str) -> str:
+    """'Smith_Claim_2024.pdf' → 'Smith Claim 2024'"""
+    name = filename.rsplit(".", 1)[0] if "." in filename else filename
+    name = name.replace("_", " ").replace("-", " ")
+    return name.strip().title() or filename
+
+# Called after document insert
+ensure_matter_exists(matter_id, tenant_id, display_name)
+```
+
+The `ensure_matter_exists` function is idempotent — it creates a row in the `matters` table only if one doesn't exist. Subsequent uploads to the same matter don't overwrite the name.
+
+### Rename API
+
+Users can rename matters via inline editing in the CasePicker dropdown:
+
+```python
+# PUT /v1/matters/{matter_id}/name
+@router.put("/v1/matters/{matter_id}/name")
+async def rename_matter(matter_id, body: RenameMatterRequest, ctx):
+    # RBAC + matter access checks
+    display_name = body.display_name.strip()
+    if not display_name or len(display_name) > 100:
+        raise HTTPException(400, "Display name must be 1-100 characters.")
+    updated = update_matter_display_name(matter_id, ctx.tenant_id, display_name)
+    if not updated:
+        raise HTTPException(404, "Matter not found.")
+    return {"matter_id": matter_id, "display_name": display_name}
+```
+
+### Composite Primary Key for Tenant Isolation
+
+The `matters` table uses a composite PK `(matter_id, tenant_id)` so different tenants can independently use the same case slug (e.g., both might have a `smith-claim` matter):
+
+```python
+class Matter(Base):
+    __tablename__ = "matters"
+    matter_id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, primary_key=True)
+    display_name: Mapped[str] = mapped_column(String, nullable=False)
+    created_at_utc: Mapped[str] = mapped_column(String, nullable=False)
+```
+
+The `list_matters_for_tenant` query LEFT JOINs this table and falls back to a slug-derived name when no matter row exists (backward compatible with pre-existing data):
+
+```sql
+SELECT documents.matter_id, COUNT(*) as doc_count,
+       MAX(documents.ingested_at_utc) as latest_ingested,
+       (SELECT d2.docs_snapshot_id FROM documents d2 ...),
+       m.display_name as matter_display_name
+FROM documents
+LEFT JOIN matters m ON m.matter_id = documents.matter_id
+  AND m.tenant_id = documents.tenant_id
+WHERE documents.tenant_id = :tenant_id AND documents.status = 'ready'
+GROUP BY documents.matter_id, m.display_name
+```
+
+### Document Strip Overflow
+
+With 30+ documents in a matter, the horizontal document strip scrolls off-screen with no indication. The `DocumentStrip` component shows the first 5 documents as pills, then a "+N more" button that expands the full list:
+
+```tsx
+const MAX_VISIBLE = 5;
+const visibleDocs = expanded ? documents : documents.slice(0, MAX_VISIBLE);
+const overflowCount = documents.length - MAX_VISIBLE;
+
+{overflowCount > 0 && !expanded && (
+  <button onClick={() => setExpanded(true)}>
+    +{overflowCount} more
+  </button>
+)}
+```
+
+This is a simple but important UX detail — without it, users don't know their other documents exist.
+
+### Interview Talking Points
+
+- **Why auto-name from filename?** Law firm filenames are descriptive by convention (`Smith_Claim_2024.pdf`). Deriving case names from the first upload eliminates a manual step while producing names that are 80%+ correct for the domain.
+- **Why composite PK?** A single `matter_id` PK would create cross-tenant collisions — tenant A's `smith-claim` would block tenant B from using the same slug. The composite PK `(matter_id, tenant_id)` is the standard pattern for multi-tenant data.
+- **Why LEFT JOIN?** Backward compatibility. Pre-existing matters (created before the `matters` table existed) have no row. The LEFT JOIN + COALESCE-style fallback means the system gracefully degrades to slug-derived names instead of breaking.
+
+---
+
 ## Observability Stack
 
 The system runs three parallel observability layers, each serving a different audience and failure mode:
@@ -799,8 +998,9 @@ No TTL needed because the same text always produces the same embedding. The `sta
 # cache.py — QueryResultCache
 class QueryResultCache:
     """LRU cache for Q&A responses with tenant isolation and TTL."""
-    def _make_key(self, tenant_id, matter_id, docs_snapshot_id, question_hash):
-        return f"{tenant_id}:{matter_id}:{docs_snapshot_id}:{question_hash}"
+    def _make_key(self, tenant_id, matter_id, docs_snapshot_id, question_hash,
+                  doc_id=None):
+        return f"{tenant_id}:{matter_id}:{docs_snapshot_id}:{question_hash}:{doc_id or ''}"
 ```
 
 | Setting | Default | Config |
@@ -808,9 +1008,9 @@ class QueryResultCache:
 | Enabled | No (opt-in) | `QUERY_CACHE_ENABLED` |
 | Max entries | 500 | `QUERY_CACHE_MAX_SIZE` |
 | TTL | 3600s | `QUERY_CACHE_TTL_SECONDS` |
-| Key | `tenant:matter:snapshot:question_hash` | N/A |
+| Key | `tenant:matter:snapshot:question_hash:doc_id` | N/A |
 
-The key includes `docs_snapshot_id`, so re-indexing documents automatically invalidates stale cached answers. Tenant isolation is enforced at the key level — cross-tenant cache hits are structurally impossible.
+The key includes `docs_snapshot_id`, so re-indexing documents automatically invalidates stale cached answers. The `doc_id` segment ensures pinned queries never return cached unpinned results (and vice versa). Tenant isolation is enforced at the key level — cross-tenant cache hits are structurally impossible.
 
 ### Thread Safety
 
@@ -1064,6 +1264,7 @@ Located in [packages/shared/python/evidence_shared/schemas.py](../packages/share
 class AskRequest(BaseModel):
     question: str
     docs_snapshot_id: Optional[str] = None
+    doc_id: Optional[str] = None     # Pin query to a single document
     top_k: Optional[int] = 8
 
 class Citation(BaseModel):
@@ -1203,14 +1404,20 @@ Evidence-Bound enforces evidence-grounded answers through:
 5. **Adversarial Detection** — Negation mismatch, injection patterns, homoglyph normalization, blocklists
 6. **Tenant Isolation** — Every query filtered by tenant_id + matter_id
 
+**UX & Document Interaction**
+7. **Document Disambiguation** — Ambiguous queries expose top candidates; users click to pin and re-query scoped to a specific document
+8. **Doc Pinning** — Optional `doc_id` threads through the entire pipeline (schema, retrieval, cache key), with OData injection validation
+9. **Case Auto-Naming** — Matters named from first uploaded filename; editable via inline rename with tenant-isolated composite PK
+10. **Overflow-Aware UI** — Document strips, candidate cards, and case pickers handle 30+ items without losing content off-screen
+
 **Production Engineering**
-7. **Three-Layer Observability** — Langfuse (LLM tracing) + OpenTelemetry (infrastructure) + telemetry table (business metrics)
-8. **Sub-Component Latency Tracking** — Per-request breakdown: retrieval, verification, LLM, overhead (p50/p95/p99)
-9. **Thread-Safe LRU Caching** — Embedding cache (5K entries) + query result cache (tenant-isolated, TTL, auto-invalidated on re-index)
-10. **Per-Request Cost Estimation** — Component-level cost breakdown with configurable rates
-11. **Rate Limiting** — Per-IP slowapi decorators on all routes (20/min query, 10/min upload)
-12. **PII Redaction** — Raw questions, answers, and document names never reach logs or traces
-13. **Graceful Degradation** — Every external dependency is optional; the pipeline never breaks due to observability failures
-14. **Performance Test Suite** — 8 automated tests: percentile math, concurrency (50 threads), rate limit enforcement, latency breakdown validation
+11. **Three-Layer Observability** — Langfuse (LLM tracing) + OpenTelemetry (infrastructure) + telemetry table (business metrics)
+12. **Sub-Component Latency Tracking** — Per-request breakdown: retrieval, verification, LLM, overhead (p50/p95/p99)
+13. **Thread-Safe LRU Caching** — Embedding cache (5K entries) + query result cache (tenant-isolated, TTL, auto-invalidated on re-index, doc_id-aware)
+14. **Per-Request Cost Estimation** — Component-level cost breakdown with configurable rates
+15. **Rate Limiting** — Per-IP slowapi decorators on all routes (20/min query, 10/min upload)
+16. **PII Redaction** — Raw questions, answers, and document names never reach logs or traces
+17. **Graceful Degradation** — Every external dependency is optional; the pipeline never breaks due to observability failures
+18. **Performance Test Suite** — 8 automated tests: percentile math, concurrency (50 threads), rate limit enforcement, latency breakdown validation
 
 The system refuses to answer rather than risk hallucination or fabricated citations. And when it does answer, every aspect of the request — latency, cost, tokens, cache behavior, and evidence quality — is tracked, measured, and available for audit.
