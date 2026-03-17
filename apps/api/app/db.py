@@ -147,6 +147,22 @@ class User(Base):
     locked_until_utc: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
+class Matter(Base):
+    """Matter (case) metadata table.
+
+    Stores display name and creation timestamp for matters.
+    Auto-created on first document upload with name derived from filename.
+    Composite PK (matter_id, tenant_id) supports same slug across tenants (FR-001).
+    """
+
+    __tablename__ = "matters"
+
+    matter_id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, primary_key=True)
+    display_name: Mapped[str] = mapped_column(String, nullable=False)
+    created_at_utc: Mapped[str] = mapped_column(String, nullable=False)
+
+
 class MatterAssignment(Base):
     """Matter-level permission assignment (FR-004).
 
@@ -358,18 +374,21 @@ def list_matters_for_tenant(
     with session_scope() as session:
         if user_role == "admin":
             stmt = text(
-                "SELECT matter_id, COUNT(*) as doc_count, "
-                "MAX(ingested_at_utc) as latest_ingested, "
+                "SELECT documents.matter_id, COUNT(*) as doc_count, "
+                "MAX(documents.ingested_at_utc) as latest_ingested, "
                 "("
                 "  SELECT d2.docs_snapshot_id FROM documents d2 "
                 "  WHERE d2.tenant_id = :tenant_id "
                 "  AND d2.matter_id = documents.matter_id "
                 "  AND d2.status = 'ready' "
                 "  ORDER BY d2.ingested_at_utc DESC LIMIT 1"
-                ") as latest_snapshot_id "
+                ") as latest_snapshot_id, "
+                "m.display_name as matter_display_name "
                 "FROM documents "
-                "WHERE tenant_id = :tenant_id AND status = 'ready' "
-                "GROUP BY matter_id "
+                "LEFT JOIN matters m ON m.matter_id = documents.matter_id "
+                "  AND m.tenant_id = documents.tenant_id "
+                "WHERE documents.tenant_id = :tenant_id AND documents.status = 'ready' "
+                "GROUP BY documents.matter_id, m.display_name "
                 "ORDER BY latest_ingested DESC"
             )
             rows = session.execute(stmt, {"tenant_id": tenant_id}).all()
@@ -383,12 +402,15 @@ def list_matters_for_tenant(
                 "  AND d2.matter_id = d.matter_id "
                 "  AND d2.status = 'ready' "
                 "  ORDER BY d2.ingested_at_utc DESC LIMIT 1"
-                ") as latest_snapshot_id "
+                ") as latest_snapshot_id, "
+                "m.display_name as matter_display_name "
                 "FROM documents d "
+                "LEFT JOIN matters m ON m.matter_id = d.matter_id "
+                "  AND m.tenant_id = d.tenant_id "
                 "JOIN matter_assignments ma ON d.matter_id = ma.matter_id "
                 "  AND ma.tenant_id = :tenant_id AND ma.user_id = :user_id "
                 "WHERE d.tenant_id = :tenant_id AND d.status = 'ready' "
-                "GROUP BY d.matter_id "
+                "GROUP BY d.matter_id, m.display_name "
                 "ORDER BY latest_ingested DESC"
             )
             rows = session.execute(
@@ -399,11 +421,48 @@ def list_matters_for_tenant(
             {
                 "matter_id": row[0],
                 "doc_count": row[1],
-                "display_name": row[0].replace("-", " ").title(),
+                "display_name": row[4] if row[4] else row[0].replace("-", " ").title(),
                 "latest_snapshot_id": row[3],
             }
             for row in rows
         ]
+
+
+def ensure_matter_exists(
+    matter_id: str, tenant_id: str, display_name: str
+) -> None:
+    """Create a matter row if it doesn't exist yet.
+
+    Called on first document upload to auto-name the matter from the filename.
+    Uses composite PK (matter_id, tenant_id) for tenant isolation (FR-001).
+    """
+    with session_scope() as session:
+        existing = session.get(Matter, (matter_id, tenant_id))
+        if existing is not None:
+            return
+        from app.ingestion import utc_now
+
+        matter = Matter(
+            matter_id=matter_id,
+            tenant_id=tenant_id,
+            display_name=display_name,
+            created_at_utc=utc_now(),
+        )
+        session.add(matter)
+        session.commit()
+
+
+def update_matter_display_name(
+    matter_id: str, tenant_id: str, display_name: str
+) -> bool:
+    """Update a matter's display name. Returns True if found and updated."""
+    with session_scope() as session:
+        matter = session.get(Matter, (matter_id, tenant_id))
+        if matter is None:
+            return False
+        matter.display_name = display_name
+        session.commit()
+        return True
 
 
 def list_documents_for_matter(
@@ -536,6 +595,7 @@ def load_chunks(
     docs_snapshot_id: str | None,
     tenant_id: str,
     matter_id: str,
+    doc_id: str | None = None,
 ) -> list[Chunk]:
     """Load chunks with REQUIRED tenant/matter isolation (FR-001, FR-002).
 
@@ -543,6 +603,7 @@ def load_chunks(
         docs_snapshot_id: Filter by document snapshot ID (optional)
         tenant_id: Tenant ID (REQUIRED for FR-001 isolation)
         matter_id: Matter ID (REQUIRED for FR-002 isolation)
+        doc_id: Optional doc_id to pin query to a single document
 
     Returns:
         List of chunks matching the filters
@@ -554,6 +615,8 @@ def load_chunks(
         )
         if docs_snapshot_id:
             stmt = stmt.where(Chunk.docs_snapshot_id == docs_snapshot_id)
+        if doc_id:
+            stmt = stmt.where(Chunk.doc_id == doc_id)
         return list(session.scalars(stmt).all())
 
 
@@ -561,6 +624,7 @@ def load_index_records(
     docs_snapshot_id: str | None,
     tenant_id: str,
     matter_id: str,
+    doc_id: str | None = None,
 ) -> list[IndexRecord]:
     """Load index records with REQUIRED tenant/matter isolation (FR-001, FR-002).
 
@@ -568,6 +632,7 @@ def load_index_records(
         docs_snapshot_id: Filter by document snapshot ID (optional)
         tenant_id: Tenant ID (REQUIRED for FR-001 isolation)
         matter_id: Matter ID (REQUIRED for FR-002 isolation)
+        doc_id: Optional doc_id to pin query to a single document
 
     Returns:
         List of index records matching the filters
@@ -579,6 +644,8 @@ def load_index_records(
         )
         if docs_snapshot_id:
             stmt = stmt.where(IndexRecord.docs_snapshot_id == docs_snapshot_id)
+        if doc_id:
+            stmt = stmt.where(IndexRecord.doc_id == doc_id)
         return list(session.scalars(stmt).all())
 
 

@@ -64,9 +64,10 @@ class QueryResultCache:
         self._misses = 0
 
     def _make_key(
-        self, tenant_id: str, matter_id: str, docs_snapshot_id: str, question_hash: str
+        self, tenant_id: str, matter_id: str, docs_snapshot_id: str, question_hash: str,
+        doc_id: str | None = None,
     ) -> str:
-        return f"{tenant_id}:{matter_id}:{docs_snapshot_id}:{question_hash}"
+        return f"{tenant_id}:{matter_id}:{docs_snapshot_id}:{question_hash}:{doc_id or ''}"
 
     def get(
         self,
@@ -74,8 +75,9 @@ class QueryResultCache:
         matter_id: str,
         docs_snapshot_id: str,
         question_hash: str,
+        doc_id: str | None = None,
     ) -> dict[str, Any] | None:
-        key = self._make_key(tenant_id, matter_id, docs_snapshot_id, question_hash)
+        key = self._make_key(tenant_id, matter_id, docs_snapshot_id, question_hash, doc_id)
         with self._lock:
             if key not in self._cache:
                 self._misses += 1
@@ -96,8 +98,9 @@ class QueryResultCache:
         docs_snapshot_id: str,
         question_hash: str,
         result: dict[str, Any],
+        doc_id: str | None = None,
     ) -> None:
-        key = self._make_key(tenant_id, matter_id, docs_snapshot_id, question_hash)
+        key = self._make_key(tenant_id, matter_id, docs_snapshot_id, question_hash, doc_id)
         with self._lock:
             if key in self._cache:
                 self._cache.move_to_end(key)

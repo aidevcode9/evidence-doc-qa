@@ -79,6 +79,7 @@ class SearchClient(ABC):
         matter_id: str,
         *,
         docs_snapshot_id: str | None = None,
+        doc_id: str | None = None,
         top_k: int = 5,
     ) -> SearchResponse:
         """Execute hybrid search combining BM25 and vector search.
@@ -89,6 +90,7 @@ class SearchClient(ABC):
             tenant_id: Tenant ID for isolation (REQUIRED - FR-001).
             matter_id: Matter ID for isolation (REQUIRED - FR-002).
             docs_snapshot_id: Optional document snapshot filter.
+            doc_id: Optional doc_id to pin query to a single document.
             top_k: Maximum number of results to return.
 
         Returns:

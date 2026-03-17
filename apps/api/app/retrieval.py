@@ -53,6 +53,7 @@ def hybrid_search(
     tenant_id: str,
     matter_id: str,
     *,
+    doc_id: str | None = None,
     return_usage: bool = False,
 ) -> list[ChunkRecord] | tuple[list[ChunkRecord], UsageInfo]:
     """Hybrid search with REQUIRED tenant/matter isolation (FR-001, FR-002).
@@ -62,6 +63,7 @@ def hybrid_search(
         docs_snapshot_id: Optional document snapshot filter
         tenant_id: Tenant ID (REQUIRED for FR-001 isolation)
         matter_id: Matter ID (REQUIRED for FR-002 isolation)
+        doc_id: Optional doc_id to pin query to a single document
         return_usage: Whether to return embedding usage info
 
     Returns:
@@ -72,16 +74,16 @@ def hybrid_search(
     query_embedding = embeddings[0]
     if _azure_enabled():
         logger.info(f"Retrieval: Routing to Azure AI Search (Snapshot: {docs_snapshot_id}, Tenant: {tenant_id})")
-        results = _azure_search(question, docs_snapshot_id, query_embedding, tenant_id, matter_id)
+        results = _azure_search(question, docs_snapshot_id, query_embedding, tenant_id, matter_id, doc_id=doc_id)
         if results:
             _enrich_hybrid_observation("azure", len(results), _start)
             return (results, embedding_usage) if return_usage else results
         logger.info("Retrieval: Azure returned zero hits. Falling back to local index.")
 
     logger.info(f"Retrieval: Using Local Hybrid Logic (Snapshot: {docs_snapshot_id}, Tenant: {tenant_id})")
-    records = _load_index_records(docs_snapshot_id, tenant_id, matter_id)
+    records = _load_index_records(docs_snapshot_id, tenant_id, matter_id, doc_id=doc_id)
     if not records:
-        fallback = _fallback_overlap(question, docs_snapshot_id, tenant_id, matter_id)
+        fallback = _fallback_overlap(question, docs_snapshot_id, tenant_id, matter_id, doc_id=doc_id)
         _enrich_hybrid_observation("local_fallback", len(fallback), _start)
         return (fallback, embedding_usage) if return_usage else fallback
 
@@ -185,6 +187,7 @@ def _azure_search(
     query_embedding: list[float],
     tenant_id: str,
     matter_id: str,
+    doc_id: str | None = None,
 ) -> list[ChunkRecord]:
     """Azure AI Search with REQUIRED tenant/matter filters (FR-001, FR-002).
 
@@ -194,6 +197,7 @@ def _azure_search(
         query_embedding: Query embedding vector
         tenant_id: Tenant ID (REQUIRED for FR-001 isolation)
         matter_id: Matter ID (REQUIRED for FR-002 isolation)
+        doc_id: Optional doc_id to pin query to a single document
 
     Returns:
         List of matching chunks from Azure Search
@@ -225,6 +229,8 @@ def _azure_search(
     filters.append(f"matter_id eq '{matter_id}'")
     if docs_snapshot_id and docs_snapshot_id != "none":
         filters.append(f"docs_snapshot_id eq '{docs_snapshot_id}'")
+    if doc_id:
+        filters.append(f"doc_id eq '{doc_id}'")
 
     filter_string = " and ".join(filters)
     base_payload["filter"] = filter_string
@@ -420,9 +426,10 @@ def _load_index_records(
     docs_snapshot_id: str | None,
     tenant_id: str,
     matter_id: str,
+    doc_id: str | None = None,
 ) -> list[ChunkRecord]:
     """Load index records with REQUIRED tenant/matter isolation (FR-001, FR-002)."""
-    rows = load_index_records(docs_snapshot_id, tenant_id, matter_id)
+    rows = load_index_records(docs_snapshot_id, tenant_id, matter_id, doc_id=doc_id)
     records: list[ChunkRecord] = []
     for row in rows:
         rec: ChunkRecord = {
@@ -447,10 +454,11 @@ def _fallback_overlap(
     docs_snapshot_id: str | None,
     tenant_id: str,
     matter_id: str,
+    doc_id: str | None = None,
 ) -> list[ChunkRecord]:
     """Fallback overlap search with REQUIRED tenant/matter isolation (FR-001, FR-002)."""
     query_tokens = _tokenize(question)
-    rows = load_chunks(docs_snapshot_id, tenant_id, matter_id)
+    rows = load_chunks(docs_snapshot_id, tenant_id, matter_id, doc_id=doc_id)
     scored: list[ChunkRecord] = []
     for row in rows:
         score = _overlap_score(query_tokens, row.chunk_text)

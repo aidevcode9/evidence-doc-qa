@@ -25,6 +25,7 @@ class VersionSnapshot(BaseModel):
 class AskRequest(BaseModel):
     question: str
     docs_snapshot_id: Optional[str] = None
+    doc_id: Optional[str] = None
     top_k: Optional[int] = 8
     include_debug: Optional[bool] = False
 
@@ -43,6 +44,21 @@ class AskRequest(BaseModel):
         # alphanumeric with hyphens and underscores, max 64 chars.
         if not re.match(r"^[a-zA-Z0-9][-_a-zA-Z0-9]{0,63}$", v):
             msg = "docs_snapshot_id must be alphanumeric with hyphens/underscores (max 64 chars)"
+            raise ValueError(msg)
+        return v
+
+    @field_validator("doc_id")
+    @classmethod
+    def validate_doc_id(cls, v: Optional[str]) -> Optional[str]:
+        """SECURITY: Prevent OData filter injection via doc_id.
+
+        Same pattern as docs_snapshot_id — this value is interpolated into
+        Azure Search OData $filter strings.
+        """
+        if v is None:
+            return v
+        if not re.match(r"^[a-zA-Z0-9][-_a-zA-Z0-9]{0,63}$", v):
+            msg = "doc_id must be alphanumeric with hyphens/underscores (max 64 chars)"
             raise ValueError(msg)
         return v
 

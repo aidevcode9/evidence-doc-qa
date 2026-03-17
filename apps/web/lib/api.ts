@@ -15,7 +15,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 let _currentMatterId =
   (typeof window !== "undefined" && localStorage.getItem("docqa_matter")) ||
-  "demo-matter";
+  "";
 
 /**
  * Set the active matter and persist to localStorage.
@@ -188,4 +188,24 @@ export async function fetchMatterDocs(matterId: string): Promise<DocSummary[]> {
     throw new Error("Failed to fetch matter documents");
   }
   return response.json();
+}
+
+/**
+ * Rename a matter's display name.
+ */
+export async function renameMatter(matterId: string, displayName: string): Promise<void> {
+  const response = await fetch(
+    `${API_URL}/v1/matters/${encodeURIComponent(matterId)}/name`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        ...getTenantHeaders(),
+      },
+      body: JSON.stringify({ display_name: displayName }),
+    }
+  );
+  if (!response.ok) {
+    throw new Error("Failed to rename matter");
+  }
 }
