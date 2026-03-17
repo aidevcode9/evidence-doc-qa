@@ -37,8 +37,8 @@ class TestListMattersForTenant:
 
         # Mock session to return test data
         mock_rows = [
-            ("matter-a", 3, "2026-03-15T12:00:00Z", "snap_aaa111"),
-            ("matter-b", 1, "2026-03-14T12:00:00Z", "snap_bbb222"),
+            ("matter-a", 3, "2026-03-15T12:00:00Z", "snap_aaa111", None),
+            ("matter-b", 1, "2026-03-14T12:00:00Z", "snap_bbb222", None),
         ]
         with patch("app.db.session_scope") as mock_scope:
             mock_session = MagicMock()
@@ -62,7 +62,7 @@ class TestListMattersForTenant:
         from app.db import list_matters_for_tenant
 
         mock_rows = [
-            ("acme-v-widget-corp", 2, "2026-03-15T12:00:00Z", "snap_xxx"),
+            ("acme-v-widget-corp", 2, "2026-03-15T12:00:00Z", "snap_xxx", None),
         ]
         with patch("app.db.session_scope") as mock_scope:
             mock_session = MagicMock()
@@ -245,3 +245,116 @@ class TestListMatterDocsEndpoint:
 
             response = client.get("/v1/matters/secret-matter/docs")
             assert response.status_code == 403
+
+
+# --- Matter Naming Tests ---
+
+
+class TestListMattersWithDisplayName:
+    """list_matters_for_tenant uses display_name from matters table when available."""
+
+    def test_uses_matters_table_display_name(self) -> None:
+        """When matters table has a display_name, use it instead of slug."""
+        from app.db import list_matters_for_tenant
+
+        mock_rows = [
+            ("smith-claim", 2, "2026-03-15T12:00:00Z", "snap_x", "Smith Insurance Claim"),
+        ]
+        with patch("app.db.session_scope") as mock_scope:
+            mock_session = MagicMock()
+            mock_session.execute.return_value.all.return_value = mock_rows
+            mock_scope.return_value.__enter__ = MagicMock(return_value=mock_session)
+            mock_scope.return_value.__exit__ = MagicMock(return_value=False)
+
+            result = list_matters_for_tenant(
+                tenant_id="t1", user_id="u1", user_role="admin"
+            )
+
+        assert result[0]["display_name"] == "Smith Insurance Claim"
+
+    def test_falls_back_to_slug_when_no_matter_row(self) -> None:
+        """When matters table returns None, derive from slug."""
+        from app.db import list_matters_for_tenant
+
+        mock_rows = [
+            ("old-matter", 1, "2026-03-15T12:00:00Z", "snap_y", None),
+        ]
+        with patch("app.db.session_scope") as mock_scope:
+            mock_session = MagicMock()
+            mock_session.execute.return_value.all.return_value = mock_rows
+            mock_scope.return_value.__enter__ = MagicMock(return_value=mock_session)
+            mock_scope.return_value.__exit__ = MagicMock(return_value=False)
+
+            result = list_matters_for_tenant(
+                tenant_id="t1", user_id="u1", user_role="admin"
+            )
+
+        assert result[0]["display_name"] == "Old Matter"
+
+
+class TestDisplayNameFromFilename:
+    """_display_name_from_filename derives human-readable names."""
+
+    def test_strips_extension_and_titlecases(self) -> None:
+        from app.services.document_service import _display_name_from_filename
+
+        assert _display_name_from_filename("Smith_Claim_2024.pdf") == "Smith Claim 2024"
+
+    def test_handles_hyphens(self) -> None:
+        from app.services.document_service import _display_name_from_filename
+
+        assert _display_name_from_filename("medical-records-jan.pdf") == "Medical Records Jan"
+
+    def test_handles_no_extension(self) -> None:
+        from app.services.document_service import _display_name_from_filename
+
+        assert _display_name_from_filename("report") == "Report"
+
+
+class TestRenameMatterEndpoint:
+    """PUT /v1/matters/{matter_id}/name renames a matter."""
+
+    def test_rename_returns_200(self) -> None:
+        with (
+            patch("app.routers.matters.has_permission", return_value=True),
+            patch("app.routers.matters.user_has_matter_access", return_value=True),
+            patch("app.routers.matters.update_matter_display_name", return_value=True),
+        ):
+            from app.routers.matters import router
+
+            app = FastAPI()
+            app.include_router(router)
+            client = TestClient(app, headers={
+                "X-Tenant-Id": "t1",
+                "X-User-Id": "u1",
+                "X-User-Role": "admin",
+            })
+
+            response = client.put(
+                "/v1/matters/smith-case/name",
+                json={"display_name": "Smith vs Acme Corp"},
+            )
+            assert response.status_code == 200
+            assert response.json()["display_name"] == "Smith vs Acme Corp"
+
+    def test_rename_not_found_returns_404(self) -> None:
+        with (
+            patch("app.routers.matters.has_permission", return_value=True),
+            patch("app.routers.matters.user_has_matter_access", return_value=True),
+            patch("app.routers.matters.update_matter_display_name", return_value=False),
+        ):
+            from app.routers.matters import router
+
+            app = FastAPI()
+            app.include_router(router)
+            client = TestClient(app, headers={
+                "X-Tenant-Id": "t1",
+                "X-User-Id": "u1",
+                "X-User-Role": "admin",
+            })
+
+            response = client.put(
+                "/v1/matters/nonexistent/name",
+                json={"display_name": "New Name"},
+            )
+            assert response.status_code == 404

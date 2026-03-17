@@ -76,12 +76,13 @@ def execute_ask(
 
     request_id = str(uuid.uuid4())
     docs_snapshot_id = payload.docs_snapshot_id or get_latest_snapshot_for_matter(tenant_id=tenant_id, matter_id=matter_id) or "none"
+    doc_id = payload.doc_id  # Optional: pin query to a single document
     question_len = len(question)
     question_hash = rag.hash_text(question) if question else None
 
     # Query cache check (Cost Reduction)
     if _query_cache is not None and question_hash:
-        cached = _query_cache.get(tenant_id, matter_id, docs_snapshot_id, question_hash)
+        cached = _query_cache.get(tenant_id, matter_id, docs_snapshot_id, question_hash, doc_id=doc_id)
         if cached is not None:
             logger.info(f"Cache hit [{request_id}]: returning cached response")
             cached_response = AskResponse(**cached)
@@ -170,6 +171,7 @@ def execute_ask(
             docs_snapshot_id,
             tenant_id=tenant_id,
             matter_id=matter_id,
+            doc_id=doc_id,
             return_usage=True,
         )
         # hybrid_search with return_usage=True returns tuple
@@ -692,6 +694,7 @@ def execute_ask(
         _query_cache.put(
             tenant_id, matter_id, docs_snapshot_id, question_hash,
             response.model_dump(),
+            doc_id=doc_id,
         )
 
     logger.info(f"Success [{request_id}]: Response returned with {len(citations)} citation(s) from {primary_citation.doc_name}")

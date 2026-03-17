@@ -56,6 +56,7 @@ class LocalSearchClient(SearchClient):
         matter_id: str,
         *,
         docs_snapshot_id: str | None = None,
+        doc_id: str | None = None,
         top_k: int = 5,
     ) -> SearchResponse:
         """Execute hybrid BM25 + vector search with RRF fusion.
@@ -66,18 +67,19 @@ class LocalSearchClient(SearchClient):
             tenant_id: Tenant ID for isolation (REQUIRED - FR-001).
             matter_id: Matter ID for isolation (REQUIRED - FR-002).
             docs_snapshot_id: Optional document snapshot filter.
+            doc_id: Optional doc_id to pin query to a single document.
             top_k: Maximum number of results to return.
 
         Returns:
             SearchResponse with ranked results.
         """
         # Load records with tenant/matter isolation
-        records = self._load_index_records(docs_snapshot_id, tenant_id, matter_id)
+        records = self._load_index_records(docs_snapshot_id, tenant_id, matter_id, doc_id=doc_id)
 
         if not records:
             # Try fallback overlap search
             fallback = self._fallback_overlap(
-                query, docs_snapshot_id, tenant_id, matter_id, top_k
+                query, docs_snapshot_id, tenant_id, matter_id, top_k, doc_id=doc_id
             )
             return SearchResponse(
                 results=fallback,
@@ -191,9 +193,10 @@ class LocalSearchClient(SearchClient):
         docs_snapshot_id: str | None,
         tenant_id: str,
         matter_id: str,
+        doc_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """Load index records with tenant/matter isolation."""
-        rows = load_index_records(docs_snapshot_id, tenant_id, matter_id)
+        rows = load_index_records(docs_snapshot_id, tenant_id, matter_id, doc_id=doc_id)
         records: list[dict[str, Any]] = []
         for row in rows:
             rec: dict[str, Any] = {
@@ -219,10 +222,11 @@ class LocalSearchClient(SearchClient):
         tenant_id: str,
         matter_id: str,
         top_k: int,
+        doc_id: str | None = None,
     ) -> list[SearchResult]:
         """Fallback overlap search when no indexed records exist."""
         query_tokens = self._tokenize(query)
-        rows = load_chunks(docs_snapshot_id, tenant_id, matter_id)
+        rows = load_chunks(docs_snapshot_id, tenant_id, matter_id, doc_id=doc_id)
         scored: list[dict[str, Any]] = []
 
         for row in rows:

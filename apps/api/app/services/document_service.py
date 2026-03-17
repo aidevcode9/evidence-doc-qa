@@ -9,6 +9,7 @@ from app.config import MAX_UPLOAD_SIZE_BYTES, MAX_UPLOAD_SIZE_MB, MIN_EXTRACTED_
 from app.db import (
     Chunk,
     Document,
+    ensure_matter_exists,
     get_document_by_sha256,
     insert_chunks,
     insert_document,
@@ -22,6 +23,17 @@ if TYPE_CHECKING:
 
 # Type alias for chunk row tuple
 ChunkRowTuple = tuple[str, str, str, str, int, int, int, int, int, str, str]
+
+
+def _display_name_from_filename(filename: str) -> str:
+    """Derive a human-readable display name from a PDF filename.
+
+    'Smith_Claim_2024.pdf' → 'Smith Claim 2024'
+    'medical-records-jan.pdf' → 'Medical Records Jan'
+    """
+    name = filename.rsplit(".", 1)[0] if "." in filename else filename
+    name = name.replace("_", " ").replace("-", " ")
+    return name.strip().title() or filename
 
 
 async def process_document_upload_async(
@@ -108,6 +120,10 @@ async def process_document_upload_async(
             status="queued",
         )
     )
+
+    # Auto-name matter from first uploaded PDF filename
+    display_name = _display_name_from_filename(filename)
+    ensure_matter_exists(matter_id, tenant_id, display_name)
 
     return {
         "doc_id": doc_id,

@@ -12,7 +12,9 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.context import TenantContext, get_tenant_context
-from app.db import list_documents_for_matter, list_matters_for_tenant, user_has_matter_access
+from pydantic import BaseModel
+
+from app.db import list_documents_for_matter, list_matters_for_tenant, update_matter_display_name, user_has_matter_access
 from app.rbac import has_permission
 
 router = APIRouter()
@@ -87,3 +89,36 @@ async def list_matter_docs(
         })
 
     return result
+
+
+class RenameMatterRequest(BaseModel):
+    display_name: str
+
+
+@router.put("/v1/matters/{matter_id}/name")
+async def rename_matter(
+    matter_id: str,
+    body: RenameMatterRequest,
+    ctx: TenantContext = Depends(get_tenant_context),
+) -> dict[str, str]:
+    """Rename a matter's display name."""
+    if not has_permission(ctx.user_role, "query"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    if not user_has_matter_access(
+        user_id=ctx.user_id,
+        tenant_id=ctx.tenant_id,
+        matter_id=matter_id,
+        user_role=ctx.user_role,
+    ):
+        raise HTTPException(status_code=403, detail="Access denied.")
+
+    display_name = body.display_name.strip()
+    if not display_name or len(display_name) > 100:
+        raise HTTPException(status_code=400, detail="Display name must be 1-100 characters.")
+
+    updated = update_matter_display_name(matter_id, ctx.tenant_id, display_name)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Matter not found.")
+
+    return {"matter_id": matter_id, "display_name": display_name}

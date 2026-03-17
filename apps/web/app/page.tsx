@@ -32,6 +32,8 @@ export default function DocQAPage() {
   const [selectedMatter, setSelectedMatter] = useState<MatterInfo | null>(null);
   const [documents, setDocuments] = useState<DocSummary[]>([]);
   const [docsLoading, setDocsLoading] = useState(false);
+  const [pinnedDocId, setPinnedDocId] = useState<string | null>(null);
+  const [pinnedDocName, setPinnedDocName] = useState<string | null>(null);
 
   const handleToast = useCallback((message: string, variant: "info" | "warning" | "error" = "info") => {
     setToast({ message, variant });
@@ -116,14 +118,16 @@ export default function DocQAPage() {
       }
     }
 
-    // Load matters and auto-select saved or first matter
+    // Load matters and auto-select saved matter (don't auto-select first)
     const savedMatterId = localStorage.getItem("docqa_matter");
     fetchMatters()
       .then((matterList) => {
         if (matterList.length === 0) return;
-        const target =
-          matterList.find((m) => m.matter_id === savedMatterId) || matterList[0];
-        handleMatterChange(target);
+        if (savedMatterId) {
+          const target = matterList.find((m) => m.matter_id === savedMatterId);
+          if (target) handleMatterChange(target);
+        }
+        // If no saved matter, don't auto-select — let user pick
       })
       .catch(() => {
         // Backend not available — leave empty
@@ -146,10 +150,12 @@ export default function DocQAPage() {
     }
   };
 
-  const handleAsk = async (question: string) => {
+  const handleAsk = async (question: string, overrideDocId?: string) => {
     const userMsg: Message = { id: crypto.randomUUID(), role: "user", text: question };
     setMessages((prev) => [...prev, userMsg]);
     setIsAsking(true);
+
+    const effectiveDocId = overrideDocId ?? pinnedDocId ?? undefined;
 
     try {
       const headers: Record<string, string> = {
@@ -166,6 +172,7 @@ export default function DocQAPage() {
         body: JSON.stringify({
           question,
           docs_snapshot_id: docsSnapshotId || undefined,
+          doc_id: effectiveDocId,
         }),
       });
 
@@ -202,6 +209,21 @@ export default function DocQAPage() {
     }
   };
 
+  const handleCandidateSelect = async (docId: string, docName: string) => {
+    setPinnedDocId(docId);
+    setPinnedDocName(docName);
+    // Re-run the last user question scoped to this document
+    const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+    if (lastUserMsg) {
+      await handleAsk(lastUserMsg.text, docId);
+    }
+  };
+
+  const handleUnpin = () => {
+    setPinnedDocId(null);
+    setPinnedDocName(null);
+  };
+
   const selectedMessage = messages.find((m) => m.id === selectedMessageId) || null;
 
   return (
@@ -221,6 +243,7 @@ export default function DocQAPage() {
               onMatterChange={handleMatterChange}
               onNewCase={handleNewCase}
               activeMatterId={selectedMatter?.matter_id || null}
+              onToast={handleToast}
             />
         </div>
         <div className="flex items-center gap-3">
@@ -231,6 +254,22 @@ export default function DocQAPage() {
 
       {/* Document strip below header */}
       <DocumentStrip documents={documents} loading={docsLoading} />
+
+      {/* Pinned document indicator */}
+      {pinnedDocId && (
+        <div className="flex-none h-8 border-b border-blue-500/20 bg-blue-600/10 flex items-center px-6 gap-2">
+          <svg className="w-3 h-3 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M10 2a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h2a1 1 0 110 2H7a1 1 0 110-2h2V6.477L6.237 7.582l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.617a1 1 0 01.894-1.789l1.599.799L9 4.323V3a1 1 0 011-1z" />
+          </svg>
+          <span className="text-xs text-blue-400">Pinned: {pinnedDocName}</span>
+          <button
+            onClick={handleUnpin}
+            className="ml-auto text-[10px] text-gray-500 hover:text-white px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
+          >
+            Unpin
+          </button>
+        </div>
+      )}
 
       {/* Main Grid */}
       <main className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
@@ -254,6 +293,7 @@ export default function DocQAPage() {
             <EvidencePanel
               message={selectedMessage}
               onCitationClick={handleCitationClick}
+              onCandidateSelect={handleCandidateSelect}
               sessionId={sessionId}
             />
         </div>

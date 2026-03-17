@@ -1,5 +1,5 @@
 import React from "react";
-import { Message, Citation } from "@/types";
+import { Message, Citation, DebugCandidate } from "@/types";
 import { getAuthHeaders, getApiUrl } from "@/lib/api";
 
 const MetricTooltip = ({ label, description }: { label: string; description: string }) => (
@@ -53,9 +53,64 @@ const renderHighlightedText = (text: string): React.ReactNode[] => {
   return parts.length ? parts : [sanitized];
 };
 
+function CandidateCard({
+  candidate,
+  idx,
+  onSelect,
+}: {
+  candidate: DebugCandidate;
+  idx: number;
+  onSelect?: (docId: string, docName: string) => void;
+}) {
+  return (
+    <button
+      key={`${candidate.chunk_id}-${idx}`}
+      className="rounded-lg border border-white/10 bg-white/5 p-3 w-full text-left hover:border-blue-500/50 hover:bg-blue-500/5 transition-colors cursor-pointer"
+      onClick={() => onSelect?.(candidate.doc_id, candidate.doc_name)}
+      title="Click to re-query scoped to this document"
+    >
+      <div className="flex items-center justify-between text-[10px] text-gray-400">
+        <span className="font-mono">
+          {candidate.doc_name} - Pg {candidate.page_num}
+        </span>
+        <span>{candidate.verifier_verdict}</span>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-gray-500">
+        {candidate.azure_search_score !== null && candidate.azure_search_score !== undefined ? (
+          <div title="Azure @search.score for this candidate from hybrid retrieval.">
+            Azure Hybrid: {candidate.azure_search_score}
+          </div>
+        ) : (
+          <div title="Rank-fusion score for this candidate in hybrid retrieval.">
+            RRF: {candidate.rrf_score}
+          </div>
+        )}
+        {candidate.azure_reranker_score !== null && candidate.azure_reranker_score !== undefined && (
+          <div title="Azure semantic reranker score (0-4). Higher means stronger semantic relevance.">
+            Reranker: {candidate.azure_reranker_score}
+          </div>
+        )}
+        <div title="Token overlap between question and candidate snippet.">
+          Overlap: {candidate.overlap_score}
+        </div>
+        <div title="Why this candidate was accepted, rejected, or skipped by verification.">
+          Reason: {candidate.reason}
+        </div>
+      </div>
+      <div className="mt-2 text-xs text-gray-300 italic">
+        &quot;{candidate.snippet}&quot;
+      </div>
+      <div className="mt-1.5 text-[9px] text-blue-400/60 uppercase tracking-wider">
+        Click to search this document
+      </div>
+    </button>
+  );
+}
+
 interface EvidencePanelProps {
   message: Message | null;
   onCitationClick?: (citation: Citation) => void;
+  onCandidateSelect?: (docId: string, docName: string) => void;
   sessionId?: string | null;
 }
 
@@ -145,7 +200,7 @@ const ExportButtons = ({ sessionId }: { sessionId?: string | null }) => {
   );
 };
 
-export function EvidencePanel({ message, onCitationClick, sessionId }: EvidencePanelProps) {
+export function EvidencePanel({ message, onCitationClick, onCandidateSelect, sessionId }: EvidencePanelProps) {
   if (!message) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-gray-600 p-8 text-center border-l border-white/5 bg-white/[0.02]">
@@ -281,39 +336,7 @@ export function EvidencePanel({ message, onCitationClick, sessionId }: EvidenceP
             <h3 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-4">Top Candidates</h3>
             <div className="space-y-3">
               {debug_candidates.slice(0, 3).map((candidate, idx) => (
-                <div key={`${candidate.chunk_id}-${idx}`} className="rounded-lg border border-white/10 bg-white/5 p-3">
-                  <div className="flex items-center justify-between text-[10px] text-gray-400">
-                    <span className="font-mono">
-                      {candidate.doc_name} - Pg {candidate.page_num}
-                    </span>
-                    <span>{candidate.verifier_verdict}</span>
-                  </div>
-                  <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-gray-500">
-                    {candidate.azure_search_score !== null && candidate.azure_search_score !== undefined ? (
-                      <div title="Azure @search.score for this candidate from hybrid retrieval.">
-                        Azure Hybrid: {candidate.azure_search_score}
-                      </div>
-                    ) : (
-                      <div title="Rank-fusion score for this candidate in hybrid retrieval.">
-                        RRF: {candidate.rrf_score}
-                      </div>
-                    )}
-                    {candidate.azure_reranker_score !== null && candidate.azure_reranker_score !== undefined && (
-                      <div title="Azure semantic reranker score (0-4). Higher means stronger semantic relevance.">
-                        Reranker: {candidate.azure_reranker_score}
-                      </div>
-                    )}
-                    <div title="Token overlap between question and candidate snippet.">
-                      Overlap: {candidate.overlap_score}
-                    </div>
-                    <div title="Why this candidate was accepted, rejected, or skipped by verification.">
-                      Reason: {candidate.reason}
-                    </div>
-                  </div>
-                  <div className="mt-2 text-xs text-gray-300 italic">
-                    "{candidate.snippet}"
-                  </div>
-                </div>
+                <CandidateCard key={`${candidate.chunk_id}-${idx}`} candidate={candidate} idx={idx} onSelect={onCandidateSelect} />
               ))}
             </div>
           </div>
@@ -527,39 +550,7 @@ export function EvidencePanel({ message, onCitationClick, sessionId }: EvidenceP
             <h3 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-4">Top Candidates</h3>
             <div className="space-y-3">
               {debug_candidates.slice(0, 3).map((candidate, idx) => (
-                <div key={`${candidate.chunk_id}-${idx}`} className="rounded-lg border border-white/10 bg-white/5 p-3">
-                  <div className="flex items-center justify-between text-[10px] text-gray-400">
-                    <span className="font-mono">
-                      {candidate.doc_name} - Pg {candidate.page_num}
-                    </span>
-                    <span>{candidate.verifier_verdict}</span>
-                  </div>
-                  <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-gray-500">
-                    {candidate.azure_search_score !== null && candidate.azure_search_score !== undefined ? (
-                      <div title="Azure @search.score for this candidate from hybrid retrieval.">
-                        Azure Hybrid: {candidate.azure_search_score}
-                      </div>
-                    ) : (
-                      <div title="Rank-fusion score for this candidate in hybrid retrieval.">
-                        RRF: {candidate.rrf_score}
-                      </div>
-                    )}
-                    {candidate.azure_reranker_score !== null && candidate.azure_reranker_score !== undefined && (
-                      <div title="Azure semantic reranker score (0-4). Higher means stronger semantic relevance.">
-                        Reranker: {candidate.azure_reranker_score}
-                      </div>
-                    )}
-                    <div title="Token overlap between question and candidate snippet.">
-                      Overlap: {candidate.overlap_score}
-                    </div>
-                    <div title="Why this candidate was accepted, rejected, or skipped by verification.">
-                      Reason: {candidate.reason}
-                    </div>
-                  </div>
-                  <div className="mt-2 text-xs text-gray-300 italic">
-                    "{candidate.snippet}"
-                  </div>
-                </div>
+                <CandidateCard key={`${candidate.chunk_id}-${idx}`} candidate={candidate} idx={idx} onSelect={onCandidateSelect} />
               ))}
             </div>
           </div>

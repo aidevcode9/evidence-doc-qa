@@ -1,7 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { DocSummary } from "@/lib/api";
+
+const MAX_VISIBLE = 5;
 
 type DocumentStripProps = {
   documents: DocSummary[];
@@ -22,6 +24,8 @@ function StatusDot({ status }: { status: string }) {
 }
 
 export function DocumentStrip({ documents, loading }: DocumentStripProps) {
+  const [expanded, setExpanded] = useState(false);
+
   if (loading) {
     return (
       <div className="h-10 border-b border-white/5 bg-black/30 flex items-center px-6">
@@ -38,12 +42,15 @@ export function DocumentStrip({ documents, loading }: DocumentStripProps) {
     );
   }
 
+  const visibleDocs = expanded ? documents : documents.slice(0, MAX_VISIBLE);
+  const overflowCount = documents.length - MAX_VISIBLE;
+
   return (
-    <div className="h-10 border-b border-white/5 bg-black/30 flex items-center px-6 gap-2 overflow-x-auto scrollbar-hide">
+    <div className={`${expanded ? "min-h-10 flex-wrap py-1.5" : "h-10"} border-b border-white/5 bg-black/30 flex items-center px-6 gap-2 overflow-hidden`}>
       <span className="text-[10px] text-gray-600 uppercase tracking-wider flex-shrink-0 mr-1">
         Docs
       </span>
-      {documents.map((doc) => (
+      {visibleDocs.map((doc) => (
         <div
           key={doc.doc_id}
           className="flex items-center gap-1.5 px-3 py-1 bg-white/5 rounded-full text-xs text-gray-400 whitespace-nowrap"
@@ -53,6 +60,22 @@ export function DocumentStrip({ documents, loading }: DocumentStripProps) {
           <span className="max-w-[150px] truncate">{doc.doc_name}</span>
         </div>
       ))}
+      {overflowCount > 0 && !expanded && (
+        <button
+          onClick={() => setExpanded(true)}
+          className="flex items-center px-3 py-1 bg-blue-500/10 rounded-full text-xs text-blue-400 whitespace-nowrap hover:bg-blue-500/20 transition-colors cursor-pointer"
+        >
+          +{overflowCount} more
+        </button>
+      )}
+      {expanded && overflowCount > 0 && (
+        <button
+          onClick={() => setExpanded(false)}
+          className="flex items-center px-3 py-1 bg-white/5 rounded-full text-xs text-gray-500 whitespace-nowrap hover:bg-white/10 transition-colors cursor-pointer"
+        >
+          Show less
+        </button>
+      )}
     </div>
   );
 }
