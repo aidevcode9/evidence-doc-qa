@@ -268,6 +268,72 @@ class TestHeaderModeBackwardCompat:
             assert "invalid role" in exc_info.value.detail.lower()
 
 
+class TestJWTNameClaim:
+    """JWT access tokens should include display_name as 'name' claim."""
+
+    def test_create_access_token_includes_name_claim(self) -> None:
+        """Token should contain 'name' claim from display_name parameter."""
+        from app.security import create_access_token, decode_access_token
+
+        token = create_access_token(
+            user_id="user-123",
+            tenant_id="tenant-456",
+            role="attorney",
+            email="alice@firm.com",
+            display_name="Alice Johnson",
+        )
+
+        claims = decode_access_token(token)
+        assert claims is not None
+        assert claims["name"] == "Alice Johnson"
+
+    def test_create_access_token_name_defaults_to_empty(self) -> None:
+        """Token should work without display_name (backward compat)."""
+        from app.security import create_access_token, decode_access_token
+
+        token = create_access_token(
+            user_id="user-123",
+            tenant_id="tenant-456",
+            role="attorney",
+            email="bob@firm.com",
+        )
+
+        claims = decode_access_token(token)
+        assert claims is not None
+        assert claims.get("name", "") == ""
+
+    def test_jwt_mode_extracts_name_from_token(self) -> None:
+        """JWT mode context extraction should work with tokens containing 'name'."""
+        from unittest.mock import patch
+
+        from app.security import create_access_token
+
+        token = create_access_token(
+            user_id="user-123",
+            tenant_id="tenant-456",
+            role="attorney",
+            email="alice@firm.com",
+            display_name="Alice Johnson",
+        )
+
+        with (
+            patch("app.context.AUTH_MODE", "jwt"),
+            patch("app.context.user_has_matter_access", return_value=True),
+        ):
+            from app.context import get_request_context
+
+            context = get_request_context(
+                authorization=f"Bearer {token}",
+                x_matter_id="matter-789",
+                x_tenant_id=None,
+                x_user_id=None,
+                x_user_role=None,
+            )
+
+            assert context.tenant_id == "tenant-456"
+            assert context.user_id == "user-123"
+
+
 class TestAuthModeDefault:
     """Tests for default AUTH_MODE behavior."""
 

@@ -502,6 +502,7 @@ class TestRefreshEndpoint:
         mock_user.email = "test@example.com"
         mock_user.role = "attorney"
         mock_user.is_active = True
+        mock_user.display_name = "Test Attorney"
 
         with (
             patch.object(auth_module, "get_refresh_token", return_value=mock_stored_token),
@@ -705,6 +706,7 @@ class TestSecurityHardening:
         mock_user.email = "test@example.com"
         mock_user.role = "attorney"
         mock_user.is_active = True
+        mock_user.display_name = "Test Attorney"
 
         with (
             patch.object(auth_module, "get_refresh_token", side_effect=mock_get_with_tenant),

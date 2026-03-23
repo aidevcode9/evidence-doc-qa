@@ -102,6 +102,7 @@ def create_access_token(
     role: str,
     email: str,
     expires_delta: timedelta | None = None,
+    display_name: str = "",
 ) -> str:
     """Create a JWT access token.
 
@@ -111,6 +112,7 @@ def create_access_token(
         role: The user's role (admin, attorney, etc.).
         email: The user's email address.
         expires_delta: Optional custom expiration time.
+        display_name: The user's display name (OIDC 'name' claim).
 
     Returns:
         The encoded JWT token string.
@@ -126,6 +128,7 @@ def create_access_token(
         "tenant_id": tenant_id,
         "role": role,
         "email": email,
+        "name": display_name,
         "exp": expire,
         "iat": now,
         "jti": str(uuid.uuid4()),

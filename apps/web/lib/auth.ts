@@ -10,6 +10,7 @@ export interface JWTClaims {
   tenant_id: string;
   role: string;
   email: string;
+  name?: string; // display name (OIDC standard claim)
   exp: number; // Unix timestamp
   iat: number;
   jti: string;
@@ -21,6 +22,7 @@ export interface User {
   email: string;
   role: string;
   tenantId: string;
+  displayName: string;
 }
 
 /**
@@ -55,6 +57,7 @@ export function claimsToUser(claims: JWTClaims): User {
     email: claims.email,
     role: claims.role,
     tenantId: claims.tenant_id,
+    displayName: claims.name || claims.email,
   };
 }
 

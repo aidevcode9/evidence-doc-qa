@@ -1,14 +1,8 @@
 /**
  * Centralized API client for Evidence Bound frontend.
  *
- * Manages authentication headers consistently across all API calls.
- * Currently uses AUTH_MODE=headers (demo headers). When AUTH_MODE=jwt
- * is enabled, this will be updated to use JWT Bearer tokens.
- *
- * TODO(FR-050): Replace hardcoded demo headers with JWT token extraction.
- * Current implementation grants admin role to all users - acceptable for
- * demo but MUST be changed before multi-tenant production deployment.
- * See: STATUS.md "Phase 5 Progress" for tracking.
+ * Reads user identity from the `docqa_user` cookie (set after SSO login).
+ * Falls back to hardcoded demo headers when no cookie is present.
  */
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -35,17 +29,44 @@ export function getCurrentMatter(): string {
 }
 
 /**
+ * Read user claims from the docqa_user cookie (set after SSO login).
+ * Returns null if no cookie exists (demo mode / not logged in).
+ */
+function getCachedUser(): {
+  userId: string;
+  tenantId: string;
+  role: string;
+  name: string;
+} | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie
+    .split("; ")
+    .find((c) => c.startsWith("docqa_user="));
+  if (!match) return null;
+  try {
+    return JSON.parse(decodeURIComponent(match.split("=")[1]));
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Get authentication headers for API requests.
  *
- * For AUTH_MODE=headers (development/demo), returns X-* headers.
- * Future: For AUTH_MODE=jwt, will return Bearer token from cookie.
- *
- * WARNING: Hardcoded admin role bypasses matter access checks.
- * This is intentional for demo mode but grants full access.
+ * Reads identity from docqa_user cookie (JWT claims) when available.
+ * Falls back to hardcoded demo headers when no cookie is present.
  */
 export function getAuthHeaders(): Record<string, string> {
-  // TODO(FR-050): Replace with JWT token extraction when AUTH_MODE=jwt
-  // Current hardcoded values are for demo/development only
+  const user = getCachedUser();
+  if (user) {
+    return {
+      "X-Tenant-Id": user.tenantId,
+      "X-Matter-Id": _currentMatterId,
+      "X-User-Id": user.userId,
+      "X-User-Role": user.role,
+    };
+  }
+  // Fallback: demo mode (no SSO login)
   return {
     "X-Tenant-Id": "demo-tenant",
     "X-Matter-Id": _currentMatterId,
@@ -58,6 +79,14 @@ export function getAuthHeaders(): Record<string, string> {
  * Get tenant-only headers (no X-Matter-Id) for matter-listing endpoints.
  */
 function getTenantHeaders(): Record<string, string> {
+  const user = getCachedUser();
+  if (user) {
+    return {
+      "X-Tenant-Id": user.tenantId,
+      "X-User-Id": user.userId,
+      "X-User-Role": user.role,
+    };
+  }
   return {
     "X-Tenant-Id": "demo-tenant",
     "X-User-Id": "demo-user",

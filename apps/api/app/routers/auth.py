@@ -101,6 +101,7 @@ def login(request: LoginRequest) -> dict[str, Any]:
         tenant_id=user.tenant_id,
         role=user.role,
         email=user.email,
+        display_name=user.display_name or "",
     )
 
     refresh_token, token_id = create_refresh_token(
@@ -177,6 +178,7 @@ def refresh(request: RefreshRequest) -> dict[str, Any]:
         tenant_id=user.tenant_id,
         role=user.role,
         email=user.email,
+        display_name=user.display_name or "",
     )
 
     return {

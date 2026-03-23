@@ -252,6 +252,7 @@ class TestSSOCallback:
                                         email="attorney@firm.com",
                                         role="viewer",
                                         tenant_id="test-tenant",
+                                        display_name="Test Attorney",
                                     )
 
                                     response = sso_enabled_app.get(
@@ -290,6 +291,7 @@ class TestSSOCallback:
             role="attorney",  # Already promoted
             tenant_id="test-tenant",
             auth_provider="microsoft",
+            display_name="Test Attorney",
         )
 
         with patch("app.routers.sso.get_and_delete_sso_state") as mock_get_state:
@@ -338,6 +340,7 @@ class TestSSOCallback:
             role="attorney",
             tenant_id="test-tenant",
             auth_provider="google",  # Different provider!
+            display_name="Test Attorney",
         )
 
         with patch("app.routers.sso.get_and_delete_sso_state") as mock_get_state:
@@ -380,6 +383,7 @@ class TestSSOCallback:
             role="attorney",
             tenant_id="test-tenant",
             auth_provider="microsoft",
+            display_name="Test Attorney",
         )
 
         with patch("app.routers.sso.get_and_delete_sso_state") as mock_get_state:

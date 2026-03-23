@@ -430,6 +430,7 @@ async def sso_callback(
         tenant_id=user.tenant_id,
         role=user.role,
         email=user.email,
+        display_name=user.display_name or "",
     )
 
     refresh_token, token_id = create_refresh_token(

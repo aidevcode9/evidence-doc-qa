@@ -6,6 +6,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { decodeJWTPayload } from "@/lib/auth";
 
 export async function POST(request: Request) {
   let body: { access_token?: string; refresh_token?: string };
@@ -40,6 +41,28 @@ export async function POST(request: Request) {
     path: "/",
     maxAge: 7 * 24 * 60 * 60, // 7 days
   });
+
+  // Readable user claims cookie for frontend header construction.
+  // Contains only public claims (no secrets) — safe as non-httpOnly.
+  const claims = decodeJWTPayload(access_token);
+  if (claims) {
+    response.cookies.set(
+      "docqa_user",
+      JSON.stringify({
+        userId: claims.sub,
+        tenantId: claims.tenant_id,
+        role: claims.role,
+        name: claims.name || claims.email,
+      }),
+      {
+        httpOnly: false,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 30 * 60, // Match access token TTL
+      }
+    );
+  }
 
   return response;
 }
