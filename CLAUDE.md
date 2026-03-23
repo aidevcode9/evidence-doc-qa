@@ -4,7 +4,7 @@
 
 ---
 
-## ⚡ Auto-Trigger Rules (READ FIRST)
+## Auto-Trigger Rules (READ FIRST)
 
 **These rules activate automatically. No command needed.**
 
@@ -51,7 +51,7 @@
 
 ---
 
-## 🤖 Autonomous Work Protocol
+## Autonomous Work Protocol
 
 When user indicates they'll check back later (e.g., "work on the next 2 FRs", "I'll check in an hour"):
 
@@ -101,7 +101,7 @@ After each completed task, append to `CHECKPOINT.md`:
 
 ---
 
-## 🧪 TDD Enforcement
+## TDD Enforcement
 
 **This is mandatory. No exceptions.**
 
@@ -138,7 +138,7 @@ def test_[unit]_[scenario]_[expected]():
 
 ---
 
-## 📊 LLM Telemetry Requirements (NFR-030)
+## LLM Telemetry Requirements (NFR-030)
 
 **Every LLM call MUST be instrumented. This applies to all projects with AI features.**
 
@@ -243,7 +243,7 @@ record_telemetry(
 
 ---
 
-## 📚 Documentation Sync Requirements
+## Documentation Sync Requirements
 
 **These documents must stay in sync with the codebase:**
 
@@ -275,7 +275,7 @@ record_telemetry(
 - **Embeddings:** Azure OpenAI (text-embedding-3-large)
 - **LLM:** Azure OpenAI (GPT-4o)
 - **Frontend:** Next.js 14
-- **Deployment:** Azure App Service + Vercel
+- **Deployment:** Azure Container Apps + Vercel
 - **Parser:** Marker (default), LlamaParse (cloud option)
 
 > **Planned:** Config-driven provider abstraction (NFR-032, 034, 035). See ARCHITECTURE.md for target interfaces.
@@ -372,7 +372,7 @@ python -m evals.run --suite adversarial
 | Matter isolation | All artifacts scoped by `matter_id` | FR-002 |
 | RBAC enforcement | Role checked on every API call | FR-003 |
 
-> ⚠️ **Current state:** Single-tenant demo. Multi-tenancy comes in Phase 3.
+> **Current state:** Single-tenant demo. Multi-tenancy comes in Phase 3.
 
 ---
 

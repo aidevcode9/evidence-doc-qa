@@ -130,7 +130,7 @@ Evidence-Bound is an enterprise document Q&A platform designed for law firms and
 
 | Tier | Infrastructure | Best For |
 |------|---------------|----------|
-| **SaaS Multi-Tenant** | Azure App Service + managed DBs | SMB law firms, quick start |
+| **SaaS Multi-Tenant** | Azure Container Apps + managed DBs | SMB law firms, quick start |
 | **Dedicated Cloud** | Isolated Azure resources per client | Mid-market, compliance requirements |
 | **On-Premises** | Customer infrastructure | Enterprise, data sovereignty |
 

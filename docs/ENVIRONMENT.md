@@ -10,8 +10,8 @@ environments.
 
 ## Hosted environments
 - Web (Vercel): use project environment variables (Development/Preview/Prod).
-- API (Azure App Service): use "Configuration" settings in the Azure Portal or Bicep/GitHub Secrets.
-- Jobs (Azure): In the current demo, ingestion runs within the main API App Service for simplicity.
+- API (Azure Container Apps): env vars set via `az containerapp update --set-env-vars` in deploy workflow or Azure Portal.
+- Jobs (Azure): In the current demo, ingestion runs as background tasks within the main Container App for simplicity.
 
 ## Required variables
 Use `.env.example` as the source of truth for required keys and defaults.
