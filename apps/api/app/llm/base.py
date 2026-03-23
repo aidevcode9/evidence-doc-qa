@@ -19,7 +19,7 @@ class LLMResponse:
     Attributes:
         content: The generated text content.
         provider: Provider name (e.g., 'azure_openai', 'anthropic', 'openai', 'ollama').
-        model: Model identifier (e.g., 'gpt-4o', 'claude-3.5-sonnet').
+        model: Model identifier (e.g., 'gpt-5-mini', 'claude-3.5-sonnet').
         prompt_tokens: Number of tokens in the prompt.
         completion_tokens: Number of tokens in the completion.
         latency_ms: Request latency in milliseconds.
@@ -78,7 +78,7 @@ class LLMClient(ABC):
     @property
     @abstractmethod
     def model(self) -> str:
-        """Return the model identifier (e.g., 'gpt-4o', 'claude-3.5-sonnet')."""
+        """Return the model identifier (e.g., 'gpt-5-mini', 'claude-3.5-sonnet')."""
         pass
 
 

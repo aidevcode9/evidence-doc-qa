@@ -8,7 +8,7 @@
 
 Evidence Bound is a retrieval-augmented Q&A system for law firms. Every answer must cite a specific document span or the system refuses to answer. No hallucination by design.
 
-**Stack:** FastAPI (Python) | PostgreSQL | Azure AI Search | Azure OpenAI (GPT-4o) | Next.js | Langfuse
+**Stack:** FastAPI (Python) | PostgreSQL | Azure AI Search | Azure OpenAI (GPT-5-mini) | Next.js | Langfuse
 
 ---
 
@@ -69,7 +69,7 @@ Evidence Bound is a retrieval-augmented Q&A system for law firms. Every answer m
  │       ▼                                                                │
  │  4. verify_relevance() ──────────────────────────── [@observe span]    │
  │       │                                                                │
- │       └── call_openai() ── GPT-4o judges chunk ── [@observe generation]│
+ │       └── call_openai() ── GPT-5-mini judges chunk [@observe generation]│
  │              │                                                         │
  │              ▼  verdict: VERIFIED / REJECTED + exact span              │
  │                                                                        │
@@ -130,7 +130,7 @@ Every request creates one row. No external dependency. Stays in your database.
 | `request_id` | Primary key | `a1b2c3d4-...` |
 | `tenant_id` | Tenant isolation | `acme-legal` |
 | `matter_id` | Matter isolation | `case-2024-001` |
-| `model_id` | Which LLM answered | `gpt-4o` |
+| `model_id` | Which LLM answered | `gpt-5-mini` |
 | `tokens_in` / `tokens_out` | Token usage | `1250` / `85` |
 | `cost_est` | Estimated cost (USD) | `0.0042` |
 | `latency_ms` | End-to-end latency | `1850` |
@@ -147,7 +147,7 @@ When enabled, `@observe` decorators create a nested trace waterfall:
 execute_ask                  (trace root — tenant, session, request_id)
   ├── hybrid_search          (mode: azure/local, result_count, latency_ms)
   │   └── embed_texts        (model: text-embedding-3-large, tokens, embeddings_mode)
-  └── verify_relevance       (model: gpt-4o, tokens_in, tokens_out, verdict, latency_ms)
+  └── verify_relevance       (model: gpt-5-mini, tokens_in, tokens_out, verdict, latency_ms)
       └── call_openai        (generation span — model, token counts)
 ```
 
@@ -168,7 +168,7 @@ Every response includes a `version_snapshot` for reproducibility:
   "prompt_version": "v3.1.0",
   "verifier_prompt_version": "2.0.1",
   "retrieval_version": "v1.0.0",
-  "model_id": "gpt-4o",
+  "model_id": "gpt-5-mini",
   "parser_mode": "marker"
 }
 ```
@@ -186,7 +186,7 @@ This means: for any past answer, you can identify exactly which document snapsho
 │             │               │  FastAPI API                                │
 │  - Q&A UI   │    /v1/ask    │  ┌─────────┐  ┌───────────┐  ┌──────────┐  │
 │  - PDF view │──────────────│  │ Policy  │─│ Retrieval │─│ Verifier │  │
-│  - Citations│               │  │ Gate    │  │ (hybrid)  │  │ (GPT-4o) │  │
+│  - Citations│               │  │ Gate    │  │ (hybrid)  │  │GPT-5-mini│  │
 │             │               │  └─────────┘  └───────────┘  └──────────┘  │
 └─────────────┘               │       │             │              │        │
                               │       ▼             ▼              ▼        │
@@ -209,7 +209,7 @@ This means: for any past answer, you can identify exactly which document snapsho
                                                      ▼
                                            ┌──────────────────┐
                                            │  Azure OpenAI    │
-                                           │  - GPT-4o (chat) │
+                                           │  - GPT-5-mini    │
                                            │  - text-embed-   │
                                            │    3-large (vec)  │
                                            └──────────────────┘
@@ -226,4 +226,4 @@ This means: for any past answer, you can identify exactly which document snapsho
 | **PII never leaves the system** | Document content and user questions not sent to telemetry services |
 | **Every query version-tracked** | Any past answer reproducible with exact prompt, model, and doc snapshot |
 | **Tenant + matter isolation on every query** | Multi-tenant from day one — no data leakage between firms or cases |
-| **LLM verification of retrieval** | GPT-4o independently confirms chunk answers the question before citing |
+| **LLM verification of retrieval** | GPT-5-mini independently confirms chunk answers the question before citing |
