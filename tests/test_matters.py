@@ -311,6 +311,97 @@ class TestDisplayNameFromFilename:
         assert _display_name_from_filename("report") == "Report"
 
 
+class TestCreateMatterEndpoint:
+    """POST /v1/matters creates a matter with user-provided display name."""
+
+    def test_create_matter_returns_201(self) -> None:
+        with (
+            patch("app.routers.matters.has_permission", return_value=True),
+            patch("app.routers.matters.ensure_matter_exists") as mock_ensure,
+        ):
+            from app.routers.matters import router
+
+            app = FastAPI()
+            app.include_router(router)
+            client = TestClient(app, headers={
+                "X-Tenant-Id": "t1",
+                "X-User-Id": "u1",
+                "X-User-Role": "admin",
+            })
+
+            response = client.post(
+                "/v1/matters",
+                json={"matter_id": "smith-v-jones", "display_name": "Smith v. Jones"},
+            )
+            assert response.status_code == 201
+            assert response.json()["matter_id"] == "smith-v-jones"
+            assert response.json()["display_name"] == "Smith v. Jones"
+            mock_ensure.assert_called_once_with("smith-v-jones", "t1", "Smith v. Jones")
+
+    def test_create_matter_invalid_id_returns_400(self) -> None:
+        with (
+            patch("app.routers.matters.has_permission", return_value=True),
+        ):
+            from app.routers.matters import router
+
+            app = FastAPI()
+            app.include_router(router)
+            client = TestClient(app, headers={
+                "X-Tenant-Id": "t1",
+                "X-User-Id": "u1",
+                "X-User-Role": "admin",
+            })
+
+            response = client.post(
+                "/v1/matters",
+                json={"matter_id": "'; DROP TABLE--", "display_name": "Bad"},
+            )
+            assert response.status_code == 400
+
+    def test_create_matter_empty_name_returns_400(self) -> None:
+        with (
+            patch("app.routers.matters.has_permission", return_value=True),
+        ):
+            from app.routers.matters import router
+
+            app = FastAPI()
+            app.include_router(router)
+            client = TestClient(app, headers={
+                "X-Tenant-Id": "t1",
+                "X-User-Id": "u1",
+                "X-User-Role": "admin",
+            })
+
+            response = client.post(
+                "/v1/matters",
+                json={"matter_id": "valid-id", "display_name": "   "},
+            )
+            assert response.status_code == 400
+
+    def test_ensure_matter_does_not_overwrite_existing_name(self) -> None:
+        """After creating with user name, ensure_matter_exists should NOT overwrite."""
+        from app.db import ensure_matter_exists, Matter
+
+        mock_existing = Matter(
+            matter_id="smith-v-jones",
+            tenant_id="t1",
+            display_name="Smith v. Jones",
+            created_at_utc="2026-03-20T00:00:00Z",
+        )
+
+        with patch("app.db.session_scope") as mock_scope:
+            mock_session = MagicMock()
+            mock_session.get.return_value = mock_existing  # Already exists
+            mock_scope.return_value.__enter__ = MagicMock(return_value=mock_session)
+            mock_scope.return_value.__exit__ = MagicMock(return_value=False)
+
+            # Try to overwrite with filename-derived name
+            ensure_matter_exists("smith-v-jones", "t1", "Contract Draft")
+
+            # Should NOT have added a new matter (existing was found)
+            mock_session.add.assert_not_called()
+
+
 class TestRenameMatterEndpoint:
     """PUT /v1/matters/{matter_id}/name renames a matter."""
 

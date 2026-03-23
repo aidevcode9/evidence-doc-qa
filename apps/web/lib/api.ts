@@ -191,6 +191,24 @@ export async function fetchMatterDocs(matterId: string): Promise<DocSummary[]> {
 }
 
 /**
+ * Create a matter with a user-provided display name.
+ * Idempotent — if the matter already exists, this is a no-op.
+ */
+export async function createMatter(matterId: string, displayName: string): Promise<void> {
+  const response = await fetch(`${API_URL}/v1/matters`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...getTenantHeaders(),
+    },
+    body: JSON.stringify({ matter_id: matterId, display_name: displayName }),
+  });
+  if (!response.ok && response.status !== 409) {
+    throw new Error("Failed to create matter");
+  }
+}
+
+/**
  * Rename a matter's display name.
  */
 export async function renameMatter(matterId: string, displayName: string): Promise<void> {

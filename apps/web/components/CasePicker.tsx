@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { fetchMatters, renameMatter, MatterInfo } from "@/lib/api";
+import { createMatter, fetchMatters, renameMatter, MatterInfo } from "@/lib/api";
 
 type CasePickerProps = {
   onMatterChange: (matter: MatterInfo) => void;
@@ -99,11 +99,16 @@ export function CasePicker({
     setRenameName("");
   };
 
-  const handleNewCase = () => {
+  const handleNewCase = async () => {
     const trimmed = newName.trim();
     if (!trimmed) return;
     const slug = slugify(trimmed);
     if (!slug) return;
+    try {
+      await createMatter(slug, trimmed);
+    } catch {
+      // Best-effort — matter row will be created on first upload if this fails
+    }
     onNewCase(slug);
     setNewName("");
     setCreating(false);

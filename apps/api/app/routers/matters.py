@@ -14,7 +14,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.context import TenantContext, get_tenant_context
 from pydantic import BaseModel
 
-from app.db import list_documents_for_matter, list_matters_for_tenant, update_matter_display_name, user_has_matter_access
+import re
+
+from app.db import ensure_matter_exists, list_documents_for_matter, list_matters_for_tenant, update_matter_display_name, user_has_matter_access
 from app.rbac import has_permission
 
 router = APIRouter()
@@ -89,6 +91,42 @@ async def list_matter_docs(
         })
 
     return result
+
+
+_MATTER_ID_RE = re.compile(r"^[a-zA-Z0-9][-_a-zA-Z0-9]{0,63}$")
+
+
+@router.post("/v1/matters", status_code=201)
+async def create_matter(
+    body: "CreateMatterRequest",
+    ctx: TenantContext = Depends(get_tenant_context),
+) -> dict[str, str]:
+    """Create a matter with a user-provided display name.
+
+    Idempotent — if the matter already exists, this is a no-op.
+    Called by the frontend when a user creates a new case via CasePicker.
+    """
+    if not has_permission(ctx.user_role, "query"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    if not _MATTER_ID_RE.match(body.matter_id):
+        raise HTTPException(
+            status_code=400,
+            detail="matter_id must be alphanumeric with hyphens/underscores (max 64 chars).",
+        )
+
+    display_name = body.display_name.strip()
+    if not display_name or len(display_name) > 100:
+        raise HTTPException(status_code=400, detail="Display name must be 1-100 characters.")
+
+    ensure_matter_exists(body.matter_id, ctx.tenant_id, display_name)
+
+    return {"matter_id": body.matter_id, "display_name": display_name}
+
+
+class CreateMatterRequest(BaseModel):
+    matter_id: str
+    display_name: str
 
 
 class RenameMatterRequest(BaseModel):
