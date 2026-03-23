@@ -48,7 +48,7 @@ LLM_PROVIDER=azure_openai  # azure_openai | anthropic | gemini | ollama
 # Azure OpenAI
 AZURE_OPENAI_CHAT_ENDPOINT=https://your-resource.openai.azure.com
 AZURE_OPENAI_CHAT_API_KEY=xxx
-MODEL_ID=gpt-4o
+MODEL_ID=gpt-5-mini
 
 # Anthropic
 ANTHROPIC_API_KEY=sk-ant-xxx

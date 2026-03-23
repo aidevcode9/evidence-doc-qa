@@ -31,7 +31,7 @@ LLM_PROVIDER=azure_openai
 ### Setup
 
 1. Create an Azure OpenAI resource in the Azure Portal
-2. Deploy a model (e.g., `gpt-4o`)
+2. Deploy a model (e.g., `gpt-5-mini`)
 3. Get your endpoint and API key
 
 ### Configuration
@@ -42,7 +42,7 @@ LLM_PROVIDER=azure_openai
 # Required
 AZURE_OPENAI_CHAT_ENDPOINT=https://your-resource.openai.azure.com
 AZURE_OPENAI_CHAT_API_KEY=your-api-key
-MODEL_ID=gpt-4o  # Your deployment name
+MODEL_ID=gpt-5-mini  # Your deployment name
 
 # Optional
 AZURE_OPENAI_CHAT_API_VERSION=2024-02-15-preview
@@ -51,7 +51,7 @@ AZURE_OPENAI_CHAT_API_VERSION=2024-02-15-preview
 ### Notes
 
 - `MODEL_ID` is your **deployment name**, not the model name
-- Supports GPT-4o, GPT-4 Turbo, GPT-3.5 Turbo
+- Supports GPT-5-mini, GPT-4 Turbo, GPT-3.5 Turbo
 - Enterprise SLA and compliance certifications available
 
 ---
@@ -235,7 +235,7 @@ OLLAMA_MODEL=llama3.2:8b
 LLM_PROVIDER=azure_openai
 AZURE_OPENAI_CHAT_ENDPOINT=https://...
 AZURE_OPENAI_CHAT_API_KEY=...
-MODEL_ID=gpt-4o
+MODEL_ID=gpt-5-mini
 ```
 
 No code changes required. The `get_llm_client()` factory function returns the appropriate client based on configuration.
@@ -352,7 +352,7 @@ LLM_PROVIDER=azure_openai  # azure_openai | anthropic | gemini | ollama
 AZURE_OPENAI_CHAT_ENDPOINT=https://your-resource.openai.azure.com
 AZURE_OPENAI_CHAT_API_KEY=your-key
 AZURE_OPENAI_CHAT_API_VERSION=2024-02-15-preview
-MODEL_ID=gpt-4o
+MODEL_ID=gpt-5-mini
 
 # === Anthropic ===
 ANTHROPIC_API_KEY=sk-ant-xxx

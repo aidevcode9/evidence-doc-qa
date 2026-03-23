@@ -10,7 +10,7 @@
 │  (Frontend)  │────▶│  (FastAPI API)        │────▶│                      │
 │  Next.js 14  │     │  Python 3.12          │     │  - PostgreSQL        │
 └─────────────┘     └──────────────────────┘     │  - AI Search         │
-                                                  │  - OpenAI (GPT-4o)   │
+                                                  │  - OpenAI (GPT-5-mini)   │
                                                   │  - Blob Storage      │
                                                   │  - App Insights      │
                                                   └──────────────────────┘
@@ -22,7 +22,7 @@
 | **API** | Azure Container Apps | Docker image from `apps/api/Dockerfile` |
 | **Database** | Azure PostgreSQL Flexible Server | Alembic migrations |
 | **Search** | Azure AI Search | Hybrid BM25 + vector + semantic reranker |
-| **LLM** | Azure OpenAI | GPT-4o (chat), text-embedding-3-large (embeddings) |
+| **LLM** | Azure OpenAI | GPT-5-mini (chat), text-embedding-3-large (embeddings) |
 | **Storage** | Azure Blob Storage | Raw document uploads |
 | **Observability** | Azure Application Insights + Langfuse | OTEL traces + LLM observability |
 
@@ -84,7 +84,7 @@ DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST:5432/DBNAME
 AZURE_OPENAI_ENDPOINT=https://<name>.openai.azure.com
 AZURE_OPENAI_API_KEY=xxx
 AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT=text-embedding-3-large
-DOCQA_MODEL_ID=gpt-4o
+DOCQA_MODEL_ID=gpt-5-mini
 
 # Azure AI Search
 AZURE_SEARCH_ENDPOINT=https://<name>.search.windows.net

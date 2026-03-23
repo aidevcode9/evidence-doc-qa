@@ -6,7 +6,7 @@ The current system relies solely on retrieval scores to decide whether to answer
 To improve `Refusal Correctness` from ~42% to >90%, we must introduce an LLM verification step.
 
 ## Objectives
-- [ ] **Implement "Is Answerable?" Check:** Before returning the final answer, send the Question + Retrieved Chunks to `gpt-4o-mini`.
+- [ ] **Implement "Is Answerable?" Check:** Before returning the final answer, send the Question + Retrieved Chunks to `gpt-5-mini-mini`.
 - [ ] **Prompt Engineering:** Create a prompt that asks: "Does the provided context contain the specific information to answer the question? Answer YES or NO."
 - [ ] **Refusal Handling:** 
     - If LLM says NO: Return `NO_SUPPORTING_EVIDENCE`.

@@ -273,7 +273,7 @@ record_telemetry(
 - **Database:** PostgreSQL (Azure Flexible Server)
 - **Search:** Azure AI Search (hybrid BM25 + vector + semantic reranker)
 - **Embeddings:** Azure OpenAI (text-embedding-3-large)
-- **LLM:** Azure OpenAI (GPT-4o)
+- **LLM:** Azure OpenAI (GPT-5-mini)
 - **Frontend:** Next.js 14
 - **Deployment:** Azure Container Apps + Vercel
 - **Parser:** Marker (default), LlamaParse (cloud option)
@@ -480,7 +480,7 @@ AZURE_SEARCH_INDEX=evidence-chunks
 AZURE_OPENAI_ENDPOINT=https://your-openai.openai.azure.com
 AZURE_OPENAI_API_KEY=xxx
 AZURE_EMBEDDING_DEPLOYMENT=text-embedding-3-large
-AZURE_LLM_DEPLOYMENT=gpt-4o
+AZURE_LLM_DEPLOYMENT=gpt-5-mini
 
 # Parser
 PARSER_PROVIDER=marker  # or pypdf, llamaparse

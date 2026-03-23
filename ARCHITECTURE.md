@@ -52,8 +52,8 @@ See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for full latency architecture, sc
 | Tier | LLM | Search | Parser | Embeddings |
 |------|-----|--------|--------|------------|
 | **Starter** | Gemini Flash | pgvector | pypdf | local (nomic) |
-| **Professional** | Azure GPT-4o | pgvector | LlamaParse | Azure OpenAI |
-| **Enterprise** | Azure GPT-4o | Azure AI Search | LlamaParse | Azure OpenAI |
+| **Professional** | Azure GPT-5-mini | pgvector | LlamaParse | Azure OpenAI |
+| **Enterprise** | Azure GPT-5-mini | Azure AI Search | LlamaParse | Azure OpenAI |
 | **On-Prem** | Ollama Llama 3.2 | pgvector | Marker | local (nomic) |
 
 ### Core Environment Variables

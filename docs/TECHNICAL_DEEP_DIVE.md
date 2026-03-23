@@ -518,7 +518,7 @@ Located in [apps/api/app/llm/base.py](../apps/api/app/llm/base.py):
 class LLMResponse:
     content: str
     provider: str           # 'azure_openai', 'anthropic', 'openai', 'ollama'
-    model: str              # 'gpt-4o', 'claude-3.5-sonnet', etc.
+    model: str              # 'gpt-5-mini', 'claude-3.5-sonnet', etc.
     prompt_tokens: int
     completion_tokens: int
     latency_ms: int
@@ -546,7 +546,7 @@ class LLMClient(ABC):
 ```
 
 **Available implementations:**
-- `AzureOpenAIClient` - Azure OpenAI (GPT-4o, GPT-5)
+- `AzureOpenAIClient` - Azure OpenAI (GPT-5-mini, GPT-5)
 - `AnthropicClient` - Claude models
 - `OllamaClient` - Local models (Llama 3.2)
 
@@ -849,7 +849,7 @@ LLM calls additionally set GenAI semantic convention attributes on the active sp
 ```python
 # otel.py — set_genai_span_attributes()
 span.set_attribute("gen_ai.system", "azure_openai")
-span.set_attribute("gen_ai.request.model", "gpt-4o")
+span.set_attribute("gen_ai.request.model", "gpt-5-mini")
 span.set_attribute("gen_ai.usage.prompt_tokens", 800)
 span.set_attribute("gen_ai.usage.completion_tokens", 50)
 span.set_attribute("llm.latency_ms", 1200)

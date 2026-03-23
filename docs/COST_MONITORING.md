@@ -10,7 +10,7 @@ Every `/ask` request incurs up to three billable costs:
 
 | Component | Service | Rate | Configurable Via |
 |-----------|---------|------|------------------|
-| **LLM Verification** | Azure OpenAI GPT-4o | ~$0.0025/1K input, ~$0.01/1K output | `DOCQA_MODEL_COST_INPUT_PER_1K`, `DOCQA_MODEL_COST_OUTPUT_PER_1K` |
+| **LLM Verification** | Azure OpenAI GPT-5-mini | ~$0.0025/1K input, ~$0.01/1K output | `DOCQA_MODEL_COST_INPUT_PER_1K`, `DOCQA_MODEL_COST_OUTPUT_PER_1K` |
 | **Embeddings** | Azure OpenAI text-embedding-3-large | ~$0.00013/1K tokens | `DOCQA_EMBEDDINGS_COST_PER_1K` |
 | **Azure Search** | Azure AI Search queries | ~$0.001/query | `AZURE_SEARCH_COST_PER_QUERY` |
 
@@ -160,7 +160,7 @@ Every LLM/embedding call sets semantic convention attributes on the active span:
 | Attribute | Example |
 |-----------|---------|
 | `gen_ai.system` | `azure_openai` |
-| `gen_ai.request.model` | `gpt-4o` |
+| `gen_ai.request.model` | `gpt-5-mini` |
 | `gen_ai.usage.prompt_tokens` | `800` |
 | `gen_ai.usage.completion_tokens` | `50` |
 | `llm.latency_ms` | `1200` |

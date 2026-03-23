@@ -117,7 +117,7 @@ LLM and embedding calls set semantic convention attributes on the active OTEL sp
 | Attribute | Example |
 |-----------|---------|
 | `gen_ai.system` | `azure_openai` |
-| `gen_ai.request.model` | `gpt-4o` |
+| `gen_ai.request.model` | `gpt-5-mini` |
 | `gen_ai.usage.prompt_tokens` | `800` |
 | `gen_ai.usage.completion_tokens` | `50` |
 | `llm.latency_ms` | `1200` |
