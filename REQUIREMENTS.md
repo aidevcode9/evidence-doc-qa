@@ -257,6 +257,27 @@ Tests:
 - [ ] Test: Dropdown closes on outside click
 - [ ] Test: Demo mode shows fallback badge
 
+### 4.7 Test Suite Stability
+
+| ID | Requirement | Acceptance Criteria |
+|----|-------------|---------------------|
+| FR-060 | All test suites pass with zero failures in dev and CI | `pytest tests/ -v` reports 0 failures, 0 errors; skips allowed only for missing optional credentials |
+
+#### FR-060 Implementation Checklist
+
+Dependencies (✅ Complete):
+- [x] `python-jose[cryptography]` installed — required by `app/security.py` for JWT
+- [x] `passlib[argon2]` installed — required by `app/security.py` for password hashing
+
+Router Module Resolution (✅ Complete):
+- [x] `app/routers/__init__.py` exports all submodules — enables `patch("app.routers.sso.xxx")` in tests
+
+Test Fixes (✅ Complete):
+- [x] `test_performance.py` — patch target renamed to `get_latest_snapshot_for_matter` (matches actual import)
+- [x] `test_metadata.py` — tests verify metadata via session mock (metadata set in background task, not at insert time)
+- [x] `test_langfuse.py` — skipif checks `langfuse` package availability + credentials
+- [x] `test_async_ingestion.py` — uses real `starlette.requests.Request` for slowapi compatibility
+
 ---
 
 ## Non-Functional Requirements

@@ -3,10 +3,13 @@
 TDD: These tests define the expected Langfuse integration behavior.
 """
 
+import importlib
 import os
 from typing import Any
 from unittest.mock import patch, MagicMock
 import pytest
+
+_langfuse_installed = importlib.util.find_spec("langfuse") is not None
 
 
 class TestLangfuseConfig:
@@ -610,8 +613,8 @@ class TestLangfuseIntegration:
     """
 
     @pytest.mark.skipif(
-        not os.getenv("LANGFUSE_PUBLIC_KEY") or not os.getenv("LANGFUSE_SECRET_KEY"),
-        reason="Langfuse credentials not configured"
+        not _langfuse_installed or not os.getenv("LANGFUSE_PUBLIC_KEY") or not os.getenv("LANGFUSE_SECRET_KEY"),
+        reason="Langfuse package not installed or credentials not configured"
     )
     def test_langfuse_client_can_connect(self):
         """Test that Langfuse client can connect with current credentials."""
@@ -634,8 +637,8 @@ class TestLangfuseIntegration:
         client.flush()
 
     @pytest.mark.skipif(
-        not os.getenv("LANGFUSE_PUBLIC_KEY") or not os.getenv("LANGFUSE_SECRET_KEY"),
-        reason="Langfuse credentials not configured"
+        not _langfuse_installed or not os.getenv("LANGFUSE_PUBLIC_KEY") or not os.getenv("LANGFUSE_SECRET_KEY"),
+        reason="Langfuse package not installed or credentials not configured"
     )
     def test_langfuse_can_send_trace(self):
         """Test that we can send a trace to Langfuse."""
@@ -670,8 +673,8 @@ class TestLangfuseIntegration:
         print(f"Check Langfuse dashboard for trace: {trace.id}")
 
     @pytest.mark.skipif(
-        not os.getenv("LANGFUSE_PUBLIC_KEY") or not os.getenv("LANGFUSE_SECRET_KEY"),
-        reason="Langfuse credentials not configured"
+        not _langfuse_installed or not os.getenv("LANGFUSE_PUBLIC_KEY") or not os.getenv("LANGFUSE_SECRET_KEY"),
+        reason="Langfuse package not installed or credentials not configured"
     )
     def test_observe_decorator_sends_trace(self):
         """Test that @observe decorator actually sends traces."""

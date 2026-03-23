@@ -64,6 +64,24 @@ class TestMetadataInUpload:
         def capture_insert(doc: Document) -> None:
             captured_doc.append(doc)
 
+        # Track metadata set during background processing via session_scope
+        metadata_written: list[str] = []
+        mock_doc_row = MagicMock()
+
+        def track_metadata(val: str) -> None:
+            metadata_written.append(val)
+
+        type(mock_doc_row).metadata_json = property(
+            lambda self: metadata_written[-1] if metadata_written else None,
+            lambda self, v: track_metadata(v),
+        )
+
+        mock_session = MagicMock()
+        mock_session.get.return_value = mock_doc_row
+        mock_ctx = MagicMock()
+        mock_ctx.__enter__ = lambda self: mock_session
+        mock_ctx.__exit__ = lambda self, *a: None
+
         with (
             patch("app.services.document_service.get_document_by_sha256", return_value=None),
             patch("app.services.document_service.get_parser_client") as mock_parser,
@@ -71,6 +89,8 @@ class TestMetadataInUpload:
             patch("app.services.document_service.indexing"),
             patch("app.services.document_service.insert_chunks"),
             patch("app.services.document_service.insert_document", side_effect=capture_insert),
+            patch("app.services.document_service.update_document_status"),
+            patch("app.db.session_scope", return_value=mock_ctx),
         ):
             mock_ingestion.compute_sha256.return_value = "fakehash"
             mock_ingestion.docs_snapshot_id_for.return_value = "snap_fakehash"
@@ -95,10 +115,8 @@ class TestMetadataInUpload:
                 mock_file, tenant_id="t1", matter_id="m1"
             )
 
-        assert len(captured_doc) == 1
-        doc = captured_doc[0]
-        assert doc.metadata_json is not None
-        meta = json.loads(doc.metadata_json)
+        assert len(metadata_written) == 1
+        meta = json.loads(metadata_written[0])
         assert meta["title"] == "Service Agreement"
         assert meta["author"] == "Legal Dept"
         assert meta["page_count"] == 5
@@ -114,10 +132,23 @@ class TestMetadataInUpload:
         mock_file.read.return_value = pdf_bytes
         mock_file.filename = "plain.pdf"
 
-        captured_doc: list[Document] = []
+        # Track metadata set during background processing via session_scope
+        metadata_written: list[str] = []
+        mock_doc_row = MagicMock()
 
-        def capture_insert(doc: Document) -> None:
-            captured_doc.append(doc)
+        def track_metadata(val: str) -> None:
+            metadata_written.append(val)
+
+        type(mock_doc_row).metadata_json = property(
+            lambda self: metadata_written[-1] if metadata_written else None,
+            lambda self, v: track_metadata(v),
+        )
+
+        mock_session = MagicMock()
+        mock_session.get.return_value = mock_doc_row
+        mock_ctx = MagicMock()
+        mock_ctx.__enter__ = lambda self: mock_session
+        mock_ctx.__exit__ = lambda self, *a: None
 
         with (
             patch("app.services.document_service.get_document_by_sha256", return_value=None),
@@ -125,7 +156,9 @@ class TestMetadataInUpload:
             patch("app.services.document_service.ingestion") as mock_ingestion,
             patch("app.services.document_service.indexing"),
             patch("app.services.document_service.insert_chunks"),
-            patch("app.services.document_service.insert_document", side_effect=capture_insert),
+            patch("app.services.document_service.insert_document"),
+            patch("app.services.document_service.update_document_status"),
+            patch("app.db.session_scope", return_value=mock_ctx),
         ):
             mock_ingestion.compute_sha256.return_value = "hash2"
             mock_ingestion.docs_snapshot_id_for.return_value = "snap_hash2"
@@ -146,8 +179,8 @@ class TestMetadataInUpload:
                 mock_file, tenant_id="t1", matter_id="m1"
             )
 
-        assert len(captured_doc) == 1
-        meta = json.loads(captured_doc[0].metadata_json)
+        assert len(metadata_written) == 1
+        meta = json.loads(metadata_written[0])
         assert meta == {}
 
 

@@ -1,6 +1,6 @@
 # STATUS.md
 
-Last updated: 2026-03-15
+Last updated: 2026-03-20
 
 ---
 
@@ -28,6 +28,7 @@ Last updated: 2026-03-15
 
 | Task | FR | Date |
 |------|-----|------|
+| **Test suite stability: 582 pass, 0 fail (was 53 fail + 13 error)** | FR-060 | 03-20 |
 | **409 duplicate upload UX fix (shows existing document name)** | FR-011 | 03-15 |
 | **401 demo mode console noise fix (fetchCapabilities pattern)** | FR-054 | 03-15 |
 | **Slash commands reorganization (wsauto, persona frontmatter)** | INFRA | 03-15 |

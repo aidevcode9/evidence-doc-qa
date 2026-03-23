@@ -92,7 +92,24 @@ class TestUploadReturns202:
             }
 
             context = make_context()
+
+            # Create a real Starlette Request — slowapi's isinstance check
+            # rejects MagicMock objects.
+            from starlette.requests import Request
+            from starlette.datastructures import Headers
+
+            scope = {
+                "type": "http",
+                "method": "POST",
+                "path": "/v1/docs/upload",
+                "headers": [],
+                "query_string": b"",
+                "client": ("127.0.0.1", 0),
+            }
+            request = Request(scope)
+
             result = await upload_doc(
+                request=request,
                 file=mock_file,
                 background_tasks=mock_bg_tasks,
                 context=context,

@@ -194,7 +194,7 @@ class TestLatencyBreakdownStored:
             patch("app.services.ask_service.verification.is_enabled", return_value=False),
             patch("app.services.ask_service.STRICT_EVIDENCE", False),
             patch("app.services.ask_service.ALLOW_UNVERIFIED", True),
-            patch("app.services.ask_service.get_latest_docs_snapshot_id", return_value="snap-1"),
+            patch("app.services.ask_service.get_latest_snapshot_for_matter", return_value="snap-1"),
             patch("app.services.ask_service.record_telemetry") as mock_telemetry,
             patch("app.services.ask_service.record_request_metrics"),
             patch("app.services.ask_service.safe_update_trace"),
