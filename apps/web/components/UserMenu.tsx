@@ -6,10 +6,10 @@ import type { User } from "@/lib/auth";
 import { fetchCapabilities } from "@/lib/api";
 
 const ROLE_COLORS: Record<string, string> = {
-  admin: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-  attorney: "bg-green-500/20 text-green-400 border-green-500/30",
-  paralegal: "bg-amber-500/20 text-amber-400 border-amber-500/30",
-  viewer: "bg-gray-500/20 text-gray-400 border-gray-500/30",
+  admin: "bg-primary/10 text-primary border-primary/20",
+  attorney: "bg-success/10 text-success border-success/20",
+  paralegal: "bg-warning/10 text-warning border-warning/20",
+  viewer: "bg-muted text-muted-foreground border-border",
 };
 
 function getInitials(user: User | null): string {
@@ -33,13 +33,9 @@ export function UserMenu() {
           setIsDemo(true);
           return;
         }
-        // Only call /api/auth/me when auth is active (JWT mode)
         fetch("/api/auth/me")
           .then((res) => {
-            if (!res.ok) {
-              setIsDemo(true);
-              return null;
-            }
+            if (!res.ok) { setIsDemo(true); return null; }
             return res.json();
           })
           .then((data) => {
@@ -54,16 +50,12 @@ export function UserMenu() {
 
   useEffect(() => {
     if (!open) return;
-
     function onClickOutside(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        handleClose();
-      }
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) handleClose();
     }
     function onEscape(e: KeyboardEvent) {
       if (e.key === "Escape") handleClose();
     }
-
     document.addEventListener("mousedown", onClickOutside);
     document.addEventListener("keydown", onEscape);
     return () => {
@@ -92,15 +84,14 @@ export function UserMenu() {
 
   return (
     <div ref={menuRef} className="relative">
-      {/* Avatar Button */}
       <button
         onClick={() => setOpen((prev) => !prev)}
-        className="w-8 h-8 rounded-full bg-white/10 border border-white/10 flex items-center justify-center text-sm font-semibold text-gray-300 hover:bg-white/20 hover:border-white/20 transition-colors cursor-pointer"
+        className="w-8 h-8 rounded-full bg-muted border border-border flex items-center justify-center text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors cursor-pointer"
         aria-label="User menu"
         aria-expanded={open}
       >
         {isDemo ? (
-          <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
             <circle cx="12" cy="7" r="4" />
           </svg>
@@ -109,15 +100,13 @@ export function UserMenu() {
         )}
       </button>
 
-      {/* Dropdown */}
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-64 bg-zinc-900/95 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl overflow-hidden z-20 animate-in fade-in slide-in-from-top-1 duration-150">
-          {/* User Info */}
-          <div className="px-4 py-3 border-b border-white/10">
+        <div className="absolute right-0 top-full mt-2 w-64 bg-popover backdrop-blur-md border border-border rounded-xl shadow-xl overflow-hidden z-20 animate-in fade-in slide-in-from-top-1 duration-150">
+          <div className="px-4 py-3 border-b border-border">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-sm font-semibold text-gray-300 flex-shrink-0">
+              <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-sm font-medium text-muted-foreground flex-shrink-0">
                 {isDemo ? (
-                  <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                     <circle cx="12" cy="7" r="4" />
                   </svg>
@@ -126,8 +115,8 @@ export function UserMenu() {
                 )}
               </div>
               <div className="min-w-0">
-                <div className="text-sm font-medium text-gray-200 truncate">{displayName}</div>
-                <div className="text-xs text-gray-500 truncate">{displayEmail}</div>
+                <div className="text-sm font-medium text-foreground truncate">{displayName}</div>
+                <div className="text-xs text-muted-foreground truncate">{displayEmail}</div>
               </div>
             </div>
             <div className="mt-2">
@@ -137,12 +126,11 @@ export function UserMenu() {
             </div>
           </div>
 
-          {/* Sign Out */}
           <div className="p-1.5">
             <button
               onClick={handleSignOut}
               disabled={signingOut}
-              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-400 hover:text-red-400 hover:bg-white/5 rounded-lg transition-colors disabled:opacity-50 cursor-pointer"
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-muted-foreground hover:text-destructive hover:bg-muted rounded-lg transition-colors disabled:opacity-50 cursor-pointer"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />

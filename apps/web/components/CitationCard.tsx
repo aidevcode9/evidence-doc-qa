@@ -3,12 +3,12 @@ import { Citation } from "@/types";
 
 export function CitationCard({ citation }: { citation: Citation }) {
   return (
-    <div className="bg-black/20 p-3 rounded-lg border border-white/5 text-sm hover:bg-black/30 transition-colors">
-      <div className="flex justify-between text-xs font-semibold text-blue-400 mb-1">
+    <div className="bg-muted/50 p-3 rounded-lg border border-border text-sm hover:bg-muted transition-colors">
+      <div className="flex justify-between text-xs font-medium text-primary mb-1">
         <span>{citation.doc_name} - Page {citation.page_num}</span>
-        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Source</span>
+        <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Source</span>
       </div>
-      <p className="italic text-gray-400 text-xs">"...{citation.snippet}..."</p>
+      <p className="italic text-muted-foreground text-xs">&quot;...{citation.snippet}...&quot;</p>
     </div>
   );
 }

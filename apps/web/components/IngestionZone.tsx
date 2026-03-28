@@ -2,6 +2,7 @@
 
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import { apiUpload, apiRequest, fetchCapabilities, type ServerCapabilities } from "@/lib/api";
+import { Button } from "@/components/ui/button";
 
 type IngestionStatus = "idle" | "uploading" | "queued" | "processing" | "ready" | "failed";
 
@@ -20,14 +21,13 @@ type IngestionZoneProps = {
 };
 
 const POLL_INTERVAL_MS = 2000;
-const MAX_POLL_ATTEMPTS = 150; // 5 minutes max
+const MAX_POLL_ATTEMPTS = 150;
 
 export function IngestionZone({ onUploadSuccess, onToast }: IngestionZoneProps) {
   const [status, setStatus] = useState<IngestionStatus>("idle");
   const [docId, setDocId] = useState<string | null>(null);
   const [docName, setDocName] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string>("");
-
 
   const [capabilities, setCapabilities] = useState<ServerCapabilities | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -39,7 +39,6 @@ export function IngestionZone({ onUploadSuccess, onToast }: IngestionZoneProps) 
       .catch((err) => console.error("Failed to fetch capabilities:", err));
   }, []);
 
-  // Poll for status updates when queued or processing
   useEffect(() => {
     if (!docId || (status !== "queued" && status !== "processing")) return;
 
@@ -63,8 +62,6 @@ export function IngestionZone({ onUploadSuccess, onToast }: IngestionZoneProps) 
         } else if (data.status === "failed") {
           setStatus("failed");
           setErrorMessage(data.error_message || "Processing failed.");
-
-
           clearInterval(interval);
         } else if (data.status === "processing") {
           setStatus("processing");
@@ -94,7 +91,6 @@ export function IngestionZone({ onUploadSuccess, onToast }: IngestionZoneProps) 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: "Upload failed" }));
         if (res.status === 409 && err.detail?.existing_doc_name) {
-          // Document already exists — treat as success so user can ask questions
           const existingSnapshot = err.detail.existing_snapshot_id;
           const existingName = err.detail.existing_doc_name;
           if (existingSnapshot) {
@@ -117,7 +113,6 @@ export function IngestionZone({ onUploadSuccess, onToast }: IngestionZoneProps) 
         setDocId(data.doc_id);
         setStatus("queued");
       } else {
-        // Legacy sync response (status not present = already done)
         onUploadSuccess(data.docs_snapshot_id, file.name);
         setStatus("idle");
       }
@@ -155,18 +150,17 @@ export function IngestionZone({ onUploadSuccess, onToast }: IngestionZoneProps) 
 
   const isPdfOnly = capabilities?.parser_provider === "pypdf";
   const acceptFormats = isPdfOnly ? ".pdf" : ".pdf,.png,.jpg,.jpeg,.tiff,.tif";
-  const buttonText = isPdfOnly ? "Upload PDF" : "Upload PDF/Image";
+  const buttonText = isPdfOnly ? "Upload PDF" : "Upload";
 
-  // Status badge rendering
   if (status === "queued" || status === "processing") {
     return (
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-xl px-4 py-2">
-          <span className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-400"></span>
-          <span className="text-sm text-blue-300">
+        <div className="flex items-center gap-2 bg-primary/10 border border-primary/20 rounded-lg px-3 py-1.5">
+          <span className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></span>
+          <span className="text-xs text-primary">
             {status === "queued" ? "Queued" : "Processing"}
           </span>
-          <span className="text-xs text-blue-400/60 truncate max-w-[120px]">{docName}</span>
+          <span className="text-xs text-primary/60 truncate max-w-[100px]">{docName}</span>
         </div>
       </div>
     );
@@ -175,28 +169,22 @@ export function IngestionZone({ onUploadSuccess, onToast }: IngestionZoneProps) 
   if (status === "failed") {
     return (
       <div className="flex items-center gap-2">
-        <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">
-          <svg className="w-3.5 h-3.5 text-red-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <div className="flex items-center gap-2 bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-1.5">
+          <svg className="w-3.5 h-3.5 text-destructive flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="10" />
             <line x1="15" y1="9" x2="9" y2="15" />
             <line x1="9" y1="9" x2="15" y2="15" />
           </svg>
-          <span className="text-xs text-red-300 truncate max-w-[140px]" title={errorMessage}>
-            {errorMessage.length > 30 ? errorMessage.slice(0, 30) + "..." : errorMessage}
+          <span className="text-xs text-destructive truncate max-w-[120px]" title={errorMessage}>
+            {errorMessage.length > 25 ? errorMessage.slice(0, 25) + "..." : errorMessage}
           </span>
         </div>
         {docId && (
-          <button
-            onClick={handleRetry}
-            className="text-xs text-blue-400 hover:text-blue-300 underline underline-offset-2 cursor-pointer"
-          >
+          <button onClick={handleRetry} className="text-xs text-primary hover:text-primary/80 underline underline-offset-2 cursor-pointer">
             Retry
           </button>
         )}
-        <button
-          onClick={handleDismiss}
-          className="text-xs text-gray-500 hover:text-gray-400 cursor-pointer"
-        >
+        <button onClick={handleDismiss} className="text-xs text-muted-foreground hover:text-foreground cursor-pointer">
           Dismiss
         </button>
       </div>
@@ -206,26 +194,22 @@ export function IngestionZone({ onUploadSuccess, onToast }: IngestionZoneProps) 
   if (status === "ready") {
     return (
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-2">
-          <svg className="w-3.5 h-3.5 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <div className="flex items-center gap-2 bg-success/10 border border-success/20 rounded-lg px-3 py-1.5">
+          <svg className="w-3.5 h-3.5 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <polyline points="20 6 9 17 4 12" />
           </svg>
-          <span className="text-sm text-green-300">Ready</span>
-          <span className="text-xs text-green-400/60 truncate max-w-[120px]">{docName}</span>
+          <span className="text-xs text-success">Ready</span>
+          <span className="text-xs text-success/60 truncate max-w-[100px]">{docName}</span>
         </div>
-        <button
-          onClick={handleDismiss}
-          className="text-xs text-gray-500 hover:text-gray-400 cursor-pointer"
-        >
+        <button onClick={handleDismiss} className="text-xs text-muted-foreground hover:text-foreground cursor-pointer">
           Dismiss
         </button>
       </div>
     );
   }
 
-  // Default idle state — upload button
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex items-center">
       <input
         type="file"
         accept={acceptFormats}
@@ -233,20 +217,22 @@ export function IngestionZone({ onUploadSuccess, onToast }: IngestionZoneProps) 
         ref={fileInputRef}
         className="hidden"
       />
-      <button
+      <Button
+        variant="default"
+        size="sm"
         onClick={() => fileInputRef.current?.click()}
         disabled={status === "uploading"}
-        className="bg-white text-black hover:bg-gray-200 px-5 py-2.5 rounded-xl text-sm font-bold tracking-wide transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)] disabled:opacity-50 flex items-center gap-2"
+        className="gap-1.5"
       >
         {status === "uploading" ? (
-          <span className="animate-spin rounded-full h-3 w-3 border-b-2 border-black"></span>
+          <span className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary-foreground"></span>
         ) : (
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
           </svg>
         )}
         {status === "uploading" ? "Uploading..." : buttonText}
-      </button>
+      </Button>
     </div>
   );
 }
