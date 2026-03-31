@@ -469,6 +469,62 @@ def update_matter_display_name(
         return True
 
 
+def get_matter_last_questions(
+    tenant_id: str,
+    matter_ids: list[str],
+) -> dict[str, dict[str, str | None]]:
+    """Get the most recent user question for each matter.
+
+    Args:
+        tenant_id: Tenant ID for isolation
+        matter_ids: List of matter IDs to query
+
+    Returns:
+        Dict keyed by matter_id with last_question_at (ISO timestamp)
+        and last_question_preview (first 80 chars of content), or None values
+        if no user messages exist.
+    """
+    if not matter_ids:
+        return {}
+
+    # Initialize all matters with None values
+    result: dict[str, dict[str, str | None]] = {
+        mid: {"last_question_at": None, "last_question_preview": None}
+        for mid in matter_ids
+    }
+
+    with session_scope() as session:
+        # Use a window function to get the latest user message per matter
+        placeholders = ", ".join(f":mid_{i}" for i in range(len(matter_ids)))
+        params: dict[str, str] = {"tenant_id": tenant_id}
+        for i, mid in enumerate(matter_ids):
+            params[f"mid_{i}"] = mid
+
+        stmt = text(
+            "SELECT matter_id, created_at_utc, content FROM ("
+            "  SELECT matter_id, created_at_utc, content,"
+            "    ROW_NUMBER() OVER (PARTITION BY matter_id ORDER BY created_at_utc DESC) as rn"
+            "  FROM qa_messages"
+            "  WHERE tenant_id = :tenant_id"
+            f"    AND matter_id IN ({placeholders})"
+            "    AND role = 'user'"
+            ") sub WHERE rn = 1"
+        )
+        rows = session.execute(stmt, params).all()
+
+        for row in rows:
+            matter_id_val: str = row[0]
+            created_at: str = row[1]
+            content: str = row[2]
+            preview = content[:80] if content else None
+            result[matter_id_val] = {
+                "last_question_at": created_at,
+                "last_question_preview": preview,
+            }
+
+    return result
+
+
 def list_documents_for_matter(
     tenant_id: str, matter_id: str
 ) -> list[Document]:
