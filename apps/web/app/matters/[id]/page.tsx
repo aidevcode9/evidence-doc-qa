@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { Message, Citation } from "@/types";
 import { IngestionZone } from "@/components/IngestionZone";
 import { ChatInterface } from "@/components/ChatInterface";
@@ -9,7 +10,6 @@ import { EvidencePanel } from "@/components/EvidencePanel";
 import { DocumentViewer } from "@/components/DocumentViewer";
 import { UserMenu } from "@/components/UserMenu";
 import { Toast } from "@/components/Toast";
-import { CasePicker } from "@/components/CasePicker";
 import { DocumentStrip } from "@/components/DocumentStrip";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Logo } from "@/components/Logo";
@@ -35,7 +35,7 @@ export default function MatterChatPage() {
   const [userProfile, setUserProfile] = useState<{ name: string; email: string } | null>(null);
   const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null);
   const [toast, setToast] = useState<{ message: string; variant: "info" | "warning" | "error" } | null>(null);
-  const [selectedMatter, setSelectedMatter] = useState<MatterInfo | null>(null);
+  const [matterDisplayName, setMatterDisplayName] = useState<string>("");
   const [documents, setDocuments] = useState<DocSummary[]>([]);
   const [docsLoading, setDocsLoading] = useState(false);
   const [pinnedDocId, setPinnedDocId] = useState<string | null>(null);
@@ -67,45 +67,12 @@ export default function MatterChatPage() {
     }
   }, []);
 
-  const handleMatterChange = useCallback(
-    (matter: MatterInfo) => {
-      setCurrentMatter(matter.matter_id);
-      setSelectedMatter(matter);
-      if (matter.latest_snapshot_id) {
-        setDocsSnapshotId(matter.latest_snapshot_id);
-      } else {
-        setDocsSnapshotId("");
-      }
-      setMessages([]);
-      const newSession = crypto.randomUUID();
-      localStorage.setItem("docqa_session", newSession);
-      setSessionId(newSession);
-      loadDocsForMatter(matter.matter_id);
-    },
-    [loadDocsForMatter]
-  );
-
-  const handleNewCase = useCallback((slug: string) => {
-    const newMatter: MatterInfo = {
-      matter_id: slug,
-      display_name: slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-      doc_count: 0,
-      latest_snapshot_id: null,
-      last_question_at: null,
-      last_question_preview: null,
-    };
-    setCurrentMatter(slug);
-    setSelectedMatter(newMatter);
-    setDocsSnapshotId("");
-    setDocuments([]);
-    setMessages([]);
-    const newSession = crypto.randomUUID();
-    localStorage.setItem("docqa_session", newSession);
-    setSessionId(newSession);
-  }, []);
-
-  // On mount: initialize session, load user profile, and resolve the matter from URL param
+  /* Initialize matter on mount */
   useEffect(() => {
+    if (!matterId) return;
+
+    setCurrentMatter(matterId);
+
     let storedSession = localStorage.getItem("docqa_session");
     if (!storedSession) {
       storedSession = crypto.randomUUID();
@@ -125,40 +92,30 @@ export default function MatterChatPage() {
       }
     }
 
-    // Resolve the matter from the URL param by finding it in the matters list
-    setCurrentMatter(matterId);
+    /* Fetch matter metadata to get display_name and snapshot */
     fetchMatters()
       .then((matterList) => {
         const target = matterList.find((m) => m.matter_id === matterId);
         if (target) {
-          handleMatterChange(target);
+          setMatterDisplayName(target.display_name);
+          if (target.latest_snapshot_id) {
+            setDocsSnapshotId(target.latest_snapshot_id);
+          }
         } else {
-          // Matter not found in list — create a shell so the UI still works
-          const shell: MatterInfo = {
-            matter_id: matterId,
-            display_name: matterId.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-            doc_count: 0,
-            latest_snapshot_id: null,
-            last_question_at: null,
-            last_question_preview: null,
-          };
-          setSelectedMatter(shell);
-          loadDocsForMatter(matterId);
+          // Matter not found on server — use slug as display name
+          setMatterDisplayName(
+            matterId.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+          );
         }
       })
       .catch(() => {
-        // Backend not available — create shell
-        const shell: MatterInfo = {
-          matter_id: matterId,
-          display_name: matterId.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-          doc_count: 0,
-          latest_snapshot_id: null,
-          last_question_at: null,
-          last_question_preview: null,
-        };
-        setSelectedMatter(shell);
+        setMatterDisplayName(
+          matterId.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+        );
       });
-  }, [matterId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    loadDocsForMatter(matterId);
+  }, [matterId, loadDocsForMatter]);
 
   const handleUploadSuccess = (snapshotId: string, fileName: string) => {
     setDocsSnapshotId(snapshotId);
@@ -170,9 +127,7 @@ export default function MatterChatPage() {
         text: `Document "${fileName}" uploaded and indexed. Snapshot: ${snapshotId}.`,
       },
     ]);
-    if (selectedMatter) {
-      loadDocsForMatter(selectedMatter.matter_id);
-    }
+    loadDocsForMatter(matterId);
   };
 
   const handleAsk = async (question: string, overrideDocId?: string) => {
@@ -262,12 +217,19 @@ export default function MatterChatPage() {
             </h1>
           </div>
           <div className="w-px h-6 bg-border hidden sm:block" />
-          <CasePicker
-            onMatterChange={handleMatterChange}
-            onNewCase={handleNewCase}
-            activeMatterId={selectedMatter?.matter_id || null}
-            onToast={handleToast}
-          />
+          <Link
+            href="/"
+            className="flex items-center gap-1 text-xs sm:text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            <span className="hidden sm:inline">My Matters</span>
+          </Link>
+          <div className="w-px h-6 bg-border" />
+          <span className="text-sm font-medium text-foreground truncate max-w-[140px] sm:max-w-[240px]">
+            {matterDisplayName || "Loading..."}
+          </span>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2">
           <IngestionZone onUploadSuccess={handleUploadSuccess} onToast={handleToast} />
@@ -312,7 +274,7 @@ export default function MatterChatPage() {
           />
         </div>
 
-        {/* Evidence Column -- hidden on mobile when empty */}
+        {/* Evidence Column */}
         <div className={`flex-none w-full md:w-[380px] lg:w-[420px] bg-card/50 backdrop-blur-xl border-t md:border-t-0 border-border md:border-l z-10 md:h-full ${selectedMessage ? "h-[40vh]" : "hidden md:block"}`}>
           <EvidencePanel
             message={selectedMessage}
