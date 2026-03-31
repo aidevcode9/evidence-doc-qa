@@ -10,8 +10,6 @@ if TYPE_CHECKING:
     from app.rbac import Role
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
-from sqlalchemy.pool import NullPool
-
 from app.config import DATABASE_URL
 
 
@@ -270,7 +268,13 @@ def init_db() -> None:
 def _engine() -> Engine:
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL or DB_DATABASE_URL is required.")
-    return create_engine(DATABASE_URL, poolclass=NullPool)
+    return create_engine(
+        DATABASE_URL,
+        pool_size=10,
+        max_overflow=20,
+        pool_pre_ping=True,
+        pool_recycle=1800,
+    )
 
 
 SessionLocal = sessionmaker(bind=_engine(), class_=Session, expire_on_commit=False)

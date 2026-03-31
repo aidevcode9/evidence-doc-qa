@@ -290,3 +290,58 @@ class TestRateLimitReturns429:
         response = client.get("/v1/test-rate")
         assert response.status_code == 429
         assert "rate limit" in response.json()["detail"].lower()
+
+
+class TestAzureSearchTimeout:
+    """[PERF-1] Verify Azure Search HTTP call has timeout."""
+
+    def test_urlopen_called_with_timeout(self) -> None:
+        """_request_azure_search must pass timeout=15 to urlopen."""
+        import io
+        import json
+        from unittest.mock import patch, MagicMock
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps({"value": []}).encode()
+        mock_response.__enter__ = MagicMock(return_value=io.BytesIO(json.dumps({"value": []}).encode()))
+        mock_response.__exit__ = MagicMock(return_value=False)
+
+        with patch("app.retrieval.urllib.request.urlopen", return_value=mock_response) as mock_urlopen:
+            from app.retrieval import _request_azure_search
+
+            _request_azure_search("https://example.com/search", {"search": "test"})
+
+            mock_urlopen.assert_called_once()
+            call_args = mock_urlopen.call_args
+            # timeout should be passed as keyword arg
+            assert call_args.kwargs.get("timeout") == 15 or (
+                len(call_args.args) >= 2 and call_args.args[1] == 15
+            ), f"Expected timeout=15, got args={call_args.args}, kwargs={call_args.kwargs}"
+
+
+class TestDatabasePoolConfig:
+    """[PERF-2] Verify database engine does NOT use NullPool."""
+
+    def test_engine_does_not_use_nullpool(self) -> None:
+        """_engine() must not use NullPool — should use QueuePool with connection pooling."""
+        from unittest.mock import patch
+        from sqlalchemy.pool import NullPool
+
+        with patch("app.db.DATABASE_URL", "sqlite:///test.db"):
+            from app.db import _engine
+
+            engine = _engine()
+            assert not isinstance(engine.pool, NullPool), \
+                f"Expected QueuePool, got {type(engine.pool).__name__}"
+            engine.dispose()
+
+
+class TestQueryCacheDefault:
+    """[PERF-4] Verify QUERY_CACHE_ENABLED defaults to True."""
+
+    def test_query_cache_enabled_by_default(self) -> None:
+        """QUERY_CACHE_ENABLED must default to True (enabled)."""
+        from app.config import QUERY_CACHE_ENABLED
+
+        assert QUERY_CACHE_ENABLED is True, \
+            f"Expected QUERY_CACHE_ENABLED=True, got {QUERY_CACHE_ENABLED}"

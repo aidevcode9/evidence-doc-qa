@@ -59,7 +59,7 @@ RERANKER_CONFIDENCE_MIN = float(_getenv("RERANKER_CONFIDENCE_MIN", "0.30"))
 # Caching (Cost Reduction)
 EMBEDDING_CACHE_ENABLED = _is_truthy(_getenv("EMBEDDING_CACHE_ENABLED", "1"))
 EMBEDDING_CACHE_MAX_SIZE = int(_getenv("EMBEDDING_CACHE_MAX_SIZE", "5000"))
-QUERY_CACHE_ENABLED = _is_truthy(_getenv("QUERY_CACHE_ENABLED", "0"))
+QUERY_CACHE_ENABLED = _is_truthy(_getenv("QUERY_CACHE_ENABLED", "1"))
 QUERY_CACHE_MAX_SIZE = int(_getenv("QUERY_CACHE_MAX_SIZE", "500"))
 QUERY_CACHE_TTL_SECONDS = int(_getenv("QUERY_CACHE_TTL_SECONDS", "3600"))
 
@@ -134,7 +134,7 @@ AUTH_MODE = _getenv("AUTH_MODE", "headers")  # jwt | headers (headers for backwa
 
 # Auth Bypass Mode (FR-054) - FOR LOCAL DEMOS ONLY
 # WARNING: Never enable in production! Skips all auth checks.
-AUTH_BYPASS_ENABLED = _is_truthy(_getenv("AUTH_BYPASS_ENABLED", "1"))
+AUTH_BYPASS_ENABLED = _is_truthy(_getenv("AUTH_BYPASS_ENABLED", "0"))
 
 JWT_SECRET_KEY = _getenv("JWT_SECRET_KEY", "dev-secret-key-change-in-production")
 JWT_ALGORITHM = _getenv("JWT_ALGORITHM", "HS256")
