@@ -1,229 +1,42 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
-import { Message, Citation } from "@/types";
-import { IngestionZone } from "@/components/IngestionZone";
-import { ChatInterface } from "@/components/ChatInterface";
-import { EvidencePanel } from "@/components/EvidencePanel";
-import { DocumentViewer } from "@/components/DocumentViewer";
-import { UserMenu } from "@/components/UserMenu";
-import { Toast } from "@/components/Toast";
-import { CasePicker } from "@/components/CasePicker";
-import { DocumentStrip } from "@/components/DocumentStrip";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import React, { useState, useEffect } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { fetchMatters, MatterInfo } from "@/lib/api";
 import { Logo } from "@/components/Logo";
-import {
-  getAuthHeaders,
-  getApiUrl,
-  setCurrentMatter,
-  fetchMatters,
-  fetchMatterDocs,
-  MatterInfo,
-  DocSummary,
-} from "@/lib/api";
+import { UserMenu } from "@/components/UserMenu";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
-export default function DocQAPage() {
-  const [docsSnapshotId, setDocsSnapshotId] = useState<string>("");
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isAsking, setIsAsking] = useState(false);
-  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [userProfile, setUserProfile] = useState<{ name: string; email: string } | null>(null);
-  const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null);
-  const [toast, setToast] = useState<{ message: string; variant: "info" | "warning" | "error" } | null>(null);
-  const [selectedMatter, setSelectedMatter] = useState<MatterInfo | null>(null);
-  const [documents, setDocuments] = useState<DocSummary[]>([]);
-  const [docsLoading, setDocsLoading] = useState(false);
-  const [pinnedDocId, setPinnedDocId] = useState<string | null>(null);
-  const [pinnedDocName, setPinnedDocName] = useState<string | null>(null);
-
-  const handleToast = useCallback((message: string, variant: "info" | "warning" | "error" = "info") => {
-    setToast({ message, variant });
-  }, []);
-
-  const handleToastClose = useCallback(() => setToast(null), []);
-
-  const handleCitationClick = (citation: Citation) => {
-    setSelectedCitation(citation);
-  };
-
-  const handleCloseViewer = () => {
-    setSelectedCitation(null);
-  };
-
-  const loadDocsForMatter = useCallback(async (matterId: string) => {
-    setDocsLoading(true);
-    try {
-      const docs = await fetchMatterDocs(matterId);
-      setDocuments(docs);
-    } catch {
-      setDocuments([]);
-    } finally {
-      setDocsLoading(false);
-    }
-  }, []);
-
-  const handleMatterChange = useCallback(
-    (matter: MatterInfo) => {
-      setCurrentMatter(matter.matter_id);
-      setSelectedMatter(matter);
-      if (matter.latest_snapshot_id) {
-        setDocsSnapshotId(matter.latest_snapshot_id);
-      } else {
-        setDocsSnapshotId("");
-      }
-      setMessages([]);
-      const newSession = crypto.randomUUID();
-      localStorage.setItem("docqa_session", newSession);
-      setSessionId(newSession);
-      loadDocsForMatter(matter.matter_id);
-    },
-    [loadDocsForMatter]
-  );
-
-  const handleNewCase = useCallback((slug: string) => {
-    const newMatter: MatterInfo = {
-      matter_id: slug,
-      display_name: slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-      doc_count: 0,
-      latest_snapshot_id: null,
-    };
-    setCurrentMatter(slug);
-    setSelectedMatter(newMatter);
-    setDocsSnapshotId("");
-    setDocuments([]);
-    setMessages([]);
-    const newSession = crypto.randomUUID();
-    localStorage.setItem("docqa_session", newSession);
-    setSessionId(newSession);
-  }, []);
+export default function MyMattersPage() {
+  const router = useRouter();
+  const [matters, setMatters] = useState<MatterInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let storedSession = localStorage.getItem("docqa_session");
-    if (!storedSession) {
-      storedSession = crypto.randomUUID();
-      localStorage.setItem("docqa_session", storedSession);
-    }
-    setSessionId(storedSession);
-
-    const storedUser = localStorage.getItem("docqa_user");
-    if (storedUser) {
-      try {
-        const parsed = JSON.parse(storedUser) as { name?: string; email?: string };
-        if (parsed.name && parsed.email) {
-          setUserProfile({ name: parsed.name, email: parsed.email });
-        }
-      } catch {
-        // Ignore invalid storage.
-      }
-    }
-
+    // localStorage migration: if a matter was previously selected, redirect to it
     const savedMatterId = localStorage.getItem("docqa_matter");
+    if (savedMatterId) {
+      localStorage.removeItem("docqa_matter");
+      router.replace(`/matters/${encodeURIComponent(savedMatterId)}`);
+      return;
+    }
+
     fetchMatters()
-      .then((matterList) => {
-        if (matterList.length === 0) return;
-        if (savedMatterId) {
-          const target = matterList.find((m) => m.matter_id === savedMatterId);
-          if (target) handleMatterChange(target);
-        }
+      .then((list) => {
+        setMatters(list);
       })
       .catch(() => {
-        // Backend not available
+        setError("Unable to load matters. Please ensure the backend is running.");
+      })
+      .finally(() => {
+        setLoading(false);
       });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleUploadSuccess = (snapshotId: string, fileName: string) => {
-    setDocsSnapshotId(snapshotId);
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        text: `Document "${fileName}" uploaded and indexed. Snapshot: ${snapshotId}.`,
-      },
-    ]);
-    if (selectedMatter) {
-      loadDocsForMatter(selectedMatter.matter_id);
-    }
-  };
-
-  const handleAsk = async (question: string, overrideDocId?: string) => {
-    const userMsg: Message = { id: crypto.randomUUID(), role: "user", text: question };
-    setMessages((prev) => [...prev, userMsg]);
-    setIsAsking(true);
-
-    const effectiveDocId = overrideDocId ?? pinnedDocId ?? undefined;
-
-    try {
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-        ...getAuthHeaders(),
-      };
-      if (sessionId) headers["X-DocQA-Session"] = sessionId;
-      if (userProfile?.email) headers["X-DocQA-User-Email"] = userProfile.email;
-      if (userProfile?.name) headers["X-DocQA-User-Name"] = userProfile.name;
-
-      const res = await fetch(`${getApiUrl()}/v1/ask`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          question,
-          docs_snapshot_id: docsSnapshotId || undefined,
-          doc_id: effectiveDocId,
-        }),
-      });
-
-      if (!res.ok) throw new Error("Request failed");
-      const data = await res.json();
-
-      const assistantMsg: Message = {
-        id: data.request_id || crypto.randomUUID(),
-        role: "assistant",
-        text: data.answer_text || "The system could not provide an answer.",
-        citations: data.citations,
-        evidence: data.evidence,
-        debug_candidates: data.debug_candidates,
-        refusal_code: data.refusal_code,
-        reason: data.reason,
-        request_id: data.request_id,
-        version_snapshot: data.version_snapshot,
-      };
-
-      setMessages((prev) => [...prev, assistantMsg]);
-      setSelectedMessageId(assistantMsg.id);
-    } catch (err) {
-      console.error(err);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          text: "Error connecting to the API. Please ensure the backend is running.",
-        },
-      ]);
-    } finally {
-      setIsAsking(false);
-    }
-  };
-
-  const handleCandidateSelect = async (docId: string, docName: string) => {
-    setPinnedDocId(docId);
-    setPinnedDocName(docName);
-    const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
-    if (lastUserMsg) {
-      await handleAsk(lastUserMsg.text, docId);
-    }
-  };
-
-  const handleUnpin = () => {
-    setPinnedDocId(null);
-    setPinnedDocName(null);
-  };
-
-  const selectedMessage = messages.find((m) => m.id === selectedMessageId) || null;
+  }, [router]);
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-background text-foreground selection:bg-primary/20 font-sans">
+    <div className="min-h-screen flex flex-col bg-background text-foreground font-sans">
       {/* Header */}
       <header className="flex-none h-14 border-b border-border flex items-center justify-between px-3 sm:px-4 lg:px-6 bg-background/80 backdrop-blur-md z-30">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -233,84 +46,63 @@ export default function DocQAPage() {
               Evidence Bound
             </h1>
           </div>
-          <div className="w-px h-6 bg-border hidden sm:block" />
-          <CasePicker
-            onMatterChange={handleMatterChange}
-            onNewCase={handleNewCase}
-            activeMatterId={selectedMatter?.matter_id || null}
-            onToast={handleToast}
-          />
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2">
-          <IngestionZone onUploadSuccess={handleUploadSuccess} onToast={handleToast} />
-          <div className="w-px h-6 bg-border hidden sm:block" />
           <ThemeToggle />
           <UserMenu />
         </div>
       </header>
 
-      {/* Document strip */}
-      <DocumentStrip documents={documents} loading={docsLoading} />
+      {/* Main content */}
+      <main className="flex-1 px-4 sm:px-6 lg:px-8 py-8 max-w-5xl mx-auto w-full">
+        <h2 className="text-2xl font-semibold tracking-tight text-foreground font-display mb-6">
+          My Matters
+        </h2>
 
-      {/* Pinned document indicator */}
-      {pinnedDocId && (
-        <div className="flex-none h-8 border-b border-primary/20 bg-primary/5 flex items-center px-6 gap-2">
-          <svg className="w-3 h-3 text-primary" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M10 2a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h2a1 1 0 110 2H7a1 1 0 110-2h2V6.477L6.237 7.582l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.617a1 1 0 01.894-1.789l1.599.799L9 4.323V3a1 1 0 011-1z" />
-          </svg>
-          <span className="text-xs text-primary">Pinned: {pinnedDocName}</span>
-          <button
-            onClick={handleUnpin}
-            className="ml-auto text-[10px] text-muted-foreground hover:text-foreground px-2 py-0.5 rounded bg-secondary hover:bg-secondary/80 transition-colors cursor-pointer"
-          >
-            Unpin
-          </button>
-        </div>
-      )}
+        {loading && (
+          <div className="flex items-center justify-center py-20">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          </div>
+        )}
 
-      {/* Main Grid */}
-      <main className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
-        <div className="absolute inset-0 bg-grid-pattern opacity-30 pointer-events-none" />
+        {error && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+            {error}
+          </div>
+        )}
 
-        {/* Chat Column */}
-        <div className="flex-1 flex flex-col relative z-0 min-w-0">
-          <ChatInterface
-            messages={messages}
-            onAsk={handleAsk}
-            isAsking={isAsking}
-            isReady={!!docsSnapshotId}
-            selectedMessageId={selectedMessageId}
-            onMessageSelect={(m) => setSelectedMessageId(m.id)}
-          />
-        </div>
+        {!loading && !error && matters.length === 0 && (
+          <div className="rounded-lg border border-border bg-card p-12 text-center">
+            <p className="text-muted-foreground text-sm">
+              No matters yet. Create a new matter to get started.
+            </p>
+          </div>
+        )}
 
-        {/* Evidence Column — hidden on mobile when empty */}
-        <div className={`flex-none w-full md:w-[380px] lg:w-[420px] bg-card/50 backdrop-blur-xl border-t md:border-t-0 border-border md:border-l z-10 md:h-full ${selectedMessage ? "h-[40vh]" : "hidden md:block"}`}>
-          <EvidencePanel
-            message={selectedMessage}
-            onCitationClick={handleCitationClick}
-            onCandidateSelect={handleCandidateSelect}
-            sessionId={sessionId}
-          />
-        </div>
+        {!loading && !error && matters.length > 0 && (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {matters.map((matter) => (
+              <Link
+                key={matter.matter_id}
+                href={`/matters/${encodeURIComponent(matter.matter_id)}`}
+                className="group rounded-lg border border-border bg-card p-4 hover:border-primary/40 hover:shadow-sm transition-all"
+              >
+                <h3 className="text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">
+                  {matter.display_name}
+                </h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {matter.doc_count} {matter.doc_count === 1 ? "document" : "documents"}
+                </p>
+                {matter.last_question_preview && (
+                  <p className="mt-2 text-xs text-muted-foreground/70 truncate">
+                    {matter.last_question_preview}
+                  </p>
+                )}
+              </Link>
+            ))}
+          </div>
+        )}
       </main>
-
-      {/* Document Viewer Modal */}
-      {selectedCitation && (
-        <DocumentViewer
-          citation={selectedCitation}
-          onClose={handleCloseViewer}
-        />
-      )}
-
-      {/* Toast */}
-      {toast && (
-        <Toast
-          message={toast.message}
-          variant={toast.variant}
-          onClose={handleToastClose}
-        />
-      )}
     </div>
   );
 }

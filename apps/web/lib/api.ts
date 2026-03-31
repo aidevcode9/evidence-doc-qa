@@ -180,6 +180,8 @@ export type MatterInfo = {
   display_name: string;
   doc_count: number;
   latest_snapshot_id: string | null;
+  last_question_at: string | null;
+  last_question_preview: string | null;
 };
 
 /**
