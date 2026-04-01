@@ -135,6 +135,7 @@ class TestListMattersForTenant:
         assert result[0]["matter_id"] == "claims"
         assert result[0]["display_name"] == "Claims"
         assert result[0]["latest_snapshot_id"] == "snap_claims"
+        mock_session.rollback.assert_called_once()
 
 
 class TestListDocumentsForMatter:
@@ -347,6 +348,7 @@ class TestGetMatterEndpoint:
         assert result["display_name"] == "Claims"
         assert result["doc_count"] == 2
         assert result["latest_snapshot_id"] == "snap_claims"
+        mock_session.rollback.assert_called_once()
 
 
 # --- Matter Naming Tests ---

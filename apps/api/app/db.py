@@ -450,6 +450,7 @@ def list_matters_for_tenant(
                 )
                 rows = session.execute(stmt, {"tenant_id": tenant_id, "user_id": user_id}).all()
         except Exception as exc:
+            session.rollback()
             logger.warning(
                 "Matter metadata query failed for tenant %s; falling back to documents-only listing: %s",
                 tenant_id,
@@ -589,6 +590,7 @@ def get_matter_summary(
                 {"tenant_id": tenant_id, "matter_id": matter_id},
             ).first()
         except Exception as exc:
+            session.rollback()
             logger.warning(
                 "Matter summary query failed for %s/%s; falling back to documents-only summary: %s",
                 tenant_id,
