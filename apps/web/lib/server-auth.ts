@@ -29,6 +29,8 @@ export function buildBackendAuthHeaders(
 ): Headers {
   const headers = new Headers();
   const matterId = options.matterId ?? request.headers.get("x-matter-id");
+  const betaSession = request.cookies.get("docqa_beta")?.value;
+  const user = parseCookieUser(request.cookies.get("docqa_user")?.value);
 
   if (matterId) {
     headers.set("X-Matter-Id", matterId);
@@ -53,14 +55,23 @@ export function buildBackendAuthHeaders(
 
   if (AUTH_MODE === "jwt") {
     const accessToken = request.cookies.get("docqa_access")?.value;
-    if (!accessToken) {
-      throw new Error("Authentication required");
+    if (accessToken) {
+      headers.set("Authorization", `Bearer ${accessToken}`);
+      return headers;
     }
-    headers.set("Authorization", `Bearer ${accessToken}`);
-    return headers;
+
+    // Backward-compatible beta gate support: older demo/prod environments still
+    // rely on the httpOnly beta session plus readable user claims cookie.
+    if (betaSession && user?.userId && user.tenantId && user.role) {
+      headers.set("X-Tenant-Id", user.tenantId);
+      headers.set("X-User-Id", user.userId);
+      headers.set("X-User-Role", user.role);
+      return headers;
+    }
+
+    throw new Error("Authentication required");
   }
 
-  const user = parseCookieUser(request.cookies.get("docqa_user")?.value);
   if (!user?.userId || !user.tenantId || !user.role) {
     throw new Error("Authentication required");
   }
