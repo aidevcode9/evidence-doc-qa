@@ -449,3 +449,143 @@ class TestRenameMatterEndpoint:
                 json={"display_name": "New Name"},
             )
             assert response.status_code == 404
+
+
+# --- Last Question Activity Tests (FR-UI-001) ---
+
+
+class TestGetMatterLastQuestions:
+    """get_matter_last_questions returns last user message per matter."""
+
+    def test_get_matter_last_questions_returns_data(self) -> None:
+        """Should return last_question_at and last_question_preview for each matter."""
+        from app.db import get_matter_last_questions
+
+        mock_rows = [
+            ("matter-a", "2026-03-15T14:30:00Z", "What is the contract term?"),
+            ("matter-b", "2026-03-14T10:00:00Z", "Who signed this agreement?"),
+        ]
+        with patch("app.db.session_scope") as mock_scope:
+            mock_session = MagicMock()
+            mock_session.execute.return_value.all.return_value = mock_rows
+            mock_scope.return_value.__enter__ = MagicMock(return_value=mock_session)
+            mock_scope.return_value.__exit__ = MagicMock(return_value=False)
+
+            result = get_matter_last_questions(
+                tenant_id="t1",
+                matter_ids=["matter-a", "matter-b"],
+            )
+
+        assert result["matter-a"]["last_question_at"] == "2026-03-15T14:30:00Z"
+        assert result["matter-a"]["last_question_preview"] == "What is the contract term?"
+        assert result["matter-b"]["last_question_at"] == "2026-03-14T10:00:00Z"
+        assert result["matter-b"]["last_question_preview"] == "Who signed this agreement?"
+
+    def test_get_matter_last_questions_empty_list(self) -> None:
+        """Empty matter_ids list returns empty dict without DB query."""
+        from app.db import get_matter_last_questions
+
+        result = get_matter_last_questions(tenant_id="t1", matter_ids=[])
+        assert result == {}
+
+    def test_get_matter_last_questions_no_messages(self) -> None:
+        """Matters with no QAMessages return None values."""
+        from app.db import get_matter_last_questions
+
+        with patch("app.db.session_scope") as mock_scope:
+            mock_session = MagicMock()
+            mock_session.execute.return_value.all.return_value = []
+            mock_scope.return_value.__enter__ = MagicMock(return_value=mock_session)
+            mock_scope.return_value.__exit__ = MagicMock(return_value=False)
+
+            result = get_matter_last_questions(
+                tenant_id="t1",
+                matter_ids=["matter-a", "matter-b"],
+            )
+
+        assert result["matter-a"]["last_question_at"] is None
+        assert result["matter-a"]["last_question_preview"] is None
+        assert result["matter-b"]["last_question_at"] is None
+        assert result["matter-b"]["last_question_preview"] is None
+
+    def test_get_matter_last_questions_truncates_to_80_chars(self) -> None:
+        """Long message content is truncated to 80 characters."""
+        from app.db import get_matter_last_questions
+
+        long_msg = "A" * 120
+        mock_rows = [
+            ("matter-a", "2026-03-15T14:30:00Z", long_msg),
+        ]
+        with patch("app.db.session_scope") as mock_scope:
+            mock_session = MagicMock()
+            mock_session.execute.return_value.all.return_value = mock_rows
+            mock_scope.return_value.__enter__ = MagicMock(return_value=mock_session)
+            mock_scope.return_value.__exit__ = MagicMock(return_value=False)
+
+            result = get_matter_last_questions(
+                tenant_id="t1",
+                matter_ids=["matter-a"],
+            )
+
+        preview = result["matter-a"]["last_question_preview"]
+        assert preview is not None
+        assert len(preview) == 80
+
+
+class TestListMattersIncludesQuestionFields:
+    """GET /v1/matters includes last_question_at and last_question_preview."""
+
+    def test_list_matters_includes_question_fields(self) -> None:
+        """Endpoint merges last question data into matters response."""
+        mock_matters = [
+            {
+                "matter_id": "matter-a",
+                "display_name": "Matter A",
+                "doc_count": 2,
+                "latest_snapshot_id": "snap_abc",
+            },
+            {
+                "matter_id": "matter-b",
+                "display_name": "Matter B",
+                "doc_count": 1,
+                "latest_snapshot_id": "snap_def",
+            },
+        ]
+        mock_questions = {
+            "matter-a": {
+                "last_question_at": "2026-03-15T14:30:00Z",
+                "last_question_preview": "What is the contract term?",
+            },
+            "matter-b": {
+                "last_question_at": None,
+                "last_question_preview": None,
+            },
+        }
+
+        with (
+            patch("app.routers.matters.list_matters_for_tenant", return_value=mock_matters),
+            patch("app.routers.matters.get_matter_last_questions", return_value=mock_questions),
+            patch("app.routers.matters.has_permission", return_value=True),
+        ):
+            from app.routers.matters import router
+
+            app = FastAPI()
+            app.include_router(router)
+            client = TestClient(app, headers={
+                "X-Tenant-Id": "t1",
+                "X-User-Id": "u1",
+                "X-User-Role": "admin",
+            })
+
+            response = client.get("/v1/matters")
+            assert response.status_code == 200
+            data = response.json()
+            assert len(data) == 2
+
+            # matter-a has question data
+            assert data[0]["last_question_at"] == "2026-03-15T14:30:00Z"
+            assert data[0]["last_question_preview"] == "What is the contract term?"
+
+            # matter-b has null question data
+            assert data[1]["last_question_at"] is None
+            assert data[1]["last_question_preview"] is None

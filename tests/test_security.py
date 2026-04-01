@@ -166,3 +166,49 @@ class TestODataFilterInjection:
                 question="test",
                 docs_snapshot_id="snap') or (tenant_id eq 'x",
             )
+
+
+class TestAuthBypassDefault:
+    """[SEC-1] Verify AUTH_BYPASS_ENABLED defaults to False."""
+
+    def test_auth_bypass_disabled_by_default(self) -> None:
+        """AUTH_BYPASS_ENABLED must default to False (disabled)."""
+        from app.config import AUTH_BYPASS_ENABLED
+
+        assert AUTH_BYPASS_ENABLED is False, \
+            f"Expected AUTH_BYPASS_ENABLED=False, got {AUTH_BYPASS_ENABLED}"
+
+
+class TestJwtSecretStartupValidation:
+    """[SEC-2] Verify startup raises RuntimeError with default JWT secret in JWT mode."""
+
+    def test_startup_raises_with_default_jwt_secret(self) -> None:
+        """startup_event must raise RuntimeError when AUTH_MODE=jwt and secret is default."""
+        from unittest.mock import patch
+
+        with patch("app.main.AUTH_MODE", "jwt"), \
+             patch("app.main.JWT_SECRET_KEY", "dev-secret-key-change-in-production"), \
+             patch("app.main.init_db"), \
+             patch("app.main.ensure_index"), \
+             patch("app.main.otel"):
+            from app.main import startup_event
+
+            with pytest.raises(RuntimeError, match="JWT_SECRET_KEY"):
+                startup_event()
+
+    def test_startup_ok_with_headers_mode(self) -> None:
+        """startup_event must NOT raise when AUTH_MODE=headers even with default secret."""
+        from unittest.mock import patch
+
+        with patch("app.main.AUTH_MODE", "headers"), \
+             patch("app.main.JWT_SECRET_KEY", "dev-secret-key-change-in-production"), \
+             patch("app.main.AUTH_BYPASS_ENABLED", False), \
+             patch("app.main.ALLOW_UNVERIFIED", False), \
+             patch("app.main.STRICT_EVIDENCE", True), \
+             patch("app.main.init_db"), \
+             patch("app.main.ensure_index"), \
+             patch("app.main.otel"):
+            from app.main import startup_event
+
+            # Should not raise
+            startup_event()

@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 import re
 
-from app.db import ensure_matter_exists, list_documents_for_matter, list_matters_for_tenant, update_matter_display_name, user_has_matter_access
+from app.db import ensure_matter_exists, get_matter_last_questions, list_documents_for_matter, list_matters_for_tenant, update_matter_display_name, user_has_matter_access
 from app.rbac import has_permission
 
 router = APIRouter()
@@ -35,11 +35,28 @@ async def list_matters(
     if not has_permission(ctx.user_role, "query"):
         raise HTTPException(status_code=403, detail="Permission denied.")
 
-    return list_matters_for_tenant(
+    matters = list_matters_for_tenant(
         tenant_id=ctx.tenant_id,
         user_id=ctx.user_id,
         user_role=ctx.user_role.value,
     )
+
+    matter_ids = [m["matter_id"] for m in matters]
+    try:
+        last_questions = get_matter_last_questions(
+            tenant_id=ctx.tenant_id,
+            matter_ids=matter_ids,
+        )
+    except Exception:
+        last_questions = {}
+
+    for matter in matters:
+        mid = matter["matter_id"]
+        q_data = last_questions.get(mid, {"last_question_at": None, "last_question_preview": None})
+        matter["last_question_at"] = q_data["last_question_at"]
+        matter["last_question_preview"] = q_data["last_question_preview"]
+
+    return matters
 
 
 @router.get("/v1/matters/{matter_id}/docs")

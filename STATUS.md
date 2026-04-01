@@ -1,33 +1,39 @@
 # STATUS.md
 
-Last updated: 2026-03-20
+Last updated: 2026-03-31
 
 ---
 
 ## Current Phase: 8 — NFRs (Performance & Scaling)
 
-**Goal:** Query latency p95 < 8s, 50 concurrent users, rate limiting, metrics
-**Progress:** NFR-011, NFR-012 in progress
+**Goal:** Query latency p95 < 4s, 50 concurrent users, secure defaults
+**Progress:** Architecture review complete. Concrete fixes identified. See `docs/LATENCY_FIXES.md`, `docs/MATURITY_ASSESSMENT.md`, `docs/ARCHITECTURE_REVIEW.md`, `docs/MULTI_TENANT_READINESS.md`.
+
+> **Research already done.** Skip `/wsresearch` for tasks marked ✅ below — read the linked doc instead.
 
 ---
 
 ## Now
 
-| Task | FR | Branch | Started | Notes |
-|------|-----|--------|---------|-------|
-| Query latency p95 < 8s (metrics, tracing, targets) | NFR-011 | main | 03-15 | Enhanced metrics endpoint, latency breakdown, OTEL custom metrics |
-| 50 concurrent users + horizontal scaling | NFR-012 | main | 03-15 | Rate limiting, async FastAPI, cache thread-safety, load testing |
-
-## Next
-
-| Task | FR | Depends On | Notes |
-|------|-----|------------|-------|
-| Security NFRs | NFR-001–022 | — | Phase 8 |
+| Task | FR | Depends On | Notes | Research |
+|------|-----|------------|-------|----------|
+| **[PERF-5] Auto-verify high-confidence Azure reranker results** | NFR-011 | PERF-3 ✅ | Skip LLM verification when `azure_reranker_score >= 2.5 AND overlap >= 0.3`. Saves 1-6s for ~70% of queries. **Must run evals after.** | `docs/LATENCY_FIXES.md` Fix 5 |
+| **[PERF-6] Replace urllib.request with httpx** | NFR-011, NFR-012 | PERF-3 ✅ | `retrieval.py`, `verification.py`, `embeddings.py` — connection pooling, HTTP/2, consistent timeout handling. | `docs/LATENCY_FIXES.md` Fix 6 |
+| **[LOAD-1] Add load tests for NFR-011 and NFR-012** | NFR-011, NFR-012 | PERF-3 ✅, PERF-4 ✅ | Prove p95 < 4s under 50 concurrent users. No automated proof currently exists. | `docs/MATURITY_ASSESSMENT.md` §4 |
+| **Security NFRs** | NFR-001–022 | SEC-1 ✅, SEC-2 ✅ | Full security review pass | `docs/MULTI_TENANT_READINESS.md` |
 
 ## Done (This Week)
 
 | Task | FR | Date |
 |------|-----|------|
+| **[PERF-1] Azure Search timeout (15s)** | NFR-011 | 03-31 |
+| **[PERF-2] DB connection pooling (QueuePool)** | NFR-011 | 03-31 |
+| **[SEC-1] AUTH_BYPASS_ENABLED default → 0** | NFR-001 | 03-31 |
+| **[SEC-2] JWT secret startup enforcement** | NFR-001 | 03-31 |
+| **[PERF-4] Query cache enabled by default** | NFR-011 | 03-31 |
+| **[PERF-3] Parallel verification (ThreadPoolExecutor)** | NFR-011 | 03-31 |
+| **[UI-1] My Matters dashboard — default landing page** | FR-UI-001 | 03-31 |
+| **UI modernization (light/dark, login, logo, shadcn/ui)** | — | 03-31 |
 | **Test suite stability: 582 pass, 0 fail (was 53 fail + 13 error)** | FR-060 | 03-20 |
 | **409 duplicate upload UX fix (shows existing document name)** | FR-011 | 03-15 |
 | **401 demo mode console noise fix (fetchCapabilities pattern)** | FR-054 | 03-15 |

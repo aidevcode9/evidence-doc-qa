@@ -73,9 +73,10 @@ app.include_router(matters.router)
 def startup_event() -> None:
     # JWT secret validation (FR-050)
     if AUTH_MODE == "jwt" and JWT_SECRET_KEY == "dev-secret-key-change-in-production":
-        logger.warning(
-            "SECURITY WARNING: Using default JWT_SECRET_KEY. "
-            "Set a secure JWT_SECRET_KEY in production (generate with: openssl rand -hex 32)"
+        raise RuntimeError(
+            "SECURITY: JWT_SECRET_KEY is still the default value. "
+            "Set a secure JWT_SECRET_KEY before starting in JWT mode "
+            "(generate with: openssl rand -hex 32)"
         )
 
     # Security warnings for production (HIGH severity)

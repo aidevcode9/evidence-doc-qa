@@ -336,7 +336,7 @@ def _request_azure_search(url: str, payload: dict[str, Any]) -> dict[str, Any]:
             "api-key": AZURE_SEARCH_API_KEY,
         },
     )
-    with urllib.request.urlopen(req) as resp:
+    with urllib.request.urlopen(req, timeout=15) as resp:
         result: dict[str, Any] = json.load(resp)
         return result
 
