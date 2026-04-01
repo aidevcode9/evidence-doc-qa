@@ -2,11 +2,20 @@
 
 **Date:** 2026-03-31
 **Target:** Reduce p95 query latency from ~8s to < 4s
-**Priority:** Fix in order listed (each is independently deployable)
+**Priority:** Remaining open fixes are 5-7; fixes 1-4 shipped on 2026-03-31
 
 ---
 
-## Current Latency Profile
+**Status as of 2026-03-31**
+
+- Shipped: Fix 1 (Azure Search timeout), Fix 2 (parallel verification),
+  Fix 3 (DB connection pooling), Fix 4 (query cache enabled by default)
+- Open: Fix 5 (auto-verify high-confidence reranker hits), Fix 6 (`httpx`
+  migration), Fix 7 (Redis for horizontal scaling)
+
+---
+
+## Original Latency Profile (before 2026-03-31 fixes)
 
 ```
 Total: 3-8 seconds typical, 14+ seconds worst case
@@ -18,7 +27,8 @@ Evidence/Citations:            50-100ms
 DB writes (telemetry, QA):     50-200ms (NullPool overhead)
 ```
 
-The three killers are: sequential verification, no Azure Search timeout, and synchronous I/O blocking threads.
+The original three killers were: sequential verification, no Azure Search
+timeout, and synchronous I/O blocking threads.
 
 ---
 

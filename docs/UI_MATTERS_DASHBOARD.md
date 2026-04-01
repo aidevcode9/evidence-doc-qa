@@ -2,7 +2,13 @@
 
 **Date:** 2026-03-31
 **FR:** FR-UI-001 (new)
-**Status:** Ready for implementation
+**Status:** Implemented on 2026-03-31
+
+This spec shipped on 2026-03-31. The dashboard route, matter detail route,
+zero-document matter visibility, inline rename, and per-matter session
+storage are now live. The sections below describe the shipped behavior,
+with implementation notes added where the final code differed from the
+original plan.
 
 ---
 
@@ -14,7 +20,7 @@ For a law firm product, the mental model should be: **sign in → see your cases
 
 ---
 
-## Current Routing
+## Previous Routing (before 2026-03-31)
 
 ```
 /login          → Login page
@@ -22,7 +28,9 @@ For a law firm product, the mental model should be: **sign in → see your cases
 /auth/callback  → OAuth callback
 ```
 
-Users land on `/` immediately after login. The matter is saved in `localStorage` and auto-restored on next visit. If no matter is saved, the CasePicker dropdown shows an empty state.
+Before this change, users landed on `/` immediately after login. The matter
+was saved in `localStorage` and auto-restored on next visit. If no matter
+was saved, the CasePicker dropdown showed an empty state.
 
 ---
 
@@ -136,26 +144,26 @@ Add `last_question_at` and `last_question_preview` to the `MatterInfo` type.
 │  My Matters                              [+ New Matter]     │
 │  ─────────────────────────────────────                      │
 │                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ 🗂  Acme Corp v. Baker Industries                    │   │
-│  │    12 documents  ·  Last question 2 hours ago       │   │
-│  │    "What is the indemnification cap under..."        │   │
-│  │                              [Open →]               │   │
-│  └─────────────────────────────────────────────────────┘   │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │ 🗂  Acme Corp v. Baker Industries                   │    │
+│  │    12 documents  ·  Last question 2 hours ago       │    │
+│  │    "What is the indemnification cap under..."       │    │
+│  │                              [Open →]               │    │
+│  └─────────────────────────────────────────────────────┘    │
 │                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ 🗂  Henderson Estate Planning                        │   │
-│  │    3 documents  ·  Last question yesterday          │   │
-│  │    "Does the will include a no-contest clause?"      │   │
-│  │                              [Open →]               │   │
-│  └─────────────────────────────────────────────────────┘   │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │ 🗂  Henderson Estate Planning                       │    │
+│  │    3 documents  ·  Last question yesterday          │    │
+│  │    "Does the will include a no-contest clause?"     │    │
+│  │                              [Open →]               │    │
+│  └─────────────────────────────────────────────────────┘    │
 │                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ 🗂  Regulatory Review Q1 2026                       │   │
-│  │    0 documents  ·  No questions yet                 │   │
-│  │    Upload documents to get started                  │   │
-│  │                              [Open →]               │   │
-│  └─────────────────────────────────────────────────────┘   │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │ 🗂  Regulatory Review Q1 2026                       │    │
+│  │    0 documents  ·  No questions yet                 │    │
+│  │    Upload documents to get started                  │    │
+│  │                              [Open →]               │    │
+│  └─────────────────────────────────────────────────────┘    │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -243,27 +251,30 @@ This replaces the current CasePicker "Create" flow which creates matters inline 
 
 ## localStorage Migration
 
-Currently `localStorage` stores `docqa_matter` (last selected matter ID) and `docqa_session` (session ID).
+Before the dashboard change, `localStorage` stored `docqa_matter` (last
+selected matter ID) and a global `docqa_session` (session ID).
 
 After this change:
-- `docqa_matter` is no longer needed (matter is in the URL)
-- `docqa_session` stays (session tracking per matter visit, can be scoped to matter_id)
+- `docqa_matter` is only used as a one-time legacy redirect key, then cleared
+- `docqa_session` is stored per tenant and matter as `docqa_session:<tenantId>:<matterId>`
+- The legacy global `docqa_session` value is migrated on first matter load
 - Keep reading `docqa_matter` on first load as a redirect: if set, redirect to `/matters/[docqa_matter]` then clear the key
 
 ---
 
-## Files to Create / Modify
+## Files Created / Modified
 
 | Action | File | What |
 |--------|------|------|
 | **Create** | `apps/web/app/matters/[id]/page.tsx` | Move current `app/page.tsx` chat logic here |
 | **Create** | `apps/web/components/MattersDashboard.tsx` | New dashboard component |
+| **Create** | `apps/web/app/api/backend/[...path]/route.ts` | Server-side proxy for authenticated backend calls |
+| **Create** | `apps/web/lib/server-auth.ts` | Server auth helper for cookie-backed JWT forwarding |
 | **Modify** | `apps/web/app/page.tsx` | Replace chat UI with `<MattersDashboard />` |
-| **Modify** | `apps/web/lib/api.ts` | Add `last_question_at`, `last_question_preview` to `MatterInfo` type |
-| **Modify** | `apps/web/components/CasePicker.tsx` | Remove from chat header; keep `POST /v1/matters` logic for re-use in dashboard modal |
+| **Modify** | `apps/web/lib/api.ts` | Add matter detail fetch, proxy requests, and per-matter session storage |
 | **Modify** | `apps/web/middleware.ts` | Add `/matters/:id*` to protected paths (already covered by default catch-all, verify) |
-| **Modify** | `apps/api/app/routers/matters.py` | Add `last_question_at` + `last_question_preview` to list response |
-| **Modify** | `apps/api/app/db.py` | Add `get_matter_activity()` helper query |
+| **Modify** | `apps/api/app/routers/matters.py` | Add matter detail response and harden create/rename flows |
+| **Modify** | `apps/api/app/db.py` | Add zero-doc matter visibility, detail query, creator assignment, and session isolation |
 
 ---
 
@@ -371,20 +382,22 @@ async def list_matters(ctx: TenantContext = Depends(get_tenant_context)):
 
 ## Acceptance Criteria
 
-- [ ] Signing in lands on `/` showing all matters the user can access
-- [ ] Each matter card shows: name, document count, last question time (relative: "2 hours ago"), last question preview (truncated to 80 chars)
-- [ ] Empty state shown when user has no matters
-- [ ] Matter card with no docs shows "Upload documents to get started" instead of question preview
-- [ ] `[+ New Matter]` creates a matter and navigates to `/matters/[id]`
-- [ ] Clicking a matter card navigates to `/matters/[id]`
-- [ ] Chat interface at `/matters/[id]` shows `← My Matters` back link
-- [ ] Back link returns to `/` (dashboard)
-- [ ] Old `localStorage` matter ID redirects to `/matters/[id]` on first load then clears
-- [ ] Admin users see all matters in their tenant, not just assigned ones
-- [ ] Non-admin users see only assigned matters (existing backend behavior, no change)
-- [ ] `GET /v1/matters` returns `last_question_at` and `last_question_preview` (null if no questions)
-- [ ] All existing tests pass (no regressions)
-- [ ] New backend helper has unit test for multi-matter, no-questions, and empty states
+- [x] Signing in lands on `/` showing all matters the user can access
+- [x] Each matter card shows: name, document count, last question time (relative), last question preview (truncated to 80 chars)
+- [x] Empty state shown when user has no matters
+- [x] Matter card with no docs shows "Upload documents to get started" instead of question preview
+- [x] `[+ New Matter]` creates a matter and navigates to `/matters/[id]`
+- [x] Clicking a matter card navigates to `/matters/[id]`
+- [x] Chat interface at `/matters/[id]` shows a `My Matters` back link
+- [x] Back link returns to `/` (dashboard)
+- [x] Old `localStorage` matter ID redirects to `/matters/[id]` on first load then clears
+- [x] Admin users see all matters in their tenant, not just assigned ones
+- [x] Non-admin users see only assigned matters
+- [x] `GET /v1/matters` returns `last_question_at` and `last_question_preview` (null if no questions)
+- [x] Matter detail route loads the saved display name without slug fallback
+- [x] Session storage is isolated per tenant and matter
+- [x] All existing tests pass (no regressions)
+- [x] New backend coverage exists for zero-doc matters, creator access, and session/export isolation
 
 ---
 

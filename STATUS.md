@@ -4,23 +4,60 @@ Last updated: 2026-03-31
 
 ---
 
-## Current Phase: 8 — NFRs (Performance & Scaling)
+## Current Phase: 8a — Performance Foundation (finishing)
 
 **Goal:** Query latency p95 < 4s, 50 concurrent users, secure defaults
-**Progress:** Architecture review complete. Concrete fixes identified. See `docs/LATENCY_FIXES.md`, `docs/MATURITY_ASSESSMENT.md`, `docs/ARCHITECTURE_REVIEW.md`, `docs/MULTI_TENANT_READINESS.md`.
+**Progress:** 7/11 tracked performance tasks shipped (PERF-1-4, SEC-1-2, PERF-3, UI-1). Follow-up hardening also shipped on 03-31: matter creation/access correctness, zero-doc matter visibility, per-user/per-matter session isolation, chat-route rename restoration, web auth proxying, and a production guard against `AUTH_MODE=headers`. 4 performance tasks remain in "Now". Architecture review surfaced Phase 8b/9/10 roadmap.
 
-> **Research already done.** Skip `/wsresearch` for tasks marked ✅ below — read the linked doc instead.
+> **Research docs:** `docs/LATENCY_FIXES.md`, `docs/ARCHITECTURE_REVIEW.md`, `docs/MULTI_TENANT_READINESS.md`, `docs/UI_MATTERS_DASHBOARD.md`
 
 ---
 
-## Now
+## Now — Phase 8a: Finish Performance Foundation
 
 | Task | FR | Depends On | Notes | Research |
 |------|-----|------------|-------|----------|
-| **[PERF-5] Auto-verify high-confidence Azure reranker results** | NFR-011 | PERF-3 ✅ | Skip LLM verification when `azure_reranker_score >= 2.5 AND overlap >= 0.3`. Saves 1-6s for ~70% of queries. **Must run evals after.** | `docs/LATENCY_FIXES.md` Fix 5 |
-| **[PERF-6] Replace urllib.request with httpx** | NFR-011, NFR-012 | PERF-3 ✅ | `retrieval.py`, `verification.py`, `embeddings.py` — connection pooling, HTTP/2, consistent timeout handling. | `docs/LATENCY_FIXES.md` Fix 6 |
-| **[LOAD-1] Add load tests for NFR-011 and NFR-012** | NFR-011, NFR-012 | PERF-3 ✅, PERF-4 ✅ | Prove p95 < 4s under 50 concurrent users. No automated proof currently exists. | `docs/MATURITY_ASSESSMENT.md` §4 |
-| **Security NFRs** | NFR-001–022 | SEC-1 ✅, SEC-2 ✅ | Full security review pass | `docs/MULTI_TENANT_READINESS.md` |
+| **[PERF-5] Auto-verify high-confidence reranker results** | NFR-011 | PERF-3 ✅ | Skip LLM verification when `azure_reranker_score >= 2.5 AND overlap >= 0.3`. Saves 1-6s for ~70% of queries. **Must run evals after.** | `docs/LATENCY_FIXES.md` Fix 5 |
+| **[PERF-6] Replace urllib.request with httpx** | NFR-011, NFR-012 | PERF-3 ✅ | `retrieval.py`, `verification.py`, `embeddings.py` — connection pooling, HTTP/2, consistent timeout handling. ~4-8 hours. | `docs/LATENCY_FIXES.md` Fix 6 |
+| **[LOAD-1] Add load tests** | NFR-011, NFR-012 | PERF-3 ✅, PERF-4 ✅ | Prove p95 < 4s under 50 concurrent users. No automated proof currently exists. | `docs/MATURITY_ASSESSMENT.md` §4 |
+| **[ARCH-1] Add request deadline/timeout to execute_ask()** | NFR-011 | — | No global timeout on the ask pipeline — can hang if multiple services are slow. Add 30s deadline. | `docs/ARCHITECTURE_REVIEW.md` §Debt |
+
+## Next — Phase 8b: Pipeline Restructure (ordered by demo impact)
+
+| Task | FR | Depends On | Notes | Research |
+|------|-----|------------|-------|----------|
+| **[CONV-1] Conversational memory (multi-turn Q&A)** | FR-070 | — | Pass last 3-5 QA messages as context to LLM prompt. Data model already supports it (qa_sessions/qa_messages). Prompt engineering change, not architecture. Huge demo impact — lawyers expect follow-up questions to work. | `docs/ARCHITECTURE_REVIEW.md` §2 |
+| **[ARCH-2] Decompose execute_ask() into retrieve/verify/synthesize/cite** | NFR-050 | — | 700-line function is hard to modify/test. Split into composable steps. Enables future async migration. | `docs/ARCHITECTURE_REVIEW.md` §Debt |
+| **[ARCH-3] Replace verification loop with single LLM synthesis call** | NFR-011 | ARCH-2 | Reranker already handles relevance. Use LLM for answer synthesis, not binary relevance check. Eliminates redundant step, saves latency. | `docs/ARCHITECTURE_REVIEW.md` §1 |
+| **Security NFRs full pass** | NFR-001–022 | SEC-1 ✅, SEC-2 ✅ | Per-tenant rate limiting, CORS hardening, input fuzzing, penetration testing prep. | `docs/MULTI_TENANT_READINESS.md` |
+
+## Later — Phase 9: Document Intelligence (product gaps for paid product)
+
+| Task | FR | Notes | Research |
+|------|-----|-------|----------|
+| **[DOC-1] Document-level embeddings + summaries** | FR-080 | "Summarize this agreement" requires full-doc understanding, not chunk retrieval. New embedding strategy + endpoint. | `docs/ARCHITECTURE_REVIEW.md` §3 |
+| **[DOC-2] Cross-document comparison** | FR-081 | "Compare indemnification across these 3 contracts." High-value for attorneys. | `docs/ARCHITECTURE_REVIEW.md` §3 |
+| **[DOC-3] Privilege flag on documents** | FR-082 | Filter privileged docs from retrieval + exports. `privilege_status` column + retrieval filter + audit logging. | `docs/ARCHITECTURE_REVIEW.md` §4 |
+| **[DOC-4] Document versioning** | FR-083 | Track v1/v2/v3 of same document. "What changed between v2 and v3?" | `docs/ARCHITECTURE_REVIEW.md` §5 |
+
+## Later — Phase 10: Production Hardening (pre-scaling)
+
+| Task | FR | Notes | Research |
+|------|-----|-------|----------|
+| **[SCALE-1] Redis cache layer** | NFR-012 | Replace in-memory caches for horizontal scaling. Azure Cache for Redis ~$16/mo. | `docs/LATENCY_FIXES.md` Fix 7 |
+| **[SCALE-2] Async pipeline migration** | NFR-012 | Convert sync `execute_ask()` to async. Enables true concurrency. Large refactor. | `docs/ARCHITECTURE_REVIEW.md` §Debt |
+| **[SCALE-3] Circuit breakers on external services** | NFR-020 | Azure OpenAI, Azure Search — graceful degradation when services are slow/down. | `docs/ARCHITECTURE_REVIEW.md` §Debt |
+| **[SCALE-4] Structured JSON logging** | NFR-022 | Replace text logs with JSON for Azure Monitor / log aggregation. | `docs/ARCHITECTURE_REVIEW.md` §Debt |
+| **[SCALE-5] Horizontal scaling validation (2+ containers)** | NFR-012 | Deploy 2+ API containers, validate shared state (Redis), run load tests. | `docs/MULTI_TENANT_READINESS.md` |
+
+## Later — Architectural Debt (low priority, fix opportunistically)
+
+| Debt Item | Location | Notes |
+|-----------|----------|-------|
+| Global mutable state (`_BM25_CACHE`, `_PROMPT_TEXT`) | `retrieval.py` | Thread safety risk under concurrency. Use `lru_cache`. |
+| config.py flat list → pydantic Settings | `config.py` | Error-prone, no validation. Medium effort. |
+| Unbounded BM25 cache | `retrieval.py:509-515` | Memory leak potential. Add TTL/max size. |
+| Azure Search API version bump (2023-11-01) | `config.py:93` | Missing vector compression features. |
 
 ## Done (This Week)
 
@@ -33,6 +70,9 @@ Last updated: 2026-03-31
 | **[PERF-4] Query cache enabled by default** | NFR-011 | 03-31 |
 | **[PERF-3] Parallel verification (ThreadPoolExecutor)** | NFR-011 | 03-31 |
 | **[UI-1] My Matters dashboard — default landing page** | FR-UI-001 | 03-31 |
+| **[UI-2] Matters follow-up hardening (empty matters, detail route, inline rename)** | FR-UI-001 | 03-31 |
+| **[SEC-3] Matter creation/access + session/export isolation** | FR-004, FR-032 | 03-31 |
+| **[AUTH-1] Web API proxy + production auth-mode guard** | FR-053, NFR-001 | 03-31 |
 | **UI modernization (light/dark, login, logo, shadcn/ui)** | — | 03-31 |
 | **Test suite stability: 582 pass, 0 fail (was 53 fail + 13 error)** | FR-060 | 03-20 |
 | **409 duplicate upload UX fix (shows existing document name)** | FR-011 | 03-15 |

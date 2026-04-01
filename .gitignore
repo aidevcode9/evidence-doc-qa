@@ -246,6 +246,10 @@ infra/provision.ps1
 .claude/settings.local.json
 .claude/commands/
 .claude/plans/
+.claude/worktrees/
+
+# MCP local config
+.mcp.json
 
 # Secrets (should never be committed)
 *.pem
