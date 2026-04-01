@@ -750,18 +750,24 @@ class Matter(Base):
     created_at_utc: Mapped[str] = mapped_column(String, nullable=False)
 ```
 
-The `list_matters_for_tenant` query LEFT JOINs this table and falls back to a slug-derived name when no matter row exists (backward compatible with pre-existing data):
+The `list_matters_for_tenant` query uses the `matters` table as the primary source, LEFT JOINing documents for counts. Non-admin users are filtered through `matter_assignments`. A legacy fallback queries documents-only if the primary query fails:
 
 ```sql
-SELECT documents.matter_id, COUNT(*) as doc_count,
-       MAX(documents.ingested_at_utc) as latest_ingested,
-       (SELECT d2.docs_snapshot_id FROM documents d2 ...),
-       m.display_name as matter_display_name
-FROM documents
-LEFT JOIN matters m ON m.matter_id = documents.matter_id
-  AND m.tenant_id = documents.tenant_id
-WHERE documents.tenant_id = :tenant_id AND documents.status = 'ready'
-GROUP BY documents.matter_id, m.display_name
+-- Primary query (matters-first, includes zero-doc matters)
+SELECT m.matter_id, m.display_name, m.created_at_utc,
+       COALESCE(SUM(CASE WHEN d.status = 'ready' THEN 1 ELSE 0 END), 0) AS doc_count,
+       (SELECT d2.docs_snapshot_id FROM documents d2
+        WHERE d2.tenant_id = m.tenant_id AND d2.matter_id = m.matter_id
+        AND d2.status = 'ready' ORDER BY d2.ingested_at_utc DESC LIMIT 1
+       ) AS latest_snapshot_id
+FROM matters m
+LEFT JOIN documents d ON d.tenant_id = m.tenant_id AND d.matter_id = m.matter_id
+WHERE m.tenant_id = :tenant_id
+GROUP BY m.matter_id, m.tenant_id, m.display_name, m.created_at_utc
+
+-- Non-admin users add:
+JOIN matter_assignments ma ON ma.tenant_id = m.tenant_id AND ma.matter_id = m.matter_id
+WHERE ... AND ma.user_id = :user_id
 ```
 
 ### Document Strip Overflow
@@ -1307,30 +1313,30 @@ class AskResponse(BaseModel):
 
 ### Database Schema (Core Tables)
 
-```sql
--- Document chunks with embeddings
-doc_chunks (
-    id UUID PRIMARY KEY,
-    document_id UUID REFERENCES documents(id),
-    tenant_id UUID REFERENCES tenants(id),     -- FR-001: Isolation
-    matter_id UUID REFERENCES matters(id),     -- FR-002: Isolation
-    page_number INT NOT NULL,
-    char_start INT NOT NULL,                   -- Character offset
-    char_end INT NOT NULL,
-    text TEXT NOT NULL,
-    embedding_model TEXT NOT NULL,
-    embedding vector(1536)                     -- pgvector
-);
+The schema is managed by SQLAlchemy `Base.metadata.create_all()` on startup. Embeddings are stored as JSON in `index_records` (not pgvector — pgvector is a planned migration):
 
--- Full-text search (BM25 hybrid)
-ALTER TABLE doc_chunks ADD COLUMN search_vector tsvector
-    GENERATED ALWAYS AS (to_tsvector('english', text)) STORED;
-CREATE INDEX idx_chunks_fts ON doc_chunks USING gin(search_vector);
+```python
+# db.py — current schema (SQLAlchemy models)
+class DocChunk(Base):
+    __tablename__ = "chunks"
+    chunk_id = mapped_column(String, primary_key=True)
+    doc_id = mapped_column(String, nullable=False)
+    tenant_id = mapped_column(String, nullable=False, index=True)  # FR-001
+    matter_id = mapped_column(String, nullable=False, index=True)  # FR-002
+    page_num = mapped_column(Integer, nullable=False)
+    char_start = mapped_column(Integer, nullable=False)
+    char_end = mapped_column(Integer, nullable=False)
+    chunk_text = mapped_column(Text, nullable=False)
 
--- Vector similarity search
-CREATE INDEX idx_chunks_embedding ON doc_chunks
-    USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+class IndexRecord(Base):
+    __tablename__ = "index_records"
+    chunk_id = mapped_column(String, primary_key=True)
+    tenant_id = mapped_column(String, nullable=False, index=True)
+    matter_id = mapped_column(String, nullable=False, index=True)
+    embedding_json = mapped_column(Text)  # 3072-dim vector as JSON (text-embedding-3-large)
 ```
+
+> **Note:** BM25 is computed in-application (not via PostgreSQL `tsvector`). Vector search uses cosine similarity over the JSON-stored embeddings, or Azure AI Search in production. Migration to pgvector with native indexes is planned for high-volume deployments.
 
 ---
 

@@ -1,6 +1,6 @@
 # Evidence-Bound: Technical Architecture
 
-> **For Technical Investors** | Last Updated: February 2026
+> **For Technical Investors** | Last Updated: April 2026
 
 ---
 
@@ -57,8 +57,8 @@
 
 | Layer | Technology | Rationale |
 |-------|------------|-----------|
-| **Frontend** | Next.js 14 + TypeScript | SSR, React ecosystem, Vercel deployment |
-| **API** | FastAPI + Python 3.11 | Async performance, type hints, OpenAPI |
+| **Frontend** | Next.js 16 + TypeScript | SSR, React ecosystem, Vercel deployment |
+| **API** | FastAPI + Python 3.12 | Async performance, type hints, OpenAPI |
 | **Database** | PostgreSQL 15 | ACID compliance, JSON support, pgvector ready |
 | **Search** | Azure AI Search / pgvector | Hybrid BM25+vector, configurable provider |
 | **Embeddings** | Azure OpenAI / Local | text-embedding-3-large (3072D) or hash-based |
@@ -353,7 +353,7 @@ PARSER_PROVIDER=marker                 # Marker (offline PDF parsing)
      │                                         Check failed_login_ct  │
      │                                         Check locked_until_utc │
      │                                                                │
-     │ 3. Return JWT access token (15 min) + refresh token (7 days)  │
+     │ 3. Return JWT access token (30 min) + refresh token (7 days)  │
      │<───────────────────────────────────────────────────────────────│
      │                                                                │
      │ 4. API request with Authorization: Bearer <access_token>      │
@@ -386,8 +386,8 @@ User → /auth/sso/microsoft → OIDC Provider → Callback → Validate ID Toke
 ```
 
 **Security Features (FR-050):**
-- Password hashing: bcrypt (cost factor 12)
-- Account lockout: 5 failed attempts → 15 min lock
+- Password hashing: Argon2id (OWASP recommended)
+- Account lockout: 5 failed attempts → 30 min lock
 - Refresh token rotation: New token on each refresh
 - Token revocation: All tokens revoked on password change
 - PKCE for SSO: Protects against authorization code interception
@@ -395,27 +395,29 @@ User → /auth/sso/microsoft → OIDC Provider → Callback → Validate ID Toke
 ### Tenant Isolation Enforcement
 
 ```python
-# Middleware enforces tenant context on every request
-@app.middleware("http")
-async def tenant_middleware(request: Request, call_next):
-    # Extract from JWT claims
-    token = extract_jwt(request)
+# FastAPI dependency injects tenant context on every request
+def get_tenant_context(request: Request) -> TenantContext:
+    # Extract from JWT claims (AUTH_MODE=jwt) or headers (dev mode)
+    token = validate_jwt(request)
     tenant_id = token["tenant_id"]
     user_id = token["sub"]
+    user_role = Role(token["role"])
 
-    # Resolve matter from request (path/query)
-    matter_id = resolve_matter(request)
+    return TenantContext(
+        tenant_id=tenant_id,
+        user_id=user_id,
+        user_role=user_role,
+    )
 
-    # Verify user has matter access (FR-004)
-    if not user_has_matter_access(user_id, tenant_id, matter_id):
-        raise HTTPException(403, "Access denied")
-
-    # Inject into request state - available to all handlers
-    request.state.tenant_id = tenant_id
-    request.state.matter_id = matter_id
-    request.state.user_id = user_id
-
-    return await call_next(request)
+# Used on every endpoint via Depends()
+@router.get("/v1/matters")
+async def list_matters(ctx: TenantContext = Depends(get_tenant_context)):
+    # ctx.tenant_id is guaranteed present — enforced at extraction
+    matters = list_matters_for_tenant(
+        tenant_id=ctx.tenant_id,
+        user_id=ctx.user_id,
+        user_role=ctx.user_role.value,
+    )
 ```
 
 ---
@@ -472,7 +474,7 @@ GROUP BY tenant_id, model_id;
 
 | Resource | Limit | Scaling Path |
 |----------|-------|--------------|
-| Concurrent requests | ~100/instance | Horizontal pod scaling |
+| Concurrent requests | ~10-15 req/s per instance | Horizontal pod scaling |
 | Document processing | ~10 docs/min | Worker queue + async |
 | Search index | 1M chunks | Index partitioning |
 | Database | 100 GB | Vertical scaling, read replicas |
@@ -502,7 +504,7 @@ pytest evals/ -v              # Golden query evals (>95% pass required)
 
 | Category | Coverage Target | Current |
 |----------|-----------------|---------|
-| Unit tests | >80% | ~85% |
+| Unit tests (624 tests) | >80% | ~85% |
 | Integration tests | Critical paths | ✅ |
 | Golden query evals | >95% pass rate | ✅ |
 | LLM behavior tests | Adversarial prompts | ✅ |
