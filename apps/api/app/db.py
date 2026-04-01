@@ -452,7 +452,7 @@ def list_matters_for_tenant(
                 stmt = text(
                     base_select
                     + "WHERE m.tenant_id = :tenant_id "
-                    "GROUP BY m.matter_id, m.display_name, m.created_at_utc "
+                    "GROUP BY m.matter_id, m.tenant_id, m.display_name, m.created_at_utc "
                     "ORDER BY COALESCE(MAX(CASE WHEN d.status = 'ready' THEN d.ingested_at_utc END), m.created_at_utc) DESC"
                 )
                 rows = session.execute(stmt, {"tenant_id": tenant_id}).all()
@@ -461,7 +461,7 @@ def list_matters_for_tenant(
                     base_select
                     + "JOIN matter_assignments ma ON ma.tenant_id = m.tenant_id AND ma.matter_id = m.matter_id "
                     "WHERE m.tenant_id = :tenant_id AND ma.user_id = :user_id "
-                    "GROUP BY m.matter_id, m.display_name, m.created_at_utc "
+                    "GROUP BY m.matter_id, m.tenant_id, m.display_name, m.created_at_utc "
                     "ORDER BY COALESCE(MAX(CASE WHEN d.status = 'ready' THEN d.ingested_at_utc END), m.created_at_utc) DESC"
                 )
                 rows = session.execute(stmt, {"tenant_id": tenant_id, "user_id": user_id}).all()
@@ -611,7 +611,7 @@ def get_matter_summary(
                 "FROM matters m "
                 "LEFT JOIN documents d ON d.tenant_id = m.tenant_id AND d.matter_id = m.matter_id "
                 "WHERE m.tenant_id = :tenant_id AND m.matter_id = :matter_id "
-                "GROUP BY m.matter_id, m.display_name, m.created_at_utc"
+                "GROUP BY m.matter_id, m.tenant_id, m.display_name, m.created_at_utc"
             )
             row = session.execute(
                 stmt,
@@ -681,7 +681,7 @@ def _legacy_list_matters_for_tenant(
         stmt = text(
             base_select
             + "WHERE d.tenant_id = :tenant_id "
-            "GROUP BY d.matter_id "
+            "GROUP BY d.matter_id, d.tenant_id "
             "ORDER BY COALESCE(MAX(CASE WHEN d.status = 'ready' THEN d.ingested_at_utc END), MIN(d.ingested_at_utc)) DESC"
         )
         return session.execute(stmt, {"tenant_id": tenant_id}).all()
@@ -690,7 +690,7 @@ def _legacy_list_matters_for_tenant(
         base_select
         + "JOIN matter_assignments ma ON ma.tenant_id = d.tenant_id AND ma.matter_id = d.matter_id "
         "WHERE d.tenant_id = :tenant_id AND ma.user_id = :user_id "
-        "GROUP BY d.matter_id "
+        "GROUP BY d.matter_id, d.tenant_id "
         "ORDER BY COALESCE(MAX(CASE WHEN d.status = 'ready' THEN d.ingested_at_utc END), MIN(d.ingested_at_utc)) DESC"
     )
     return session.execute(stmt, {"tenant_id": tenant_id, "user_id": user_id}).all()
@@ -717,7 +717,7 @@ def _legacy_get_matter_summary(
         ") AS latest_snapshot_id "
         "FROM documents d "
         "WHERE d.tenant_id = :tenant_id AND d.matter_id = :matter_id "
-        "GROUP BY d.matter_id"
+        "GROUP BY d.matter_id, d.tenant_id"
     )
     return session.execute(
         stmt,
