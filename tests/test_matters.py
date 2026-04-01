@@ -12,6 +12,7 @@ Covers:
 
 from __future__ import annotations
 
+import contextlib
 import sys
 from pathlib import Path
 from typing import Any
@@ -121,21 +122,36 @@ class TestListMattersForTenant:
         legacy_rows = [
             ("claims", None, "2026-03-31T12:00:00Z", 2, "2026-03-31T12:15:00Z", "snap_claims"),
         ]
-        with patch("app.db.session_scope") as mock_scope:
-            mock_session = MagicMock()
-            mock_session.execute.side_effect = [Exception("relation matters does not exist"), MagicMock(all=MagicMock(return_value=legacy_rows))]
-            mock_scope.return_value.__enter__ = MagicMock(return_value=mock_session)
-            mock_scope.return_value.__exit__ = MagicMock(return_value=False)
 
+        # Primary session raises; fallback session returns legacy rows
+        primary_session = MagicMock()
+        primary_session.execute.side_effect = Exception("relation matters does not exist")
+        fallback_session = MagicMock()
+        fallback_session.execute.return_value.all.return_value = legacy_rows
+
+        call_count = 0
+
+        @contextlib.contextmanager
+        def fake_session_scope():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                yield primary_session
+                # Normally session_scope would rollback on exception,
+                # but the exception propagates out of the with block
+            else:
+                yield fallback_session
+
+        with patch("app.db.session_scope", fake_session_scope):
             result = list_matters_for_tenant(
                 tenant_id="t1", user_id="u1", user_role="admin"
             )
 
+        assert call_count == 2, "should use separate sessions for primary and fallback"
         assert len(result) == 1
         assert result[0]["matter_id"] == "claims"
         assert result[0]["display_name"] == "Claims"
         assert result[0]["latest_snapshot_id"] == "snap_claims"
-        mock_session.rollback.assert_called_once()
 
 
 class TestListDocumentsForMatter:
@@ -335,20 +351,33 @@ class TestGetMatterEndpoint:
         from app.db import get_matter_summary
 
         legacy_row = ("claims", None, "2026-03-31T12:00:00Z", 2, "snap_claims")
-        with patch("app.db.session_scope") as mock_scope:
-            mock_session = MagicMock()
-            mock_session.execute.side_effect = [MagicMock(first=MagicMock(side_effect=Exception("relation matters does not exist"))), MagicMock(first=MagicMock(return_value=legacy_row))]
-            mock_scope.return_value.__enter__ = MagicMock(return_value=mock_session)
-            mock_scope.return_value.__exit__ = MagicMock(return_value=False)
 
+        # Primary session raises; fallback session returns legacy row
+        primary_session = MagicMock()
+        primary_session.execute.return_value.first.side_effect = Exception("relation matters does not exist")
+        fallback_session = MagicMock()
+        fallback_session.execute.return_value.first.return_value = legacy_row
+
+        call_count = 0
+
+        @contextlib.contextmanager
+        def fake_session_scope():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                yield primary_session
+            else:
+                yield fallback_session
+
+        with patch("app.db.session_scope", fake_session_scope):
             result = get_matter_summary(matter_id="claims", tenant_id="t1")
 
+        assert call_count == 2, "should use separate sessions for primary and fallback"
         assert result is not None
         assert result["matter_id"] == "claims"
         assert result["display_name"] == "Claims"
         assert result["doc_count"] == 2
         assert result["latest_snapshot_id"] == "snap_claims"
-        mock_session.rollback.assert_called_once()
 
 
 # --- Matter Naming Tests ---

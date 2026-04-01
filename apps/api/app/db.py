@@ -378,24 +378,36 @@ def _fallback_display_name(matter_id: str) -> str:
 
 def _backfill_missing_matters() -> None:
     """Create matter rows for legacy document-only matters."""
-    with session_scope() as session:
-        stmt = text(
-            "SELECT d.matter_id, d.tenant_id, MIN(d.ingested_at_utc) AS created_at_utc "
-            "FROM documents d "
-            "LEFT JOIN matters m ON m.matter_id = d.matter_id AND m.tenant_id = d.tenant_id "
-            "WHERE m.matter_id IS NULL "
-            "GROUP BY d.matter_id, d.tenant_id"
-        )
-        rows = session.execute(stmt).all()
-        for row in rows:
-            session.add(
-                Matter(
-                    matter_id=row[0],
-                    tenant_id=row[1],
-                    display_name=_fallback_display_name(row[0]),
-                    created_at_utc=row[2] or datetime.now(timezone.utc).isoformat(),
-                )
+    try:
+        with session_scope() as session:
+            stmt = text(
+                "SELECT d.matter_id, d.tenant_id, MIN(d.ingested_at_utc) AS created_at_utc "
+                "FROM documents d "
+                "LEFT JOIN matters m ON m.matter_id = d.matter_id AND m.tenant_id = d.tenant_id "
+                "WHERE m.matter_id IS NULL "
+                "GROUP BY d.matter_id, d.tenant_id"
             )
+            rows = session.execute(stmt).all()
+            for row in rows:
+                session.add(
+                    Matter(
+                        matter_id=row[0],
+                        tenant_id=row[1],
+                        display_name=_fallback_display_name(row[0]),
+                        created_at_utc=row[2] or datetime.now(timezone.utc).isoformat(),
+                    )
+                )
+            if rows:
+                logger.info("_backfill_missing_matters: created %d matter rows", len(rows))
+            else:
+                logger.debug("_backfill_missing_matters: no orphan documents found")
+    except Exception as exc:
+        logger.error(
+            "_backfill_missing_matters: FAILED — %s: %s. "
+            "Matters table may be missing or schema mismatch.",
+            type(exc).__name__, exc,
+            exc_info=True,
+        )
 
 
 def list_matters_for_tenant(
@@ -430,8 +442,12 @@ def list_matters_for_tenant(
         "FROM matters m "
         "LEFT JOIN documents d ON d.tenant_id = m.tenant_id AND d.matter_id = m.matter_id "
     )
-    with session_scope() as session:
-        try:
+    logger.debug(
+        "list_matters_for_tenant: tenant=%s user=%s role=%s",
+        tenant_id, user_id, user_role,
+    )
+    try:
+        with session_scope() as session:
             if user_role == "admin":
                 stmt = text(
                     base_select
@@ -449,19 +465,28 @@ def list_matters_for_tenant(
                     "ORDER BY COALESCE(MAX(CASE WHEN d.status = 'ready' THEN d.ingested_at_utc END), m.created_at_utc) DESC"
                 )
                 rows = session.execute(stmt, {"tenant_id": tenant_id, "user_id": user_id}).all()
-        except Exception as exc:
-            session.rollback()
-            logger.warning(
-                "Matter metadata query failed for tenant %s; falling back to documents-only listing: %s",
-                tenant_id,
-                exc,
-            )
+        logger.debug(
+            "list_matters_for_tenant: primary query returned %d rows for tenant=%s",
+            len(rows), tenant_id,
+        )
+    except Exception as exc:
+        logger.error(
+            "list_matters_for_tenant: primary query FAILED for tenant=%s user=%s role=%s — %s: %s. "
+            "Falling back to documents-only listing.",
+            tenant_id, user_id, user_role, type(exc).__name__, exc,
+            exc_info=True,
+        )
+        with session_scope() as fallback_session:
             rows = _legacy_list_matters_for_tenant(
-                session=session,
+                session=fallback_session,
                 tenant_id=tenant_id,
                 user_id=user_id,
                 user_role=user_role,
             )
+        logger.info(
+            "list_matters_for_tenant: fallback returned %d rows for tenant=%s",
+            len(rows), tenant_id,
+        )
 
     return [
         {
@@ -566,8 +591,11 @@ def get_matter_summary(
     tenant_id: str,
 ) -> dict[str, Any] | None:
     """Get a matter summary including zero-doc matters."""
-    with session_scope() as session:
-        try:
+    logger.debug(
+        "get_matter_summary: tenant=%s matter=%s", tenant_id, matter_id,
+    )
+    try:
+        with session_scope() as session:
             stmt = text(
                 "SELECT m.matter_id, "
                 "m.display_name, "
@@ -589,19 +617,27 @@ def get_matter_summary(
                 stmt,
                 {"tenant_id": tenant_id, "matter_id": matter_id},
             ).first()
-        except Exception as exc:
-            session.rollback()
-            logger.warning(
-                "Matter summary query failed for %s/%s; falling back to documents-only summary: %s",
-                tenant_id,
-                matter_id,
-                exc,
-            )
+        logger.debug(
+            "get_matter_summary: primary query %s for tenant=%s matter=%s",
+            "found row" if row else "returned None", tenant_id, matter_id,
+        )
+    except Exception as exc:
+        logger.error(
+            "get_matter_summary: primary query FAILED for tenant=%s matter=%s — %s: %s. "
+            "Falling back to documents-only summary.",
+            tenant_id, matter_id, type(exc).__name__, exc,
+            exc_info=True,
+        )
+        with session_scope() as fallback_session:
             row = _legacy_get_matter_summary(
-                session=session,
+                session=fallback_session,
                 tenant_id=tenant_id,
                 matter_id=matter_id,
             )
+        logger.info(
+            "get_matter_summary: fallback %s for tenant=%s matter=%s",
+            "found row" if row else "returned None", tenant_id, matter_id,
+        )
 
     if row is None:
         return None
@@ -1137,6 +1173,10 @@ def user_has_matter_access(
 
     # Admin bypass: admins can access all matters in their tenant
     if user_role == Role.ADMIN:
+        logger.debug(
+            "user_has_matter_access: admin bypass for user=%s matter=%s",
+            user_id, matter_id,
+        )
         return True
 
     with session_scope() as session:
@@ -1146,7 +1186,12 @@ def user_has_matter_access(
             MatterAssignment.matter_id == matter_id,
         )
         assignment = session.scalars(stmt).first()
-        return assignment is not None
+        has_access = assignment is not None
+        logger.debug(
+            "user_has_matter_access: user=%s tenant=%s matter=%s access=%s",
+            user_id, tenant_id, matter_id, has_access,
+        )
+        return has_access
 
 
 def grant_matter_access(
