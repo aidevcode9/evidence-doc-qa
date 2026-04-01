@@ -68,6 +68,11 @@ def _verify_candidates_parallel(
 
     Returns list of (chunk, status, span, reason, usage) tuples
     in the original candidate order.
+
+    Cost trade-off: All candidates are verified in parallel, so we always
+    pay for max_candidates LLM calls even if the first candidate verifies.
+    This trades ~2x higher verification cost for 2-4s latency reduction.
+    At ~$0.005/call, this is $0.01 extra per query in the worst case.
     """
     to_verify = candidates[:max_candidates]
 

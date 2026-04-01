@@ -42,10 +42,13 @@ async def list_matters(
     )
 
     matter_ids = [m["matter_id"] for m in matters]
-    last_questions = get_matter_last_questions(
-        tenant_id=ctx.tenant_id,
-        matter_ids=matter_ids,
-    )
+    try:
+        last_questions = get_matter_last_questions(
+            tenant_id=ctx.tenant_id,
+            matter_ids=matter_ids,
+        )
+    except Exception:
+        last_questions = {}
 
     for matter in matters:
         mid = matter["matter_id"]
