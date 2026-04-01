@@ -246,6 +246,7 @@ infra/provision.ps1
 .claude/settings.local.json
 .claude/commands/
 .claude/plans/
+.claude/worktrees/
 
 # Secrets (should never be committed)
 *.pem
