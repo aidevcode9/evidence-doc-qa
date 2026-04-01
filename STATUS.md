@@ -7,7 +7,7 @@ Last updated: 2026-03-31
 ## Current Phase: 8a — Performance Foundation (finishing)
 
 **Goal:** Query latency p95 < 4s, 50 concurrent users, secure defaults
-**Progress:** 8/11 tracked performance tasks shipped (PERF-1-5, SEC-1-2, UI-1). Follow-up hardening also shipped on 03-31: matter creation/access correctness, zero-doc matter visibility, per-user/per-matter session isolation, chat-route rename restoration, web auth proxying, and a production guard against `AUTH_MODE=headers`. 3 Phase 8a tasks remain in "Now". Architecture review surfaced Phase 8b/9/10 roadmap.
+**Progress:** 9/11 tracked performance tasks shipped (PERF-1-6, SEC-1-2, UI-1). Follow-up hardening also shipped on 03-31: matter creation/access correctness, zero-doc matter visibility, per-user/per-matter session isolation, chat-route rename restoration, web auth proxying, and a production guard against `AUTH_MODE=headers`. 2 Phase 8a tasks remain in "Now". Architecture review surfaced Phase 8b/9/10 roadmap.
 
 > **Research docs:** `docs/LATENCY_FIXES.md`, `docs/ARCHITECTURE_REVIEW.md`, `docs/MULTI_TENANT_READINESS.md`, `docs/UI_MATTERS_DASHBOARD.md`
 
@@ -17,7 +17,6 @@ Last updated: 2026-03-31
 
 | Task | FR | Depends On | Notes | Research |
 |------|-----|------------|-------|----------|
-| **[PERF-6] Replace urllib.request with httpx** | NFR-011, NFR-012 | PERF-3 ✅ | `retrieval.py`, `verification.py`, `embeddings.py` — connection pooling, HTTP/2, consistent timeout handling. ~4-8 hours. | `docs/LATENCY_FIXES.md` Fix 6 |
 | **[LOAD-1] Add load tests** | NFR-011, NFR-012 | PERF-3 ✅, PERF-4 ✅ | Prove p95 < 4s under 50 concurrent users. No automated proof currently exists. | `docs/MATURITY_ASSESSMENT.md` §4 |
 | **[ARCH-1] Add request deadline/timeout to execute_ask()** | NFR-011 | — | No global timeout on the ask pipeline — can hang if multiple services are slow. Add 30s deadline. | `docs/ARCHITECTURE_REVIEW.md` §Debt |
 
@@ -69,6 +68,7 @@ Last updated: 2026-03-31
 | **[PERF-4] Query cache enabled by default** | NFR-011 | 03-31 |
 | **[PERF-3] Parallel verification (ThreadPoolExecutor)** | NFR-011 | 03-31 |
 | **[PERF-5] Auto-verify high-confidence reranker results** | NFR-011 | 03-31 |
+| **[PERF-6] Replace urllib.request with httpx** | NFR-011, NFR-012 | 03-31 |
 | **[UI-1] My Matters dashboard — default landing page** | FR-UI-001 | 03-31 |
 | **[UI-2] Matters follow-up hardening (empty matters, detail route, inline rename)** | FR-UI-001 | 03-31 |
 | **[SEC-3] Matter creation/access + session/export isolation** | FR-004, FR-032 | 03-31 |

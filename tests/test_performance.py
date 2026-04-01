@@ -444,28 +444,26 @@ class TestRateLimitReturns429:
 class TestAzureSearchTimeout:
     """[PERF-1] Verify Azure Search HTTP call has timeout."""
 
-    def test_urlopen_called_with_timeout(self) -> None:
-        """_request_azure_search must pass timeout=15 to urlopen."""
-        import io
-        import json
-        from unittest.mock import patch, MagicMock
+    def test_search_client_called_with_timeout(self) -> None:
+        """_request_azure_search must pass a 15s read timeout to httpx."""
+        from unittest.mock import MagicMock, patch
+        import httpx
 
+        mock_client = MagicMock()
         mock_response = MagicMock()
-        mock_response.read.return_value = json.dumps({"value": []}).encode()
-        mock_response.__enter__ = MagicMock(return_value=io.BytesIO(json.dumps({"value": []}).encode()))
-        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_response.json.return_value = {"value": []}
+        mock_response.raise_for_status.return_value = None
+        mock_client.post.return_value = mock_response
 
-        with patch("app.retrieval.urllib.request.urlopen", return_value=mock_response) as mock_urlopen:
+        with patch("app.retrieval.get_azure_http_client", return_value=mock_client):
             from app.retrieval import _request_azure_search
 
             _request_azure_search("https://example.com/search", {"search": "test"})
 
-            mock_urlopen.assert_called_once()
-            call_args = mock_urlopen.call_args
-            # timeout should be passed as keyword arg
-            assert call_args.kwargs.get("timeout") == 15 or (
-                len(call_args.args) >= 2 and call_args.args[1] == 15
-            ), f"Expected timeout=15, got args={call_args.args}, kwargs={call_args.kwargs}"
+            mock_client.post.assert_called_once()
+            timeout = mock_client.post.call_args.kwargs["timeout"]
+            assert isinstance(timeout, httpx.Timeout)
+            assert timeout.read == 15.0
 
 
 class TestDatabasePoolConfig:

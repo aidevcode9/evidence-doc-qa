@@ -1,9 +1,8 @@
 import hashlib
-import json
 import logging
-import urllib.request
-import urllib.error
 from typing import Any
+
+import httpx
 
 from app.cache import EmbeddingCache
 from app.config import (
@@ -16,6 +15,7 @@ from app.config import (
     EMBEDDINGS_DIM,
     EMBEDDINGS_MODE,
 )
+from app.http_client import get_azure_http_client
 from app.otel import get_observe_decorator, safe_update_observation, set_genai_span_attributes
 
 logger = logging.getLogger("docqa")
@@ -111,18 +111,17 @@ def _azure_openai_embeddings_with_usage(texts: list[str]) -> tuple[list[list[flo
         f"?api-version={AZURE_OPENAI_API_VERSION}"
     )
     payload = {"input": texts}
-    request = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"api-key": AZURE_OPENAI_API_KEY, "Content-Type": "application/json"},
-        method="POST",
-    )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            data: dict[str, Any] = json.load(response)
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        logger.error("Azure OpenAI embeddings HTTP %s: %s", exc.code, body)
+        response = get_azure_http_client().post(
+            url,
+            json=payload,
+            headers={"api-key": AZURE_OPENAI_API_KEY, "Content-Type": "application/json"},
+        )
+        response.raise_for_status()
+        data: dict[str, Any] = response.json()
+    except httpx.HTTPStatusError as exc:
+        body = exc.response.text
+        logger.error("Azure OpenAI embeddings HTTP %s: %s", exc.response.status_code, body)
         raise
     if "data" not in data:
         raise RuntimeError("Azure OpenAI embeddings response missing data.")

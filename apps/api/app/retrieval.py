@@ -2,10 +2,10 @@ import json
 import math
 import re
 import time as _time
-import urllib.request
-import urllib.error
 from collections import Counter
 from typing import Any
+
+import httpx
 
 from app.config import (
     AZURE_SEARCH_API_KEY,
@@ -21,6 +21,7 @@ from app.config import (
 
 from app.db import load_chunks, load_index_records
 from app.embeddings import embed_texts_with_usage
+from app.http_client import get_azure_http_client
 from app.otel import get_observe_decorator, safe_update_observation
 from app.telemetry import logger
 
@@ -32,6 +33,7 @@ BM25Stats = dict[str, Any]
 UsageInfo = dict[str, Any]
 
 _BM25_CACHE: dict[str, BM25Stats] = {}
+_AZURE_SEARCH_TIMEOUT = httpx.Timeout(connect=5.0, read=15.0, write=10.0, pool=10.0)
 
 
 def _enrich_hybrid_observation(mode: str, result_count: int, start: float) -> None:
@@ -248,10 +250,10 @@ def _azure_search(
         try:
             data = _request_azure_search(url, semantic_payload)
             semantic_used = True
-        except urllib.error.HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="replace")
+        except httpx.HTTPStatusError as exc:
+            body = exc.response.text
             reason = _semantic_fallback_reason(body)
-            if exc.code in (400, 403) and reason:
+            if exc.response.status_code in (400, 403) and reason:
                 fallback_reason = reason
                 logger.warning(
                     "Azure Search semantic unavailable (%s). Retrying without semantic features.",
@@ -260,8 +262,8 @@ def _azure_search(
                 _log_azure_search_request(base_payload, vector_len, filter_state)
                 try:
                     data = _request_azure_search(url, base_payload)
-                except urllib.error.HTTPError as fallback_exc:
-                    fallback_body = fallback_exc.read().decode("utf-8", errors="replace")
+                except httpx.HTTPStatusError as fallback_exc:
+                    fallback_body = fallback_exc.response.text
                     _log_azure_error(
                         fallback_exc,
                         fallback_body,
@@ -277,8 +279,8 @@ def _azure_search(
         _log_azure_search_request(base_payload, vector_len, filter_state)
         try:
             data = _request_azure_search(url, base_payload)
-        except urllib.error.HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="replace")
+        except httpx.HTTPStatusError as exc:
+            body = exc.response.text
             _log_azure_error(exc, body, url, vector_len, filter_state)
             raise
 
@@ -327,18 +329,18 @@ def _azure_search(
 
 
 def _request_azure_search(url: str, payload: dict[str, Any]) -> dict[str, Any]:
-    req = urllib.request.Request(
+    response = get_azure_http_client().post(
         url,
-        data=json.dumps(payload).encode("utf-8"),
-        method="POST",
+        json=payload,
         headers={
             "Content-Type": "application/json",
             "api-key": AZURE_SEARCH_API_KEY,
         },
+        timeout=_AZURE_SEARCH_TIMEOUT,
     )
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        result: dict[str, Any] = json.load(resp)
-        return result
+    response.raise_for_status()
+    result: dict[str, Any] = response.json()
+    return result
 
 
 def _log_azure_search_request(payload: dict[str, Any], vector_len: int, filter_state: str) -> None:
@@ -356,7 +358,7 @@ def _log_azure_search_request(payload: dict[str, Any], vector_len: int, filter_s
 
 
 def _log_azure_error(
-    exc: urllib.error.HTTPError,
+    exc: httpx.HTTPStatusError,
     body: str,
     url: str,
     vector_len: int,
@@ -364,7 +366,7 @@ def _log_azure_error(
 ) -> None:
     logger.error(
         "Azure Search HTTP %s: %s | url=%s index=%s api=%s vector_len=%s filter=%s",
-        exc.code,
+        exc.response.status_code,
         body,
         url,
         AZURE_SEARCH_INDEX,

@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-31
 **Target:** Reduce p95 query latency from ~8s to < 4s
-**Priority:** Remaining open fixes are 6-7; fixes 1-5 shipped on 2026-03-31
+**Priority:** Remaining open fix is 7; fixes 1-6 shipped on 2026-03-31
 
 ---
 
@@ -10,8 +10,9 @@
 
 - Shipped: Fix 1 (Azure Search timeout), Fix 2 (parallel verification),
   Fix 3 (DB connection pooling), Fix 4 (query cache enabled by default),
-  Fix 5 (auto-verify high-confidence reranker hits)
-- Open: Fix 6 (`httpx` migration), Fix 7 (Redis for horizontal scaling)
+  Fix 5 (auto-verify high-confidence reranker hits),
+  Fix 6 (`httpx` migration)
+- Open: Fix 7 (Redis for horizontal scaling)
 
 ---
 

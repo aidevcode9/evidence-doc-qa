@@ -3,11 +3,11 @@ import os
 import time
 import hashlib
 import re
-import urllib.request
-import urllib.error
 import urllib.parse
 from pathlib import Path
 from typing import Any
+
+import httpx
 
 from app.config import (
     AZURE_OPENAI_CHAT_API_KEY,
@@ -15,6 +15,7 @@ from app.config import (
     AZURE_OPENAI_CHAT_ENDPOINT,
     MODEL_ID,
 )
+from app.http_client import get_azure_http_client
 from app.otel import get_observe_decorator, safe_update_observation, set_genai_span_attributes
 from app.telemetry import logger
 
@@ -81,7 +82,7 @@ def verify_relevance(
     try:
         try:
             response = _call_openai(payload)
-        except urllib.error.HTTPError as exc:
+        except httpx.HTTPStatusError as exc:
             alt_param = _alt_token_param_from_error(exc)
             if alt_param and alt_param != token_param:
                 payload.pop(token_param, None)
@@ -191,7 +192,7 @@ def _call_openai(payload: dict[str, Any], max_retries: int = 3) -> dict[str, Any
         Response JSON
 
     Raises:
-        urllib.error.HTTPError: If request fails after all retries
+        httpx.HTTPStatusError: If request fails after all retries
     """
     url = f"{AZURE_OPENAI_CHAT_ENDPOINT.rstrip('/')}/openai/deployments/{MODEL_ID}/chat/completions?api-version={AZURE_OPENAI_CHAT_API_VERSION}"
     headers = {
@@ -199,31 +200,26 @@ def _call_openai(payload: dict[str, Any], max_retries: int = 3) -> dict[str, Any
         "api-key": AZURE_OPENAI_CHAT_API_KEY,
     }
 
-    last_exc: urllib.error.HTTPError | None = None
+    last_exc: httpx.HTTPStatusError | None = None
     for attempt in range(max_retries + 1):
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            method="POST",
-            headers=headers,
-        )
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                result: dict[str, Any] = json.load(resp)
-                return result
-        except urllib.error.HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="replace")
-            setattr(exc, "body", body)
+            response = get_azure_http_client().post(url, json=payload, headers=headers)
+            response.raise_for_status()
+            result: dict[str, Any] = response.json()
+            return result
+        except httpx.HTTPStatusError as exc:
+            body = exc.response.text
             last_exc = exc
 
             # Retry on rate limit (429) or server errors (5xx)
-            if exc.code == 429 or exc.code >= 500:
+            status_code = exc.response.status_code
+            if status_code == 429 or status_code >= 500:
                 if attempt < max_retries:
                     # Exponential backoff: 1s, 2s, 4s
                     delay = 2**attempt
                     logger.warning(
                         "Verifier HTTP %s (attempt %d/%d), retrying in %ds: %s",
-                        exc.code,
+                        status_code,
                         attempt + 1,
                         max_retries + 1,
                         delay,
@@ -232,7 +228,7 @@ def _call_openai(payload: dict[str, Any], max_retries: int = 3) -> dict[str, Any
                     time.sleep(delay)
                     continue
 
-            logger.error("Verifier HTTP %s: %s", exc.code, body[:2000])
+            logger.error("Verifier HTTP %s: %s", status_code, body[:2000])
             raise
 
     # Should not reach here, but satisfy type checker
@@ -478,8 +474,8 @@ def _verifier_token_param() -> str:
     return "max_tokens"
 
 
-def _alt_token_param_from_error(exc: urllib.error.HTTPError) -> str | None:
-    body = getattr(exc, "body", "") or ""
+def _alt_token_param_from_error(exc: httpx.HTTPStatusError) -> str | None:
+    body = exc.response.text or ""
     lower = body.lower()
     if "max_completion_tokens" in lower and "max_tokens" in lower:
         if "use 'max_completion_tokens' instead" in lower or "'max_tokens'" in lower:

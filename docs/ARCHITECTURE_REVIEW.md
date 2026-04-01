@@ -6,8 +6,9 @@
 **Status note:** Several foundation items identified here shipped later on
 2026-03-31: Azure Search timeout, DB QueuePool, safer auth defaults, matter
 creation/access hardening, per-user/per-matter session isolation, zero-doc
-matter visibility, and the matter dashboard follow-up fixes. The remaining
-sections below should be read as the open roadmap after those changes.
+matter visibility, the matter dashboard follow-up fixes, and the `httpx`
+migration for ask-path Azure calls. The remaining sections below should be
+read as the open roadmap after those changes.
 
 ---
 
@@ -190,7 +191,6 @@ This is a Phase 3+ feature, not a bug. But it's worth knowing the access model i
 | Debt Item | Location | Impact | Effort to Fix |
 |-----------|----------|--------|---------------|
 | Sync pipeline | `ask_service.py` | Blocks scaling | Large (async migration) |
-| urllib.request | `retrieval.py`, `verification.py`, `embeddings.py` | No connection reuse | Medium (httpx swap) |
 | 700-line execute_ask() | `ask_service.py` | Hard to modify/test | Medium (decompose) |
 | In-memory caches | `retrieval.py`, `cache.py` | Don't scale horizontally | Medium (Redis) |
 | No request deadline | `ask_service.py` | No latency guarantee | Small (add timeout) |
@@ -204,7 +204,7 @@ This is a Phase 3+ feature, not a bug. But it's worth knowing the access model i
 ## Recommended Architecture Evolution
 
 ### Phase 8a: Remaining Foundation Work (post 03-31, 1-2 weeks)
-- Finish the remaining latency fixes from `LATENCY_FIXES.md` (`httpx`, Redis follow-up)
+- Finish the remaining latency fix from `LATENCY_FIXES.md` (Redis follow-up)
 - Add request deadline/timeout to `execute_ask()`
 - Add load tests for NFR-011 and NFR-012
 
@@ -212,7 +212,6 @@ This is a Phase 3+ feature, not a bug. But it's worth knowing the access model i
 - Decompose `execute_ask()` into: `retrieve()`, `verify()`, `synthesize()`, `cite()`
 - Replace verification loop with single LLM answer synthesis call
 - Add conversation context to LLM prompt (pass last 3 messages)
-- Replace urllib with httpx
 
 ### Phase 9: Document Intelligence (4-6 weeks)
 - Document-level embeddings and summaries
