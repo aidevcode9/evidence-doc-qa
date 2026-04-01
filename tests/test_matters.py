@@ -37,8 +37,8 @@ class TestListMattersForTenant:
 
         # Mock session to return test data
         mock_rows = [
-            ("matter-a", 3, "2026-03-15T12:00:00Z", "snap_aaa111", None),
-            ("matter-b", 1, "2026-03-14T12:00:00Z", "snap_bbb222", None),
+            ("matter-a", None, "2026-03-15T12:00:00Z", 3, "2026-03-15T12:00:00Z", "snap_aaa111"),
+            ("matter-b", None, "2026-03-14T12:00:00Z", 1, "2026-03-14T12:00:00Z", "snap_bbb222"),
         ]
         with patch("app.db.session_scope") as mock_scope:
             mock_session = MagicMock()
@@ -62,7 +62,7 @@ class TestListMattersForTenant:
         from app.db import list_matters_for_tenant
 
         mock_rows = [
-            ("acme-v-widget-corp", 2, "2026-03-15T12:00:00Z", "snap_xxx", None),
+            ("acme-v-widget-corp", None, "2026-03-15T12:00:00Z", 2, "2026-03-15T12:00:00Z", "snap_xxx"),
         ]
         with patch("app.db.session_scope") as mock_scope:
             mock_session = MagicMock()
@@ -91,6 +91,28 @@ class TestListMattersForTenant:
             )
 
         assert result == []
+
+    def test_includes_zero_doc_matters(self) -> None:
+        """A created matter with zero ready docs should still be listed."""
+        from app.db import list_matters_for_tenant
+
+        mock_rows = [
+            ("empty-matter", "Empty Matter", "2026-03-31T12:00:00Z", 0, None, None),
+        ]
+        with patch("app.db.session_scope") as mock_scope:
+            mock_session = MagicMock()
+            mock_session.execute.return_value.all.return_value = mock_rows
+            mock_scope.return_value.__enter__ = MagicMock(return_value=mock_session)
+            mock_scope.return_value.__exit__ = MagicMock(return_value=False)
+
+            result = list_matters_for_tenant(
+                tenant_id="t1", user_id="u1", user_role="attorney"
+            )
+
+        assert len(result) == 1
+        assert result[0]["matter_id"] == "empty-matter"
+        assert result[0]["doc_count"] == 0
+        assert result[0]["latest_snapshot_id"] is None
 
 
 class TestListDocumentsForMatter:
@@ -247,6 +269,45 @@ class TestListMatterDocsEndpoint:
             assert response.status_code == 403
 
 
+class TestGetMatterEndpoint:
+    """GET /v1/matters/{matter_id} returns a single matter summary."""
+
+    def test_get_matter_returns_zero_doc_summary(self) -> None:
+        mock_matter = {
+            "matter_id": "empty-matter",
+            "display_name": "Empty Matter",
+            "doc_count": 0,
+            "latest_snapshot_id": None,
+            "created_at_utc": "2026-03-31T12:00:00Z",
+        }
+        with (
+            patch("app.routers.matters.has_permission", return_value=True),
+            patch("app.routers.matters.user_has_matter_access", return_value=True),
+            patch("app.routers.matters.get_matter_summary", return_value=mock_matter),
+            patch(
+                "app.routers.matters.get_matter_last_questions",
+                return_value={"empty-matter": {"last_question_at": None, "last_question_preview": None}},
+            ),
+        ):
+            from app.routers.matters import router
+
+            app = FastAPI()
+            app.include_router(router)
+            client = TestClient(app, headers={
+                "X-Tenant-Id": "t1",
+                "X-User-Id": "u1",
+                "X-User-Role": "attorney",
+            })
+
+            response = client.get("/v1/matters/empty-matter")
+            assert response.status_code == 200
+            data = response.json()
+            assert data["matter_id"] == "empty-matter"
+            assert data["display_name"] == "Empty Matter"
+            assert data["doc_count"] == 0
+            assert data["latest_snapshot_id"] is None
+
+
 # --- Matter Naming Tests ---
 
 
@@ -258,7 +319,7 @@ class TestListMattersWithDisplayName:
         from app.db import list_matters_for_tenant
 
         mock_rows = [
-            ("smith-claim", 2, "2026-03-15T12:00:00Z", "snap_x", "Smith Insurance Claim"),
+            ("smith-claim", "Smith Insurance Claim", "2026-03-15T12:00:00Z", 2, "2026-03-15T12:00:00Z", "snap_x"),
         ]
         with patch("app.db.session_scope") as mock_scope:
             mock_session = MagicMock()
@@ -277,7 +338,7 @@ class TestListMattersWithDisplayName:
         from app.db import list_matters_for_tenant
 
         mock_rows = [
-            ("old-matter", 1, "2026-03-15T12:00:00Z", "snap_y", None),
+            ("old-matter", None, "2026-03-15T12:00:00Z", 1, "2026-03-15T12:00:00Z", "snap_y"),
         ]
         with patch("app.db.session_scope") as mock_scope:
             mock_session = MagicMock()
@@ -317,9 +378,15 @@ class TestCreateMatterEndpoint:
     def test_create_matter_returns_201(self) -> None:
         with (
             patch("app.routers.matters.has_permission", return_value=True),
-            patch("app.routers.matters.ensure_matter_exists") as mock_ensure,
+            patch("app.routers.matters.create_matter_with_creator_access") as mock_create,
         ):
             from app.routers.matters import router
+            from app.rbac import Role
+
+            mock_matter = MagicMock()
+            mock_matter.matter_id = "smith-v-jones"
+            mock_matter.display_name = "Smith v. Jones"
+            mock_create.return_value = (mock_matter, True)
 
             app = FastAPI()
             app.include_router(router)
@@ -336,7 +403,85 @@ class TestCreateMatterEndpoint:
             assert response.status_code == 201
             assert response.json()["matter_id"] == "smith-v-jones"
             assert response.json()["display_name"] == "Smith v. Jones"
-            mock_ensure.assert_called_once_with("smith-v-jones", "t1", "Smith v. Jones")
+            mock_create.assert_called_once_with(
+                "smith-v-jones",
+                "t1",
+                "Smith v. Jones",
+                creator_user_id="u1",
+                creator_role=Role.ADMIN,
+            )
+
+    def test_create_matter_viewer_returns_403(self) -> None:
+        with patch("app.routers.matters.has_permission", return_value=False):
+            from app.routers.matters import router
+
+            app = FastAPI()
+            app.include_router(router)
+            client = TestClient(app, headers={
+                "X-Tenant-Id": "t1",
+                "X-User-Id": "u1",
+                "X-User-Role": "viewer",
+            })
+
+            response = client.post(
+                "/v1/matters",
+                json={"matter_id": "smith-v-jones", "display_name": "Smith v. Jones"},
+            )
+            assert response.status_code == 403
+
+    def test_create_existing_inaccessible_matter_returns_409(self) -> None:
+        with (
+            patch("app.routers.matters.has_permission", return_value=True),
+            patch("app.routers.matters.create_matter_with_creator_access") as mock_create,
+            patch("app.routers.matters.user_has_matter_access", return_value=False),
+        ):
+            from app.routers.matters import router
+
+            mock_matter = MagicMock()
+            mock_matter.matter_id = "smith-v-jones"
+            mock_matter.display_name = "Smith v. Jones"
+            mock_create.return_value = (mock_matter, False)
+
+            app = FastAPI()
+            app.include_router(router)
+            client = TestClient(app, headers={
+                "X-Tenant-Id": "t1",
+                "X-User-Id": "u1",
+                "X-User-Role": "attorney",
+            })
+
+            response = client.post(
+                "/v1/matters",
+                json={"matter_id": "smith-v-jones", "display_name": "Smith v. Jones"},
+            )
+            assert response.status_code == 409
+
+    def test_create_existing_accessible_matter_returns_200(self) -> None:
+        with (
+            patch("app.routers.matters.has_permission", return_value=True),
+            patch("app.routers.matters.create_matter_with_creator_access") as mock_create,
+            patch("app.routers.matters.user_has_matter_access", return_value=True),
+        ):
+            from app.routers.matters import router
+
+            mock_matter = MagicMock()
+            mock_matter.matter_id = "smith-v-jones"
+            mock_matter.display_name = "Smith v. Jones"
+            mock_create.return_value = (mock_matter, False)
+
+            app = FastAPI()
+            app.include_router(router)
+            client = TestClient(app, headers={
+                "X-Tenant-Id": "t1",
+                "X-User-Id": "u1",
+                "X-User-Role": "attorney",
+            })
+
+            response = client.post(
+                "/v1/matters",
+                json={"matter_id": "smith-v-jones", "display_name": "Smith v. Jones"},
+            )
+            assert response.status_code == 200
 
     def test_create_matter_invalid_id_returns_400(self) -> None:
         with (
@@ -427,6 +572,24 @@ class TestRenameMatterEndpoint:
             )
             assert response.status_code == 200
             assert response.json()["display_name"] == "Smith vs Acme Corp"
+
+    def test_rename_viewer_returns_403(self) -> None:
+        with patch("app.routers.matters.has_permission", return_value=False):
+            from app.routers.matters import router
+
+            app = FastAPI()
+            app.include_router(router)
+            client = TestClient(app, headers={
+                "X-Tenant-Id": "t1",
+                "X-User-Id": "u1",
+                "X-User-Role": "viewer",
+            })
+
+            response = client.put(
+                "/v1/matters/smith-case/name",
+                json={"display_name": "Smith vs Acme Corp"},
+            )
+            assert response.status_code == 403
 
     def test_rename_not_found_returns_404(self) -> None:
         with (

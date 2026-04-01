@@ -12,7 +12,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getAuthHeaders } from "@/lib/api";
+import { buildBackendAuthHeaders } from "@/lib/server-auth";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -49,6 +49,7 @@ export async function GET(
   { params }: { params: Promise<{ docId: string }> }
 ) {
   const { docId } = await params;
+  const matterId = request.nextUrl.searchParams.get("matter_id") || undefined;
 
   // Validate docId format (security: prevent path traversal)
   if (!DOC_ID_PATTERN.test(docId)) {
@@ -72,9 +73,19 @@ export async function GET(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
+  let headers: Headers;
+  try {
+    headers = buildBackendAuthHeaders(request, { matterId });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Authentication required" },
+      { status: 401 }
+    );
+  }
+
   try {
     const response = await fetch(`${API_URL}/v1/docs/${docId}/view`, {
-      headers: getAuthHeaders(),
+      headers,
       signal: controller.signal,
     });
 

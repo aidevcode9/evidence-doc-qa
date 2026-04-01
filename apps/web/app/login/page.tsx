@@ -98,11 +98,7 @@ export default function LoginPage() {
         setError(data.error || "Invalid beta code.");
         return;
       }
-
-      const data = await response.json();
-      if (data.sessionId) {
-        localStorage.setItem("docqa_session", data.sessionId);
-      }
+      await response.json();
       localStorage.setItem(
         "docqa_user",
         JSON.stringify({ name: trimmedName, email: trimmedEmail })

@@ -29,6 +29,7 @@ def ask(
         session_id=x_docqa_session,
         tenant_id=context.tenant_id,
         matter_id=context.matter_id,
+        user_id=context.user_id,
     )
 
 

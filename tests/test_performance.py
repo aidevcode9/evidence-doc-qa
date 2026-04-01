@@ -210,6 +210,7 @@ class TestLatencyBreakdownStored:
                 session_id=None,
                 tenant_id="t1",
                 matter_id="m1",
+                user_id="u1",
             )
 
             mock_telemetry.assert_called_once()

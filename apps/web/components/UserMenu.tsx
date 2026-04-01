@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import type { User } from "@/lib/auth";
-import { fetchCapabilities } from "@/lib/api";
+import { clearStoredSessions, fetchCapabilities } from "@/lib/api";
 
 const ROLE_COLORS: Record<string, string> = {
   admin: "bg-primary/10 text-primary border-primary/20",
@@ -72,7 +72,8 @@ export function UserMenu() {
       // Clear cookies failed — redirect anyway
     }
     localStorage.removeItem("docqa_user");
-    localStorage.removeItem("docqa_session");
+    localStorage.removeItem("docqa_matter");
+    clearStoredSessions();
     router.push("/login?logged_out=1");
   };
 

@@ -397,3 +397,35 @@ class TestCitedPacketEndpoint:
                     x_docqa_session="sess-123",
                 )
             assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_cited_packet_uses_user_and_matter_scoped_lookup(self) -> None:
+        """Cited packet export should stay scoped to the current user and matter."""
+        from app.routers.export import export_cited_packet
+
+        context = make_context(user_id="scoped-user", matter_id="scoped-matter")
+
+        with (
+            patch("app.routers.export.get_qa_session", return_value=self._mock_session()) as mock_get_session,
+            patch("app.routers.export.get_session_messages", return_value=self._mock_messages()) as mock_get_messages,
+            patch("app.routers.export.has_permission", return_value=True),
+        ):
+            await export_cited_packet(
+                "sess-123",
+                self._mock_bg(),
+                context=context,
+                format="pdf",
+                x_docqa_session="sess-123",
+            )
+
+        mock_get_session.assert_called_once_with(
+            "sess-123",
+            tenant_id="tenant-1",
+            user_id="scoped-user",
+            matter_id="scoped-matter",
+        )
+        mock_get_messages.assert_called_once_with(
+            "sess-123",
+            tenant_id="tenant-1",
+            matter_id="scoped-matter",
+        )

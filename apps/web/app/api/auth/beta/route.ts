@@ -53,5 +53,22 @@ export async function POST(request: Request) {
     maxAge: 12 * 60 * 60,
     path: "/",
   });
+  response.cookies.set(
+    "docqa_user",
+    JSON.stringify({
+      userId: `beta-${sessionId}`,
+      tenantId: "demo-tenant",
+      role: "admin",
+      name,
+      email,
+    }),
+    {
+      httpOnly: false,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 12 * 60 * 60,
+      path: "/",
+    }
+  );
   return response;
 }

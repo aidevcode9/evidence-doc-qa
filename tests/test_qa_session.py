@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "apps" / "api"))
 # Default tenant/matter IDs for tests
 TEST_TENANT_ID = "tenant-1"
 TEST_MATTER_ID = "matter-1"
+TEST_USER_ID = "user-1"
 
 
 class TestQASessionModel:
@@ -32,11 +33,13 @@ class TestQASessionModel:
                 docs_snapshot_id="snap_abc",
                 tenant_id=TEST_TENANT_ID,
                 matter_id=TEST_MATTER_ID,
+                user_id=TEST_USER_ID,
             )
 
             assert result.session_id == "test-session-123"
             assert result.docs_snapshot_id == "snap_abc"
             assert result.tenant_id == TEST_TENANT_ID
+            assert result.user_id == TEST_USER_ID
             assert result.matter_id == TEST_MATTER_ID
             mock_session.add.assert_called_once()
 
@@ -54,7 +57,12 @@ class TestQASessionModel:
             mock_scope.return_value.__exit__ = MagicMock(return_value=False)
             mock_db_session.scalars.return_value.first.return_value = mock_session_obj
 
-            result = get_qa_session("test-session-123", tenant_id=TEST_TENANT_ID)
+            result = get_qa_session(
+                "test-session-123",
+                tenant_id=TEST_TENANT_ID,
+                user_id=TEST_USER_ID,
+                matter_id=TEST_MATTER_ID,
+            )
 
             assert result is not None
             assert result.session_id == "test-session-123"
@@ -69,7 +77,12 @@ class TestQASessionModel:
             mock_scope.return_value.__exit__ = MagicMock(return_value=False)
             mock_db_session.scalars.return_value.first.return_value = None
 
-            result = get_qa_session("nonexistent", tenant_id=TEST_TENANT_ID)
+            result = get_qa_session(
+                "nonexistent",
+                tenant_id=TEST_TENANT_ID,
+                user_id=TEST_USER_ID,
+                matter_id=TEST_MATTER_ID,
+            )
 
             assert result is None
 
@@ -119,7 +132,11 @@ class TestQAMessageModel:
             mock_scope.return_value.__exit__ = MagicMock(return_value=False)
             mock_db_session.scalars.return_value.all.return_value = mock_messages
 
-            result = get_session_messages("session-abc", tenant_id=TEST_TENANT_ID)
+            result = get_session_messages(
+                "session-abc",
+                tenant_id=TEST_TENANT_ID,
+                matter_id=TEST_MATTER_ID,
+            )
 
             assert len(result) == 2
             assert result[0].message_id == "msg-1"
@@ -204,6 +221,7 @@ class TestGetOrCreateSession:
                 "snap_abc",
                 tenant_id=TEST_TENANT_ID,
                 matter_id=TEST_MATTER_ID,
+                user_id=TEST_USER_ID,
             )
 
             assert result.session_id == "existing-session"
@@ -223,6 +241,7 @@ class TestGetOrCreateSession:
                     "snap_abc",
                     tenant_id=TEST_TENANT_ID,
                     matter_id=TEST_MATTER_ID,
+                    user_id=TEST_USER_ID,
                 )
 
                 assert result.session_id == "new-session"
@@ -242,5 +261,6 @@ class TestGetOrCreateSession:
                     "snap_abc",
                     tenant_id=TEST_TENANT_ID,
                     matter_id=TEST_MATTER_ID,
+                    user_id=TEST_USER_ID,
                 )
                 assert result.session_id == "race-session"

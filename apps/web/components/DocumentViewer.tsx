@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Citation } from "@/types";
+import { getCurrentMatter } from "@/lib/api";
 
 interface DocumentViewerProps {
   citation: Citation | null;
@@ -21,7 +22,8 @@ export function DocumentViewer({ citation, onClose }: DocumentViewerProps) {
     return null;
   }
 
-  const docUrl = `/api/docs/${citation.doc_id}/view#page=${citation.page_num}`;
+  const matterId = getCurrentMatter();
+  const docUrl = `/api/docs/${citation.doc_id}/view?matter_id=${encodeURIComponent(matterId)}#page=${citation.page_num}`;
 
   const handleIframeLoad = () => {
     setLoading(false);

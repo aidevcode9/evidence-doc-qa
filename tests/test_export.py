@@ -610,6 +610,61 @@ class TestExportEndpoint:
                 )
                 assert result.media_type == "application/pdf"
 
+    def test_export_uses_user_and_matter_scoped_lookup(self) -> None:
+        """Export lookup must stay bound to the current user and matter."""
+        from unittest.mock import patch, MagicMock
+        from app.routers.export import export_session
+
+        mock_session = MagicMock(spec=QASession)
+        mock_session.session_id = "my-session-123"
+        mock_session.docs_snapshot_id = "snap_abc"
+        mock_session.created_at_utc = datetime.now(timezone.utc).isoformat()
+
+        mock_messages = [MagicMock(spec=QAMessage), MagicMock(spec=QAMessage)]
+        mock_messages[0].role = "user"
+        mock_messages[0].content = "Question?"
+        mock_messages[0].citations_json = None
+        mock_messages[0].evidence_json = None
+        mock_messages[0].refusal_code = None
+        mock_messages[0].created_at_utc = datetime.now(timezone.utc).isoformat()
+        mock_messages[1].role = "assistant"
+        mock_messages[1].content = "Answer."
+        mock_messages[1].citations_json = None
+        mock_messages[1].evidence_json = None
+        mock_messages[1].refusal_code = None
+        mock_messages[1].created_at_utc = datetime.now(timezone.utc).isoformat()
+
+        mock_bg = self._mock_background_tasks()
+        context = make_context(user_id="scoped-user", matter_id="scoped-matter")
+
+        with (
+            patch("app.routers.export.get_qa_session", return_value=mock_session) as mock_get_session,
+            patch("app.routers.export.get_session_messages", return_value=mock_messages) as mock_get_messages,
+        ):
+            import asyncio
+
+            asyncio.get_event_loop().run_until_complete(
+                export_session(
+                    "my-session-123",
+                    mock_bg,
+                    context=context,
+                    format="pdf",
+                    x_docqa_session="my-session-123",
+                )
+            )
+
+        mock_get_session.assert_called_once_with(
+            "my-session-123",
+            tenant_id="tenant-1",
+            user_id="scoped-user",
+            matter_id="scoped-matter",
+        )
+        mock_get_messages.assert_called_once_with(
+            "my-session-123",
+            tenant_id="tenant-1",
+            matter_id="scoped-matter",
+        )
+
     def test_export_limits_messages(self) -> None:
         """Export should limit messages to MAX_EXPORT_MESSAGES."""
         from unittest.mock import patch, MagicMock

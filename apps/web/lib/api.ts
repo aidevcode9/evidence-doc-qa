@@ -1,15 +1,25 @@
 /**
  * Centralized API client for Evidence Bound frontend.
  *
- * Reads user identity from the `docqa_user` cookie (set after SSO login).
- * Falls back to hardcoded demo headers when no cookie is present.
+ * Authenticated requests go through the Next.js proxy so JWT cookies stay
+ * server-side in browser sessions.
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const BACKEND_API_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const PROXY_API_URL = "/api/backend";
+const SESSION_KEY_PREFIX = "docqa_session:";
+
+export type CachedUser = {
+  userId: string;
+  tenantId: string;
+  role: string;
+  name?: string;
+  email?: string;
+};
 
 let _currentMatterId =
-  (typeof window !== "undefined" && localStorage.getItem("docqa_matter")) ||
-  "";
+  (typeof window !== "undefined" && localStorage.getItem("docqa_matter")) || "";
 
 /**
  * Set the active matter and persist to localStorage.
@@ -29,112 +39,66 @@ export function getCurrentMatter(): string {
 }
 
 /**
- * Read user claims from the docqa_user cookie (set after SSO login).
- * Returns null if no cookie exists (demo mode / not logged in).
+ * Read user claims from the docqa_user cookie when available.
  */
-function getCachedUser(): {
-  userId: string;
-  tenantId: string;
-  role: string;
-  name: string;
-} | null {
+export function getCachedUser(): CachedUser | null {
   if (typeof document === "undefined") return null;
   const match = document.cookie
     .split("; ")
-    .find((c) => c.startsWith("docqa_user="));
+    .find((cookie) => cookie.startsWith("docqa_user="));
   if (!match) return null;
   try {
-    return JSON.parse(decodeURIComponent(match.split("=")[1]));
+    return JSON.parse(decodeURIComponent(match.split("=")[1])) as CachedUser;
   } catch {
     return null;
   }
 }
 
 /**
- * Get authentication headers for API requests.
- *
- * Reads identity from docqa_user cookie (JWT claims) when available.
- * Falls back to hardcoded demo headers when no cookie is present.
+ * Headers needed by the web proxy for matter-scoped routes.
  */
 export function getAuthHeaders(): Record<string, string> {
-  const user = getCachedUser();
-  if (user) {
-    return {
-      "X-Tenant-Id": user.tenantId,
-      "X-Matter-Id": _currentMatterId,
-      "X-User-Id": user.userId,
-      "X-User-Role": user.role,
-    };
-  }
-  // Fallback: demo mode (no SSO login)
+  if (!_currentMatterId) return {};
   return {
-    "X-Tenant-Id": "demo-tenant",
     "X-Matter-Id": _currentMatterId,
-    "X-User-Id": "demo-user",
-    "X-User-Role": "admin",
   };
 }
 
 /**
- * Get tenant-only headers (no X-Matter-Id) for matter-listing endpoints.
- */
-function getTenantHeaders(): Record<string, string> {
-  const user = getCachedUser();
-  if (user) {
-    return {
-      "X-Tenant-Id": user.tenantId,
-      "X-User-Id": user.userId,
-      "X-User-Role": user.role,
-    };
-  }
-  return {
-    "X-Tenant-Id": "demo-tenant",
-    "X-User-Id": "demo-user",
-    "X-User-Role": "admin",
-  };
-}
-
-/**
- * Make an authenticated JSON API request.
- *
- * @param endpoint - API endpoint (e.g., "/v1/docs")
- * @param options - Fetch options (method, body, etc.)
- * @returns Parsed JSON response
- * @throws Error with detail message on non-2xx response
+ * Make an authenticated JSON API request through the Next.js proxy.
  */
 export async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = `${API_URL}${endpoint}`;
-  const headers: Record<string, string> = {
-    ...getAuthHeaders(),
-    ...(options.headers as Record<string, string>),
-  };
-
-  const response = await fetch(url, { ...options, headers });
+  const response = await fetch(`${PROXY_API_URL}${endpoint}`, {
+    ...options,
+    headers: {
+      ...getAuthHeaders(),
+      ...(options.headers as Record<string, string> | undefined),
+    },
+  });
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
     throw new Error(error.detail || `API error: ${response.status}`);
   }
 
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
   return response.json();
 }
 
 /**
- * Upload a file with authentication.
- *
- * @param endpoint - API endpoint for upload
- * @param formData - FormData with file
- * @returns Raw Response object
+ * Upload a file with matter context through the Next.js proxy.
  */
 export async function apiUpload(
   endpoint: string,
   formData: FormData
 ): Promise<Response> {
-  const url = `${API_URL}${endpoint}`;
-  return fetch(url, {
+  return fetch(`${PROXY_API_URL}${endpoint}`, {
     method: "POST",
     body: formData,
     headers: getAuthHeaders(),
@@ -142,10 +106,10 @@ export async function apiUpload(
 }
 
 /**
- * Get the base API URL.
+ * Get the authenticated API base URL exposed to client components.
  */
 export function getApiUrl(): string {
-  return API_URL;
+  return PROXY_API_URL;
 }
 
 /**
@@ -159,22 +123,14 @@ export interface ServerCapabilities {
   auth_bypass_enabled: boolean;
 }
 
-/**
- * Fetch server capabilities from /healthz endpoint.
- * Used by frontend to adapt UI (e.g., hide Google SSO when auth bypassed,
- * show "PDF only" when pypdf mode).
- */
 export async function fetchCapabilities(): Promise<ServerCapabilities> {
-  const response = await fetch(`${API_URL}/healthz`);
+  const response = await fetch(`${BACKEND_API_URL}/healthz`);
   if (!response.ok) {
     throw new Error("Failed to fetch server capabilities");
   }
   return response.json();
 }
 
-/**
- * Matter info returned by GET /v1/matters.
- */
 export type MatterInfo = {
   matter_id: string;
   display_name: string;
@@ -182,11 +138,9 @@ export type MatterInfo = {
   latest_snapshot_id: string | null;
   last_question_at: string | null;
   last_question_preview: string | null;
+  created_at_utc?: string | null;
 };
 
-/**
- * Document summary returned by GET /v1/matters/{id}/docs.
- */
 export type DocSummary = {
   doc_id: string;
   doc_name: string;
@@ -195,66 +149,88 @@ export type DocSummary = {
   page_count: number | null;
 };
 
-/**
- * Fetch all matters the user can access (uses tenant-only headers).
- */
 export async function fetchMatters(): Promise<MatterInfo[]> {
-  const response = await fetch(`${API_URL}/v1/matters`, {
-    headers: getTenantHeaders(),
-  });
-  if (!response.ok) {
-    throw new Error("Failed to fetch matters");
-  }
-  return response.json();
+  return apiRequest<MatterInfo[]>("/v1/matters");
 }
 
-/**
- * Fetch documents for a specific matter.
- */
+export async function fetchMatter(matterId: string): Promise<MatterInfo> {
+  return apiRequest<MatterInfo>(`/v1/matters/${encodeURIComponent(matterId)}`);
+}
+
 export async function fetchMatterDocs(matterId: string): Promise<DocSummary[]> {
-  const response = await fetch(`${API_URL}/v1/matters/${encodeURIComponent(matterId)}/docs`, {
-    headers: getTenantHeaders(),
-  });
-  if (!response.ok) {
-    throw new Error("Failed to fetch matter documents");
-  }
-  return response.json();
+  return apiRequest<DocSummary[]>(
+    `/v1/matters/${encodeURIComponent(matterId)}/docs`
+  );
 }
 
-/**
- * Create a matter with a user-provided display name.
- * Idempotent — if the matter already exists, this is a no-op.
- */
-export async function createMatter(matterId: string, displayName: string): Promise<void> {
-  const response = await fetch(`${API_URL}/v1/matters`, {
+export async function createMatter(
+  matterId: string,
+  displayName: string
+): Promise<MatterInfo | { matter_id: string; display_name: string }> {
+  return apiRequest(`/v1/matters`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...getTenantHeaders(),
     },
     body: JSON.stringify({ matter_id: matterId, display_name: displayName }),
   });
-  if (!response.ok && response.status !== 409) {
-    throw new Error("Failed to create matter");
-  }
 }
 
-/**
- * Rename a matter's display name.
- */
-export async function renameMatter(matterId: string, displayName: string): Promise<void> {
-  const response = await fetch(
-    `${API_URL}/v1/matters/${encodeURIComponent(matterId)}/name`,
-    {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        ...getTenantHeaders(),
-      },
-      body: JSON.stringify({ display_name: displayName }),
-    }
-  );
-  if (!response.ok) {
-    throw new Error("Failed to rename matter");
+export async function renameMatter(
+  matterId: string,
+  displayName: string
+): Promise<void> {
+  await apiRequest(`/v1/matters/${encodeURIComponent(matterId)}/name`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ display_name: displayName }),
+  });
+}
+
+export function getMatterSessionStorageKey(matterId: string): string {
+  const tenantId = getCachedUser()?.tenantId || "anonymous";
+  return `${SESSION_KEY_PREFIX}${tenantId}:${matterId}`;
+}
+
+export function getMatterSessionId(matterId: string): string | null {
+  if (typeof window === "undefined") return null;
+
+  const scopedKey = getMatterSessionStorageKey(matterId);
+  const scopedSession = localStorage.getItem(scopedKey);
+  if (scopedSession) {
+    return scopedSession;
   }
+
+  const legacySession = localStorage.getItem("docqa_session");
+  if (legacySession) {
+    localStorage.setItem(scopedKey, legacySession);
+    localStorage.removeItem("docqa_session");
+    return legacySession;
+  }
+
+  return null;
+}
+
+export function setMatterSessionId(matterId: string, sessionId: string): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(getMatterSessionStorageKey(matterId), sessionId);
+}
+
+export function clearStoredSessions(): void {
+  if (typeof window === "undefined") return;
+
+  const keysToRemove: string[] = [];
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith(SESSION_KEY_PREFIX)) {
+      keysToRemove.push(key);
+    }
+  }
+
+  for (const key of keysToRemove) {
+    localStorage.removeItem(key);
+  }
+  localStorage.removeItem("docqa_session");
 }

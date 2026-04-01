@@ -16,14 +16,22 @@ export default function DashboardPage() {
     const savedMatter = localStorage.getItem("docqa_matter");
     if (savedMatter) {
       localStorage.removeItem("docqa_matter");
-      router.push(`/matters/${savedMatter}`);
+      router.replace(`/matters/${savedMatter}`);
       return;
     }
     setMigrated(true);
   }, [router]);
 
-  /* Don't render dashboard until we know migration check is done */
-  if (!migrated) return null;
+  if (!migrated) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-background text-foreground">
+        <div className="flex items-center gap-3 rounded-xl border border-border bg-card/70 px-4 py-3 shadow-sm">
+          <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm text-muted-foreground">Loading your matters...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-background text-foreground font-sans">

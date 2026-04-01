@@ -39,6 +39,7 @@ PERMISSIONS: dict[str, list[Role]] = {
     "query": [Role.ADMIN, Role.ATTORNEY, Role.PARALEGAL, Role.VIEWER],
     "upload": [Role.ADMIN, Role.ATTORNEY, Role.PARALEGAL],
     "export": [Role.ADMIN, Role.ATTORNEY, Role.PARALEGAL, Role.VIEWER],
+    "create_matter": [Role.ADMIN, Role.ATTORNEY, Role.PARALEGAL],
     "delete": [Role.ADMIN],
     "manage_users": [Role.ADMIN],
 }

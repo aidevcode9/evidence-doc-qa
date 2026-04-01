@@ -64,7 +64,12 @@ function sortMatters(matters: MatterInfo[]): MatterInfo[] {
     if (a.doc_count > 0 && b.doc_count === 0) return -1;
     if (a.doc_count === 0 && b.doc_count > 0) return 1;
 
-    // 3. By doc_count descending
+    // 3. Newer matters before older ones when both are still empty
+    if (a.created_at_utc && b.created_at_utc) {
+      return new Date(b.created_at_utc).getTime() - new Date(a.created_at_utc).getTime();
+    }
+
+    // 4. By doc_count descending
     return b.doc_count - a.doc_count;
   });
 }
@@ -129,7 +134,7 @@ export function MattersDashboard() {
       const data = await fetchMatters();
       setMatters(sortMatters(data));
     } catch {
-      setError("Unable to load matters. Is the backend running?");
+      setError("Unable to load matters right now.");
     } finally {
       setLoading(false);
     }
@@ -152,7 +157,7 @@ export function MattersDashboard() {
       setNewName("");
       router.push(`/matters/${slug}`);
     } catch {
-      setError("Failed to create matter");
+      setError("Unable to create that matter.");
     } finally {
       setCreating(false);
     }

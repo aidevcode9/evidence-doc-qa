@@ -131,6 +131,8 @@ LANGFUSE_ENABLED = _is_truthy(_langfuse_enabled_raw) and bool(LANGFUSE_PUBLIC_KE
 
 # Authentication (FR-050)
 AUTH_MODE = _getenv("AUTH_MODE", "headers")  # jwt | headers (headers for backward compat)
+APP_ENV = _getenv("APP_ENV", _getenv("NODE_ENV", "development")).lower()
+IS_PRODUCTION = APP_ENV == "production"
 
 # Auth Bypass Mode (FR-054) - FOR LOCAL DEMOS ONLY
 # WARNING: Never enable in production! Skips all auth checks.

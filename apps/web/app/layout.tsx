@@ -44,7 +44,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           enableSystem
           disableTransitionOnChange
         >
-          <TooltipProvider delayDuration={300}>
+          <TooltipProvider delay={300}>
             {children}
           </TooltipProvider>
         </ThemeProvider>

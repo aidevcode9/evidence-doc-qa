@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
   response.cookies.delete("docqa_access");
   response.cookies.delete("docqa_refresh");
   response.cookies.delete("docqa_beta"); // Clear legacy beta cookie too
+  response.cookies.delete("docqa_user");
 
   return response;
 }

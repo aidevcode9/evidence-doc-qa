@@ -50,6 +50,7 @@ class TestPermissions:
         assert has_permission(Role.ADMIN, "query")
         assert has_permission(Role.ADMIN, "upload")
         assert has_permission(Role.ADMIN, "export")
+        assert has_permission(Role.ADMIN, "create_matter")
         assert has_permission(Role.ADMIN, "delete")
         assert has_permission(Role.ADMIN, "manage_users")
 
@@ -60,6 +61,7 @@ class TestPermissions:
         assert has_permission(Role.ATTORNEY, "query")
         assert has_permission(Role.ATTORNEY, "upload")
         assert has_permission(Role.ATTORNEY, "export")
+        assert has_permission(Role.ATTORNEY, "create_matter")
         assert not has_permission(Role.ATTORNEY, "delete")
         assert not has_permission(Role.ATTORNEY, "manage_users")
 
@@ -70,6 +72,7 @@ class TestPermissions:
         assert has_permission(Role.PARALEGAL, "query")
         assert has_permission(Role.PARALEGAL, "upload")
         assert has_permission(Role.PARALEGAL, "export")
+        assert has_permission(Role.PARALEGAL, "create_matter")
         assert not has_permission(Role.PARALEGAL, "delete")
         assert not has_permission(Role.PARALEGAL, "manage_users")
 
@@ -84,6 +87,12 @@ class TestPermissions:
         from app.rbac import Role, has_permission
 
         assert not has_permission(Role.VIEWER, "delete")
+
+    def test_viewer_cannot_create_matter(self) -> None:
+        """Viewer cannot create or rename matters."""
+        from app.rbac import Role, has_permission
+
+        assert not has_permission(Role.VIEWER, "create_matter")
 
     def test_viewer_can_query(self) -> None:
         """Viewer can query documents."""

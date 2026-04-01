@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Generator, Iterable
 
@@ -102,6 +103,7 @@ class QASession(Base):
 
     session_id: Mapped[str] = mapped_column(String, primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    user_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     matter_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     docs_snapshot_id: Mapped[str] = mapped_column(String, nullable=False)
     created_at_utc: Mapped[str] = mapped_column(String, nullable=False)
@@ -264,6 +266,14 @@ def init_db() -> None:
             conn.execute(text("ALTER TABLE telemetry ADD COLUMN trace_metadata TEXT"))
             conn.commit()
 
+    qa_session_columns = [c["name"] for c in inspector.get_columns("qa_sessions")]
+    if "user_id" not in qa_session_columns:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE qa_sessions ADD COLUMN user_id TEXT"))
+            conn.commit()
+
+    _backfill_missing_matters()
+
 
 def _engine() -> Engine:
     if not DATABASE_URL:
@@ -359,6 +369,32 @@ def get_latest_snapshot_for_matter(tenant_id: str, matter_id: str) -> str | None
         return row[0] if row else None
 
 
+def _fallback_display_name(matter_id: str) -> str:
+    return matter_id.replace("-", " ").replace("_", " ").title()
+
+
+def _backfill_missing_matters() -> None:
+    """Create matter rows for legacy document-only matters."""
+    with session_scope() as session:
+        stmt = text(
+            "SELECT d.matter_id, d.tenant_id, MIN(d.ingested_at_utc) AS created_at_utc "
+            "FROM documents d "
+            "LEFT JOIN matters m ON m.matter_id = d.matter_id AND m.tenant_id = d.tenant_id "
+            "WHERE m.matter_id IS NULL "
+            "GROUP BY d.matter_id, d.tenant_id"
+        )
+        rows = session.execute(stmt).all()
+        for row in rows:
+            session.add(
+                Matter(
+                    matter_id=row[0],
+                    tenant_id=row[1],
+                    display_name=_fallback_display_name(row[0]),
+                    created_at_utc=row[2] or datetime.now(timezone.utc).isoformat(),
+                )
+            )
+
+
 def list_matters_for_tenant(
     tenant_id: str, user_id: str, user_role: str
 ) -> list[dict[str, Any]]:
@@ -375,61 +411,51 @@ def list_matters_for_tenant(
     Returns:
         List of dicts with matter_id, display_name, doc_count, latest_snapshot_id
     """
+    base_select = (
+        "SELECT m.matter_id, "
+        "m.display_name AS matter_display_name, "
+        "m.created_at_utc, "
+        "COALESCE(SUM(CASE WHEN d.status = 'ready' THEN 1 ELSE 0 END), 0) AS doc_count, "
+        "MAX(CASE WHEN d.status = 'ready' THEN d.ingested_at_utc END) AS latest_ingested, "
+        "("
+        "  SELECT d2.docs_snapshot_id FROM documents d2 "
+        "  WHERE d2.tenant_id = m.tenant_id "
+        "  AND d2.matter_id = m.matter_id "
+        "  AND d2.status = 'ready' "
+        "  ORDER BY d2.ingested_at_utc DESC LIMIT 1"
+        ") AS latest_snapshot_id "
+        "FROM matters m "
+        "LEFT JOIN documents d ON d.tenant_id = m.tenant_id AND d.matter_id = m.matter_id "
+    )
     with session_scope() as session:
         if user_role == "admin":
             stmt = text(
-                "SELECT documents.matter_id, COUNT(*) as doc_count, "
-                "MAX(documents.ingested_at_utc) as latest_ingested, "
-                "("
-                "  SELECT d2.docs_snapshot_id FROM documents d2 "
-                "  WHERE d2.tenant_id = :tenant_id "
-                "  AND d2.matter_id = documents.matter_id "
-                "  AND d2.status = 'ready' "
-                "  ORDER BY d2.ingested_at_utc DESC LIMIT 1"
-                ") as latest_snapshot_id, "
-                "m.display_name as matter_display_name "
-                "FROM documents "
-                "LEFT JOIN matters m ON m.matter_id = documents.matter_id "
-                "  AND m.tenant_id = documents.tenant_id "
-                "WHERE documents.tenant_id = :tenant_id AND documents.status = 'ready' "
-                "GROUP BY documents.matter_id, m.display_name "
-                "ORDER BY latest_ingested DESC"
+                base_select
+                + "WHERE m.tenant_id = :tenant_id "
+                "GROUP BY m.matter_id, m.display_name, m.created_at_utc "
+                "ORDER BY COALESCE(MAX(CASE WHEN d.status = 'ready' THEN d.ingested_at_utc END), m.created_at_utc) DESC"
             )
             rows = session.execute(stmt, {"tenant_id": tenant_id}).all()
         else:
             stmt = text(
-                "SELECT d.matter_id, COUNT(*) as doc_count, "
-                "MAX(d.ingested_at_utc) as latest_ingested, "
-                "("
-                "  SELECT d2.docs_snapshot_id FROM documents d2 "
-                "  WHERE d2.tenant_id = :tenant_id "
-                "  AND d2.matter_id = d.matter_id "
-                "  AND d2.status = 'ready' "
-                "  ORDER BY d2.ingested_at_utc DESC LIMIT 1"
-                ") as latest_snapshot_id, "
-                "m.display_name as matter_display_name "
-                "FROM documents d "
-                "LEFT JOIN matters m ON m.matter_id = d.matter_id "
-                "  AND m.tenant_id = d.tenant_id "
-                "JOIN matter_assignments ma ON d.matter_id = ma.matter_id "
-                "  AND ma.tenant_id = :tenant_id AND ma.user_id = :user_id "
-                "WHERE d.tenant_id = :tenant_id AND d.status = 'ready' "
-                "GROUP BY d.matter_id, m.display_name "
-                "ORDER BY latest_ingested DESC"
+                base_select
+                + "JOIN matter_assignments ma ON ma.tenant_id = m.tenant_id AND ma.matter_id = m.matter_id "
+                "WHERE m.tenant_id = :tenant_id AND ma.user_id = :user_id "
+                "GROUP BY m.matter_id, m.display_name, m.created_at_utc "
+                "ORDER BY COALESCE(MAX(CASE WHEN d.status = 'ready' THEN d.ingested_at_utc END), m.created_at_utc) DESC"
             )
-            rows = session.execute(
-                stmt, {"tenant_id": tenant_id, "user_id": user_id}
-            ).all()
+            rows = session.execute(stmt, {"tenant_id": tenant_id, "user_id": user_id}).all()
 
-        return [
-            {
-                "matter_id": row[0],
-                "doc_count": row[1],
-                "display_name": row[4] if row[4] else row[0].replace("-", " ").title(),
-                "latest_snapshot_id": row[3],
-            }
-            for row in rows
-        ]
+    return [
+        {
+            "matter_id": row[0],
+            "display_name": row[1] if row[1] else _fallback_display_name(row[0]),
+            "doc_count": row[3],
+            "latest_snapshot_id": row[5],
+            "created_at_utc": row[2],
+        }
+        for row in rows
+    ]
 
 
 def ensure_matter_exists(
@@ -453,7 +479,57 @@ def ensure_matter_exists(
             created_at_utc=utc_now(),
         )
         session.add(matter)
-        session.commit()
+
+
+def create_matter_with_creator_access(
+    matter_id: str,
+    tenant_id: str,
+    display_name: str,
+    creator_user_id: str,
+    creator_role: "Role",
+) -> tuple[Matter, bool]:
+    """Create a matter and grant creator access when required.
+
+    Returns:
+        Tuple of (matter, created_now)
+    """
+    from app.ingestion import utc_now
+    from app.rbac import Role
+
+    with session_scope() as session:
+        matter = session.get(Matter, (matter_id, tenant_id))
+        if matter is not None:
+            return matter, False
+
+        matter = Matter(
+            matter_id=matter_id,
+            tenant_id=tenant_id,
+            display_name=display_name,
+            created_at_utc=utc_now(),
+        )
+        session.add(matter)
+
+        if creator_role != Role.ADMIN:
+            assignment = session.scalars(
+                select(MatterAssignment).where(
+                    MatterAssignment.user_id == creator_user_id,
+                    MatterAssignment.tenant_id == tenant_id,
+                    MatterAssignment.matter_id == matter_id,
+                )
+            ).first()
+            if assignment is None:
+                session.add(
+                    MatterAssignment(
+                        assignment_id=str(uuid.uuid4()),
+                        user_id=creator_user_id,
+                        tenant_id=tenant_id,
+                        matter_id=matter_id,
+                        granted_by=creator_user_id,
+                        granted_at_utc=datetime.now(timezone.utc).isoformat(),
+                    )
+                )
+
+        return matter, True
 
 
 def update_matter_display_name(
@@ -465,8 +541,47 @@ def update_matter_display_name(
         if matter is None:
             return False
         matter.display_name = display_name
-        session.commit()
         return True
+
+
+def get_matter_summary(
+    matter_id: str,
+    tenant_id: str,
+) -> dict[str, Any] | None:
+    """Get a matter summary including zero-doc matters."""
+    with session_scope() as session:
+        stmt = text(
+            "SELECT m.matter_id, "
+            "m.display_name, "
+            "m.created_at_utc, "
+            "COALESCE(SUM(CASE WHEN d.status = 'ready' THEN 1 ELSE 0 END), 0) AS doc_count, "
+            "("
+            "  SELECT d2.docs_snapshot_id FROM documents d2 "
+            "  WHERE d2.tenant_id = m.tenant_id "
+            "  AND d2.matter_id = m.matter_id "
+            "  AND d2.status = 'ready' "
+            "  ORDER BY d2.ingested_at_utc DESC LIMIT 1"
+            ") AS latest_snapshot_id "
+            "FROM matters m "
+            "LEFT JOIN documents d ON d.tenant_id = m.tenant_id AND d.matter_id = m.matter_id "
+            "WHERE m.tenant_id = :tenant_id AND m.matter_id = :matter_id "
+            "GROUP BY m.matter_id, m.display_name, m.created_at_utc"
+        )
+        row = session.execute(
+            stmt,
+            {"tenant_id": tenant_id, "matter_id": matter_id},
+        ).first()
+
+    if row is None:
+        return None
+
+    return {
+        "matter_id": row[0],
+        "display_name": row[1] if row[1] else _fallback_display_name(row[0]),
+        "created_at_utc": row[2],
+        "doc_count": row[3],
+        "latest_snapshot_id": row[4],
+    }
 
 
 def get_matter_last_questions(
@@ -746,6 +861,7 @@ def create_qa_session(
     docs_snapshot_id: str,
     tenant_id: str,
     matter_id: str,
+    user_id: str,
 ) -> QASession:
     """Create a new QA session with tenant/matter isolation (FR-001, FR-002).
 
@@ -761,6 +877,7 @@ def create_qa_session(
     qa_session = QASession(
         session_id=session_id,
         tenant_id=tenant_id,
+        user_id=user_id,
         matter_id=matter_id,
         docs_snapshot_id=docs_snapshot_id,
         created_at_utc=datetime.now(timezone.utc).isoformat(),
@@ -770,7 +887,13 @@ def create_qa_session(
     return qa_session
 
 
-def get_qa_session(session_id: str, tenant_id: str) -> QASession | None:
+def get_qa_session(
+    session_id: str,
+    tenant_id: str,
+    *,
+    user_id: str | None = None,
+    matter_id: str | None = None,
+) -> QASession | None:
     """Get a QA session by ID with tenant isolation (FR-001).
 
     Args:
@@ -785,6 +908,10 @@ def get_qa_session(session_id: str, tenant_id: str) -> QASession | None:
             QASession.session_id == session_id,
             QASession.tenant_id == tenant_id,
         )
+        if user_id is not None:
+            stmt = stmt.where(QASession.user_id == user_id)
+        if matter_id is not None:
+            stmt = stmt.where(QASession.matter_id == matter_id)
         return session.scalars(stmt).first()
 
 
@@ -793,6 +920,7 @@ def get_or_create_session(
     docs_snapshot_id: str,
     tenant_id: str,
     matter_id: str,
+    user_id: str,
 ) -> QASession:
     """Get existing session or create a new one with tenant/matter isolation.
 
@@ -810,16 +938,32 @@ def get_or_create_session(
     """
     from sqlalchemy.exc import IntegrityError
 
-    existing = get_qa_session(session_id, tenant_id)
+    existing = get_qa_session(
+        session_id,
+        tenant_id,
+        user_id=user_id,
+        matter_id=matter_id,
+    )
     if existing:
         return existing
 
     try:
-        return create_qa_session(session_id, docs_snapshot_id, tenant_id, matter_id)
+        return create_qa_session(
+            session_id,
+            docs_snapshot_id,
+            tenant_id,
+            matter_id,
+            user_id,
+        )
     except IntegrityError:
         # Race condition: another request created the session first
         # Fetch the existing session that was created by the other request
-        existing = get_qa_session(session_id, tenant_id)
+        existing = get_qa_session(
+            session_id,
+            tenant_id,
+            user_id=user_id,
+            matter_id=matter_id,
+        )
         if existing:
             return existing
         # Should not happen, but re-raise if session still not found
@@ -832,7 +976,12 @@ def insert_qa_message(message: QAMessage) -> None:
         session.add(message)
 
 
-def get_session_messages(session_id: str, tenant_id: str) -> list[QAMessage]:
+def get_session_messages(
+    session_id: str,
+    tenant_id: str,
+    *,
+    matter_id: str | None = None,
+) -> list[QAMessage]:
     """Get all messages for a session with tenant isolation (FR-001).
 
     Args:
@@ -851,6 +1000,8 @@ def get_session_messages(session_id: str, tenant_id: str) -> list[QAMessage]:
             )
             .order_by(QAMessage.created_at_utc.asc())
         )
+        if matter_id is not None:
+            stmt = stmt.where(QAMessage.matter_id == matter_id)
         return list(session.scalars(stmt).all())
 
 

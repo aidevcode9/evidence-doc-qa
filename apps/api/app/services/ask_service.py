@@ -112,6 +112,7 @@ def execute_ask(
     *,
     tenant_id: str,
     matter_id: str,
+    user_id: str,
 ) -> AskResponse:
     start_time = time.perf_counter()
     question = payload.question.strip()
@@ -730,6 +731,7 @@ def execute_ask(
             docs_snapshot_id=docs_snapshot_id,
             tenant_id=tenant_id,
             matter_id=matter_id,
+            user_id=user_id,
             question=question,
             request_id=request_id,
             answer_text=answer_text,
@@ -901,6 +903,7 @@ def _store_qa_messages(
     docs_snapshot_id: str,
     tenant_id: str,
     matter_id: str,
+    user_id: str,
     question: str,
     request_id: str,
     answer_text: str | None,
@@ -926,7 +929,13 @@ def _store_qa_messages(
     """
     try:
         # Ensure session exists with tenant/matter isolation
-        get_or_create_session(session_id, docs_snapshot_id, tenant_id, matter_id)
+        get_or_create_session(
+            session_id,
+            docs_snapshot_id,
+            tenant_id,
+            matter_id,
+            user_id,
+        )
 
         timestamp = ingestion.utc_now()
 

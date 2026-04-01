@@ -10,6 +10,7 @@ from app.config import (
     RAW_DIR,
     ALLOWED_ORIGINS,
     ALLOW_UNVERIFIED,
+    IS_PRODUCTION,
     JWT_SECRET_KEY,
     RATE_LIMIT_ENABLED,
     STRICT_EVIDENCE,
@@ -71,6 +72,12 @@ app.include_router(matters.router)
 
 @app.on_event("startup")
 def startup_event() -> None:
+    if AUTH_MODE == "headers" and IS_PRODUCTION:
+        raise RuntimeError(
+            "SECURITY: AUTH_MODE=headers is not allowed in production. "
+            "Use AUTH_MODE=jwt behind trusted auth, or run header mode only in local/demo environments."
+        )
+
     # JWT secret validation (FR-050)
     if AUTH_MODE == "jwt" and JWT_SECRET_KEY == "dev-secret-key-change-in-production":
         raise RuntimeError(

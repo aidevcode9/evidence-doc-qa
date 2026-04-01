@@ -80,12 +80,21 @@ async def export_session(
         )
 
     # Get session with tenant isolation (FR-001)
-    session = get_qa_session(session_id, tenant_id=context.tenant_id)
+    session = get_qa_session(
+        session_id,
+        tenant_id=context.tenant_id,
+        user_id=context.user_id,
+        matter_id=context.matter_id,
+    )
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
     # Get messages with tenant isolation (FR-001)
-    messages = get_session_messages(session_id, tenant_id=context.tenant_id)
+    messages = get_session_messages(
+        session_id,
+        tenant_id=context.tenant_id,
+        matter_id=context.matter_id,
+    )
     if not messages:
         raise HTTPException(status_code=400, detail="Session has no messages")
 
@@ -154,11 +163,20 @@ async def export_cited_packet(
         )
 
     # Tenant isolation (FR-001)
-    session = get_qa_session(session_id, tenant_id=context.tenant_id)
+    session = get_qa_session(
+        session_id,
+        tenant_id=context.tenant_id,
+        user_id=context.user_id,
+        matter_id=context.matter_id,
+    )
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    messages = get_session_messages(session_id, tenant_id=context.tenant_id)
+    messages = get_session_messages(
+        session_id,
+        tenant_id=context.tenant_id,
+        matter_id=context.matter_id,
+    )
     if len(messages) > MAX_EXPORT_MESSAGES:
         messages = messages[:MAX_EXPORT_MESSAGES]
 
