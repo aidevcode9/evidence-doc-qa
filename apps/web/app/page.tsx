@@ -1,34 +1,21 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { fetchMatter, setCurrentMatter } from "@/lib/api";
+import { setCurrentMatter } from "@/lib/api";
 import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserMenu } from "@/components/UserMenu";
 import { MattersDashboard } from "@/components/MattersDashboard";
 
 export default function DashboardPage() {
-  const router = useRouter();
   const [migrated, setMigrated] = useState(false);
 
-  /* Task 4: localStorage migration — redirect existing single-matter users */
+  /* Clear stale matter selection so dashboard always shows */
   useEffect(() => {
-    const savedMatter = localStorage.getItem("docqa_matter");
-    if (savedMatter) {
-      fetchMatter(savedMatter)
-        .then(() => {
-          router.replace(`/matters/${savedMatter}`);
-        })
-        .catch(() => {
-          localStorage.removeItem("docqa_matter");
-          setCurrentMatter("");
-          setMigrated(true);
-        });
-      return;
-    }
+    localStorage.removeItem("docqa_matter");
+    setCurrentMatter("");
     setMigrated(true);
-  }, [router]);
+  }, []);
 
   if (!migrated) {
     return (

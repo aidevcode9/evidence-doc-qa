@@ -176,6 +176,12 @@ export async function createMatter(
   });
 }
 
+export async function deleteMatter(matterId: string): Promise<void> {
+  await apiRequest(`/v1/admin/matters/${encodeURIComponent(matterId)}`, {
+    method: "DELETE",
+  });
+}
+
 export async function renameMatter(
   matterId: string,
   displayName: string

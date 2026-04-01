@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { fetchMatters, createMatter, MatterInfo } from "@/lib/api";
+import { fetchMatters, createMatter, deleteMatter, MatterInfo } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -126,6 +126,8 @@ export function MattersDashboard() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<MatterInfo | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const loadMatters = useCallback(async () => {
     setLoading(true);
@@ -160,6 +162,20 @@ export function MattersDashboard() {
       setError("Unable to create that matter.");
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteMatter(deleteTarget.matter_id);
+      setDeleteTarget(null);
+      loadMatters();
+    } catch {
+      setError("Unable to delete that matter.");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -227,12 +243,26 @@ export function MattersDashboard() {
       {!loading && matters.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {matters.map((matter) => (
-            <button
+            <div
               key={matter.matter_id}
+              className="group relative text-left bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:shadow-primary/5 transition-all duration-200 cursor-pointer"
               onClick={() => router.push(`/matters/${matter.matter_id}`)}
-              className="group text-left bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:shadow-primary/5 transition-all duration-200 cursor-pointer"
             >
-              <h3 className="font-serif text-base font-medium text-foreground group-hover:text-primary transition-colors truncate">
+              {/* Delete button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDeleteTarget(matter);
+                }}
+                className="absolute top-2 right-2 p-1.5 rounded-md text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-all"
+                title="Delete matter"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+
+              <h3 className="font-serif text-base font-medium text-foreground group-hover:text-primary transition-colors truncate pr-6">
                 {matter.display_name}
               </h3>
 
@@ -251,7 +281,7 @@ export function MattersDashboard() {
               <div className="mt-3">
                 <MatterStatusLine matter={matter} />
               </div>
-            </button>
+            </div>
           ))}
         </div>
       )}
@@ -265,6 +295,27 @@ export function MattersDashboard() {
         onCreate={handleCreate}
         creating={creating}
       />
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Matter</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete &ldquo;{deleteTarget?.display_name}&rdquo;?
+              This will permanently remove all documents, chunks, and chat history.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+              {deleting ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
