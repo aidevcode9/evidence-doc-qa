@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getAuthMode } from "@/lib/auth";
-import { fetchCapabilities, type ServerCapabilities } from "@/lib/api";
+import { fetchCapabilities, setCurrentMatter, type ServerCapabilities } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Logo } from "@/components/Logo";
@@ -103,6 +103,8 @@ export default function LoginPage() {
         "docqa_user",
         JSON.stringify({ name: trimmedName, email: trimmedEmail })
       );
+      localStorage.removeItem("docqa_matter");
+      setCurrentMatter("");
 
       router.replace(nextPath);
     } catch {

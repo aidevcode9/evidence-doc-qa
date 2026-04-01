@@ -114,6 +114,28 @@ class TestListMattersForTenant:
         assert result[0]["doc_count"] == 0
         assert result[0]["latest_snapshot_id"] is None
 
+    def test_falls_back_to_documents_when_matters_query_fails(self) -> None:
+        """Schema drift in matters metadata should degrade to document-derived listing."""
+        from app.db import list_matters_for_tenant
+
+        legacy_rows = [
+            ("claims", None, "2026-03-31T12:00:00Z", 2, "2026-03-31T12:15:00Z", "snap_claims"),
+        ]
+        with patch("app.db.session_scope") as mock_scope:
+            mock_session = MagicMock()
+            mock_session.execute.side_effect = [Exception("relation matters does not exist"), MagicMock(all=MagicMock(return_value=legacy_rows))]
+            mock_scope.return_value.__enter__ = MagicMock(return_value=mock_session)
+            mock_scope.return_value.__exit__ = MagicMock(return_value=False)
+
+            result = list_matters_for_tenant(
+                tenant_id="t1", user_id="u1", user_role="admin"
+            )
+
+        assert len(result) == 1
+        assert result[0]["matter_id"] == "claims"
+        assert result[0]["display_name"] == "Claims"
+        assert result[0]["latest_snapshot_id"] == "snap_claims"
+
 
 class TestListDocumentsForMatter:
     """list_documents_for_matter returns docs for a specific matter."""
@@ -306,6 +328,25 @@ class TestGetMatterEndpoint:
             assert data["display_name"] == "Empty Matter"
             assert data["doc_count"] == 0
             assert data["latest_snapshot_id"] is None
+
+    def test_get_matter_summary_falls_back_to_documents_when_metadata_query_fails(self) -> None:
+        """Matter detail should still load from document metadata if matters table is unavailable."""
+        from app.db import get_matter_summary
+
+        legacy_row = ("claims", None, "2026-03-31T12:00:00Z", 2, "snap_claims")
+        with patch("app.db.session_scope") as mock_scope:
+            mock_session = MagicMock()
+            mock_session.execute.side_effect = [MagicMock(first=MagicMock(side_effect=Exception("relation matters does not exist"))), MagicMock(first=MagicMock(return_value=legacy_row))]
+            mock_scope.return_value.__enter__ = MagicMock(return_value=mock_session)
+            mock_scope.return_value.__exit__ = MagicMock(return_value=False)
+
+            result = get_matter_summary(matter_id="claims", tenant_id="t1")
+
+        assert result is not None
+        assert result["matter_id"] == "claims"
+        assert result["display_name"] == "Claims"
+        assert result["doc_count"] == 2
+        assert result["latest_snapshot_id"] == "snap_claims"
 
 
 # --- Matter Naming Tests ---

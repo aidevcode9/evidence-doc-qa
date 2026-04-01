@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Generator, Iterable
@@ -12,6 +13,8 @@ if TYPE_CHECKING:
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 from app.config import DATABASE_URL
+
+logger = logging.getLogger(__name__)
 
 
 class Base(DeclarativeBase):
@@ -428,23 +431,36 @@ def list_matters_for_tenant(
         "LEFT JOIN documents d ON d.tenant_id = m.tenant_id AND d.matter_id = m.matter_id "
     )
     with session_scope() as session:
-        if user_role == "admin":
-            stmt = text(
-                base_select
-                + "WHERE m.tenant_id = :tenant_id "
-                "GROUP BY m.matter_id, m.display_name, m.created_at_utc "
-                "ORDER BY COALESCE(MAX(CASE WHEN d.status = 'ready' THEN d.ingested_at_utc END), m.created_at_utc) DESC"
+        try:
+            if user_role == "admin":
+                stmt = text(
+                    base_select
+                    + "WHERE m.tenant_id = :tenant_id "
+                    "GROUP BY m.matter_id, m.display_name, m.created_at_utc "
+                    "ORDER BY COALESCE(MAX(CASE WHEN d.status = 'ready' THEN d.ingested_at_utc END), m.created_at_utc) DESC"
+                )
+                rows = session.execute(stmt, {"tenant_id": tenant_id}).all()
+            else:
+                stmt = text(
+                    base_select
+                    + "JOIN matter_assignments ma ON ma.tenant_id = m.tenant_id AND ma.matter_id = m.matter_id "
+                    "WHERE m.tenant_id = :tenant_id AND ma.user_id = :user_id "
+                    "GROUP BY m.matter_id, m.display_name, m.created_at_utc "
+                    "ORDER BY COALESCE(MAX(CASE WHEN d.status = 'ready' THEN d.ingested_at_utc END), m.created_at_utc) DESC"
+                )
+                rows = session.execute(stmt, {"tenant_id": tenant_id, "user_id": user_id}).all()
+        except Exception as exc:
+            logger.warning(
+                "Matter metadata query failed for tenant %s; falling back to documents-only listing: %s",
+                tenant_id,
+                exc,
             )
-            rows = session.execute(stmt, {"tenant_id": tenant_id}).all()
-        else:
-            stmt = text(
-                base_select
-                + "JOIN matter_assignments ma ON ma.tenant_id = m.tenant_id AND ma.matter_id = m.matter_id "
-                "WHERE m.tenant_id = :tenant_id AND ma.user_id = :user_id "
-                "GROUP BY m.matter_id, m.display_name, m.created_at_utc "
-                "ORDER BY COALESCE(MAX(CASE WHEN d.status = 'ready' THEN d.ingested_at_utc END), m.created_at_utc) DESC"
+            rows = _legacy_list_matters_for_tenant(
+                session=session,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                user_role=user_role,
             )
-            rows = session.execute(stmt, {"tenant_id": tenant_id, "user_id": user_id}).all()
 
     return [
         {
@@ -550,27 +566,40 @@ def get_matter_summary(
 ) -> dict[str, Any] | None:
     """Get a matter summary including zero-doc matters."""
     with session_scope() as session:
-        stmt = text(
-            "SELECT m.matter_id, "
-            "m.display_name, "
-            "m.created_at_utc, "
-            "COALESCE(SUM(CASE WHEN d.status = 'ready' THEN 1 ELSE 0 END), 0) AS doc_count, "
-            "("
-            "  SELECT d2.docs_snapshot_id FROM documents d2 "
-            "  WHERE d2.tenant_id = m.tenant_id "
-            "  AND d2.matter_id = m.matter_id "
-            "  AND d2.status = 'ready' "
-            "  ORDER BY d2.ingested_at_utc DESC LIMIT 1"
-            ") AS latest_snapshot_id "
-            "FROM matters m "
-            "LEFT JOIN documents d ON d.tenant_id = m.tenant_id AND d.matter_id = m.matter_id "
-            "WHERE m.tenant_id = :tenant_id AND m.matter_id = :matter_id "
-            "GROUP BY m.matter_id, m.display_name, m.created_at_utc"
-        )
-        row = session.execute(
-            stmt,
-            {"tenant_id": tenant_id, "matter_id": matter_id},
-        ).first()
+        try:
+            stmt = text(
+                "SELECT m.matter_id, "
+                "m.display_name, "
+                "m.created_at_utc, "
+                "COALESCE(SUM(CASE WHEN d.status = 'ready' THEN 1 ELSE 0 END), 0) AS doc_count, "
+                "("
+                "  SELECT d2.docs_snapshot_id FROM documents d2 "
+                "  WHERE d2.tenant_id = m.tenant_id "
+                "  AND d2.matter_id = m.matter_id "
+                "  AND d2.status = 'ready' "
+                "  ORDER BY d2.ingested_at_utc DESC LIMIT 1"
+                ") AS latest_snapshot_id "
+                "FROM matters m "
+                "LEFT JOIN documents d ON d.tenant_id = m.tenant_id AND d.matter_id = m.matter_id "
+                "WHERE m.tenant_id = :tenant_id AND m.matter_id = :matter_id "
+                "GROUP BY m.matter_id, m.display_name, m.created_at_utc"
+            )
+            row = session.execute(
+                stmt,
+                {"tenant_id": tenant_id, "matter_id": matter_id},
+            ).first()
+        except Exception as exc:
+            logger.warning(
+                "Matter summary query failed for %s/%s; falling back to documents-only summary: %s",
+                tenant_id,
+                matter_id,
+                exc,
+            )
+            row = _legacy_get_matter_summary(
+                session=session,
+                tenant_id=tenant_id,
+                matter_id=matter_id,
+            )
 
     if row is None:
         return None
@@ -582,6 +611,80 @@ def get_matter_summary(
         "doc_count": row[3],
         "latest_snapshot_id": row[4],
     }
+
+
+def _legacy_list_matters_for_tenant(
+    *,
+    session: Session,
+    tenant_id: str,
+    user_id: str,
+    user_role: str,
+) -> list[Any]:
+    """Fallback for deployments where newer matter tables are unavailable.
+
+    This degrades to document-derived matters so existing demo data still works.
+    """
+    base_select = (
+        "SELECT d.matter_id, "
+        "NULL AS matter_display_name, "
+        "MIN(d.ingested_at_utc) AS created_at_utc, "
+        "COALESCE(SUM(CASE WHEN d.status = 'ready' THEN 1 ELSE 0 END), 0) AS doc_count, "
+        "MAX(CASE WHEN d.status = 'ready' THEN d.ingested_at_utc END) AS latest_ingested, "
+        "("
+        "  SELECT d2.docs_snapshot_id FROM documents d2 "
+        "  WHERE d2.tenant_id = d.tenant_id "
+        "  AND d2.matter_id = d.matter_id "
+        "  AND d2.status = 'ready' "
+        "  ORDER BY d2.ingested_at_utc DESC LIMIT 1"
+        ") AS latest_snapshot_id "
+        "FROM documents d "
+    )
+    if user_role == "admin":
+        stmt = text(
+            base_select
+            + "WHERE d.tenant_id = :tenant_id "
+            "GROUP BY d.matter_id "
+            "ORDER BY COALESCE(MAX(CASE WHEN d.status = 'ready' THEN d.ingested_at_utc END), MIN(d.ingested_at_utc)) DESC"
+        )
+        return session.execute(stmt, {"tenant_id": tenant_id}).all()
+
+    stmt = text(
+        base_select
+        + "JOIN matter_assignments ma ON ma.tenant_id = d.tenant_id AND ma.matter_id = d.matter_id "
+        "WHERE d.tenant_id = :tenant_id AND ma.user_id = :user_id "
+        "GROUP BY d.matter_id "
+        "ORDER BY COALESCE(MAX(CASE WHEN d.status = 'ready' THEN d.ingested_at_utc END), MIN(d.ingested_at_utc)) DESC"
+    )
+    return session.execute(stmt, {"tenant_id": tenant_id, "user_id": user_id}).all()
+
+
+def _legacy_get_matter_summary(
+    *,
+    session: Session,
+    tenant_id: str,
+    matter_id: str,
+) -> Any:
+    """Fallback matter summary derived from documents only."""
+    stmt = text(
+        "SELECT d.matter_id, "
+        "NULL AS matter_display_name, "
+        "MIN(d.ingested_at_utc) AS created_at_utc, "
+        "COALESCE(SUM(CASE WHEN d.status = 'ready' THEN 1 ELSE 0 END), 0) AS doc_count, "
+        "("
+        "  SELECT d2.docs_snapshot_id FROM documents d2 "
+        "  WHERE d2.tenant_id = d.tenant_id "
+        "  AND d2.matter_id = d.matter_id "
+        "  AND d2.status = 'ready' "
+        "  ORDER BY d2.ingested_at_utc DESC LIMIT 1"
+        ") AS latest_snapshot_id "
+        "FROM documents d "
+        "WHERE d.tenant_id = :tenant_id AND d.matter_id = :matter_id "
+        "GROUP BY d.matter_id"
+    )
+    return session.execute(
+        stmt,
+        {"tenant_id": tenant_id, "matter_id": matter_id},
+    ).first()
 
 
 def get_matter_last_questions(

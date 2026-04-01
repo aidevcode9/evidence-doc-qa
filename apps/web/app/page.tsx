@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { fetchMatter, setCurrentMatter } from "@/lib/api";
 import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserMenu } from "@/components/UserMenu";
@@ -15,8 +16,15 @@ export default function DashboardPage() {
   useEffect(() => {
     const savedMatter = localStorage.getItem("docqa_matter");
     if (savedMatter) {
-      localStorage.removeItem("docqa_matter");
-      router.replace(`/matters/${savedMatter}`);
+      fetchMatter(savedMatter)
+        .then(() => {
+          router.replace(`/matters/${savedMatter}`);
+        })
+        .catch(() => {
+          localStorage.removeItem("docqa_matter");
+          setCurrentMatter("");
+          setMigrated(true);
+        });
       return;
     }
     setMigrated(true);
