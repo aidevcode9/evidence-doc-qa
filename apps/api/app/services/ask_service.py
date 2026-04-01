@@ -24,6 +24,9 @@ from app.config import (
     CONFIDENCE_THRESHOLD,
     AZURE_SEARCH_SCORE_MIN,
     AZURE_RERANK_MIN,
+    AUTO_VERIFY_ENABLED,
+    AUTO_VERIFY_RERANKER_MIN,
+    AUTO_VERIFY_OVERLAP_MIN,
     INDEX_VERSION,
     MAX_QUERY_LENGTH,
     QUERY_CACHE_ENABLED,
@@ -56,6 +59,8 @@ def get_query_cache() -> QueryResultCache | None:
 
 
 VerifyResult = tuple[ChunkDict, str, str | None, str, dict[str, Any]]
+AUTO_VERIFY_STATUS = "AUTO_VERIFIED"
+AUTO_VERIFY_REASON = "HIGH_CONFIDENCE_RERANKER"
 
 
 def _verify_candidates_parallel(
@@ -103,6 +108,26 @@ def _verify_candidates_parallel(
 
     results.sort(key=lambda x: x[0])
     return [r[1] for r in results]
+
+
+def _can_auto_verify(question: str, chunk: ChunkDict) -> tuple[bool, str | None, float]:
+    """Return whether the top candidate can skip LLM verification."""
+    if not AUTO_VERIFY_ENABLED:
+        return False, None, 0.0
+
+    reranker_score = chunk.get("azure_reranker_score")
+    if reranker_score is None or float(reranker_score) < AUTO_VERIFY_RERANKER_MIN:
+        return False, None, 0.0
+
+    chunk_text = chunk.get("chunk_text") or ""
+    supporting_span = evidence.best_supporting_span(question, chunk_text)
+    if not supporting_span:
+        supporting_span = rag.snippet_for(chunk_text)
+    if not supporting_span:
+        return False, None, 0.0
+
+    overlap = evidence.overlap_score(evidence.tokenize(question), supporting_span)
+    return overlap >= AUTO_VERIFY_OVERLAP_MIN, supporting_span, overlap
 
 
 @_observe(name="execute_ask", capture_input=False, capture_output=False)
@@ -363,72 +388,130 @@ def execute_ask(
     verification_results: dict[str, tuple[str, str | None]] = {}
     verification_reasons: dict[str, str] = {}
     last_verifier_reason = None
+    verified_span: str | None = None
     
     verification_start = time.perf_counter()
     if verification.is_enabled():
         verification_rejected = True
-        trace_metadata = {
-            **(trace_metadata or {}),
-            **verification.verifier_trace_metadata(),
-        }
         with otel.span("verification", candidate_count=len(candidates)) as verify_span:
-            # Fire all verification calls in parallel (NFR-011 latency reduction)
-            parallel_results = _verify_candidates_parallel(
-                question, candidates, request_id=request_id, max_candidates=3,
+            top_candidate = candidates[0]
+            auto_verified, auto_verify_span, auto_verify_overlap = _can_auto_verify(
+                question,
+                top_candidate,
             )
-
-            # Process pre-computed results sequentially for accounting/status
-            for chunk, status, span, reason, usage in parallel_results:
-                v_prompt_t = int(usage.get("prompt_tokens") or 0)
-                v_compl_t = int(usage.get("completion_tokens") or 0)
-                v_cost = cost.estimate_cost(
-                    v_prompt_t,
-                    v_compl_t,
-                    MODEL_COST_INPUT_PER_1K,
-                    MODEL_COST_OUTPUT_PER_1K,
+            if auto_verified:
+                verified_chunk = top_candidate
+                verification_status = AUTO_VERIFY_STATUS
+                verification_rejected = False
+                verified_span = auto_verify_span
+                verification_results[verified_chunk["chunk_id"]] = (
+                    "auto_verified",
+                    auto_verify_span,
                 )
-                tokens_in += v_prompt_t
-                tokens_out += v_compl_t
-                cost_est += v_cost
-                v_estimated = bool(usage.get("estimated"))
+                verification_reasons[verified_chunk["chunk_id"]] = AUTO_VERIFY_REASON
+                last_verifier_reason = AUTO_VERIFY_REASON
+                trace_metadata = {
+                    **(trace_metadata or {}),
+                    "verification_mode": "auto",
+                    "auto_verify": {
+                        "enabled": True,
+                        "status": AUTO_VERIFY_STATUS,
+                        "reason": AUTO_VERIFY_REASON,
+                        "candidate_rank": 1,
+                        "azure_reranker_score": round(
+                            float(verified_chunk.get("azure_reranker_score") or 0.0),
+                            4,
+                        ),
+                        "overlap_score": round(auto_verify_overlap, 4),
+                        "reranker_min": AUTO_VERIFY_RERANKER_MIN,
+                        "overlap_min": AUTO_VERIFY_OVERLAP_MIN,
+                    },
+                }
+                logger.info(
+                    "Auto-verified [%s]: chunk_id=%s reranker=%.4f overlap=%.4f",
+                    request_id,
+                    verified_chunk["chunk_id"],
+                    float(verified_chunk.get("azure_reranker_score") or 0.0),
+                    auto_verify_overlap,
+                )
+                if verify_span:
+                    verify_span.set_attribute("verifier.verdict", AUTO_VERIFY_STATUS)
+                    verify_span.set_attribute("verifier.reason", AUTO_VERIFY_REASON)
+                    verify_span.set_attribute("verifier.mode", "auto")
+                    verify_span.set_attribute(
+                        "verifier.auto_verify_overlap",
+                        round(auto_verify_overlap, 4),
+                    )
+                    verify_span.set_attribute(
+                        "verifier.auto_verify_reranker_score",
+                        round(float(verified_chunk.get("azure_reranker_score") or 0.0), 4),
+                    )
+            else:
+                trace_metadata = {
+                    **(trace_metadata or {}),
+                    **verification.verifier_trace_metadata(),
+                    "verification_mode": "llm",
+                }
+                # Fire all verification calls in parallel (NFR-011 latency reduction)
+                parallel_results = _verify_candidates_parallel(
+                    question, candidates, request_id=request_id, max_candidates=3,
+                )
 
-                if v_prompt_t or v_compl_t or v_cost or v_estimated:
-                    v_source = usage.get("source")
-                    cost.merge_cost_breakdown(
-                        cost_breakdown,
-                        "verifier",
+                # Process pre-computed results sequentially for accounting/status
+                for chunk, status, span, reason, usage in parallel_results:
+                    v_prompt_t = int(usage.get("prompt_tokens") or 0)
+                    v_compl_t = int(usage.get("completion_tokens") or 0)
+                    v_cost = cost.estimate_cost(
                         v_prompt_t,
                         v_compl_t,
-                        v_cost,
-                        v_estimated,
-                        str(v_source) if v_source else None,
+                        MODEL_COST_INPUT_PER_1K,
+                        MODEL_COST_OUTPUT_PER_1K,
                     )
-                if v_estimated:
-                    usage_fallback = True
+                    tokens_in += v_prompt_t
+                    tokens_out += v_compl_t
+                    cost_est += v_cost
+                    v_estimated = bool(usage.get("estimated"))
 
-                verification_results[chunk["chunk_id"]] = (status, span)
-                verification_reasons[chunk["chunk_id"]] = reason
-                last_verifier_reason = reason
+                    if v_prompt_t or v_compl_t or v_cost or v_estimated:
+                        v_source = usage.get("source")
+                        cost.merge_cost_breakdown(
+                            cost_breakdown,
+                            "verifier",
+                            v_prompt_t,
+                            v_compl_t,
+                            v_cost,
+                            v_estimated,
+                            str(v_source) if v_source else None,
+                        )
+                    if v_estimated:
+                        usage_fallback = True
 
-                # First verified or unverified chunk wins (same early-exit logic)
-                if verified_chunk is None and not (verification_status == "UNVERIFIED" and not verification_rejected):
-                    if status == "verified":
-                        verified_chunk = chunk
-                        verification_status = "VERIFIED"
-                        verified_span = span
-                        verification_rejected = False
-                        if verify_span:
-                            verify_span.set_attribute("verifier.verdict", "YES")
-                            verify_span.set_attribute("verifier.reason", reason)
-                    elif status == "unverified":
-                        verification_status = "UNVERIFIED"
-                        verification_rejected = False
-                        if verify_span:
-                            verify_span.set_attribute("verifier.verdict", "UNVERIFIED")
+                    verification_results[chunk["chunk_id"]] = (status, span)
+                    verification_reasons[chunk["chunk_id"]] = reason
+                    last_verifier_reason = reason
+
+                    # First verified or unverified chunk wins (same early-exit logic)
+                    if verified_chunk is None and not (verification_status == "UNVERIFIED" and not verification_rejected):
+                        if status == "verified":
+                            verified_chunk = chunk
+                            verification_status = "VERIFIED"
+                            verified_span = span
+                            verification_rejected = False
+                            if verify_span:
+                                verify_span.set_attribute("verifier.verdict", "YES")
+                                verify_span.set_attribute("verifier.reason", reason)
+                                verify_span.set_attribute("verifier.mode", "llm")
+                        elif status == "unverified":
+                            verification_status = "UNVERIFIED"
+                            verification_rejected = False
+                            if verify_span:
+                                verify_span.set_attribute("verifier.verdict", "UNVERIFIED")
+                                verify_span.set_attribute("verifier.mode", "llm")
 
             if verify_span and verification_rejected and verified_chunk is None:
                 verify_span.set_attribute("verifier.verdict", "NO")
                 verify_span.set_attribute("verifier.reason", last_verifier_reason or "NOT_FOUND")
+                verify_span.set_attribute("verifier.mode", "llm")
 
         attached_trace2 = cost.attach_cost_trace(trace_metadata, cost_breakdown, usage_fallback)
         if attached_trace2 is not None:
@@ -498,10 +581,16 @@ def execute_ask(
                 tenant_id=tenant_id,
                 matter_id=matter_id,
             )
+        trace_metadata = {**(trace_metadata or {}), "verification_mode": "disabled"}
         verified_chunk = candidates[0]
     verification_ms = int((time.perf_counter() - verification_start) * 1000)
 
-    if verification_status == "VERIFIED" and verified_chunk:
+    if verification_status == AUTO_VERIFY_STATUS and verified_chunk:
+        verifier_result = {
+            "verdict": AUTO_VERIFY_STATUS,
+            "reason": AUTO_VERIFY_REASON,
+        }
+    elif verification_status == "VERIFIED" and verified_chunk:
         verifier_result = {
             "verdict": "YES",
             "reason": verification_reasons.get(verified_chunk["chunk_id"], "FOUND"),
@@ -522,13 +611,13 @@ def execute_ask(
     supporting_span = evidence.best_supporting_span(question, verified_chunk["chunk_text"])
     if not supporting_span:
         supporting_span = rag.snippet_for(verified_chunk["chunk_text"])
-    
-    # Use verified span if available
-    if verification_status == "VERIFIED" and "verified_span" in locals() and verified_span: # verified_span comes from the loop
-         supporting_span = verified_span
+
+    stored_verified_span = verification_results.get(verified_chunk["chunk_id"], (None, None))[1]
+    if verification_status in {"VERIFIED", AUTO_VERIFY_STATUS} and (verified_span or stored_verified_span):
+        supporting_span = verified_span or stored_verified_span
     
     overlap = evidence.overlap_score(q_tokens, supporting_span)
-    if verification_status == "VERIFIED":
+    if verification_status == "VERIFIED" and trace_metadata.get("verification_mode") != "auto":
         overlap = max(overlap, 0.6)
     
     top_score = rag.score_value(results[0], ret_score_key)
@@ -610,7 +699,11 @@ def execute_ask(
 
     evidence_support = EvidenceSupport(
         verdict=verification_status,
-        verifier_model=verification.verifier_model(),
+        verifier_model=(
+            None
+            if trace_metadata.get("verification_mode") == "auto"
+            else verification.verifier_model()
+        ),
         evidence_grade=grade,
         evidence_label=label,
         support_count=support_count,

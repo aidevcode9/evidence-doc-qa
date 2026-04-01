@@ -444,7 +444,13 @@ export function EvidencePanel({ message, onCitationClick, onCandidateSelect, ses
                     ></div>
                 </div>
                 <div className="mt-3 flex justify-between text-[10px] text-muted-foreground">
-                    <span title="VERIFIED means the model found an explicit answer span in the evidence.">
+                    <span
+                      title={
+                        evidence.verdict === "AUTO_VERIFIED"
+                          ? "AUTO_VERIFIED means the top candidate cleared semantic reranker and overlap thresholds, so the LLM verifier was skipped."
+                          : "VERIFIED means the model found an explicit answer span in the evidence."
+                      }
+                    >
                       {evidence.verdict}
                     </span>
                     <span title="Number of supporting chunks above the overlap threshold.">

@@ -204,7 +204,7 @@ This is a Phase 3+ feature, not a bug. But it's worth knowing the access model i
 ## Recommended Architecture Evolution
 
 ### Phase 8a: Remaining Foundation Work (post 03-31, 1-2 weeks)
-- Finish the remaining latency fixes from `LATENCY_FIXES.md` (high-confidence auto-verify, `httpx`, Redis follow-up)
+- Finish the remaining latency fixes from `LATENCY_FIXES.md` (`httpx`, Redis follow-up)
 - Add request deadline/timeout to `execute_ask()`
 - Add load tests for NFR-011 and NFR-012
 

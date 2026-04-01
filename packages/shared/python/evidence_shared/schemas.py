@@ -78,7 +78,7 @@ class Citation(BaseModel):
 
 
 class EvidenceSupport(BaseModel):
-    verdict: str  # "VERIFIED" | "UNVERIFIED"
+    verdict: str  # "VERIFIED" | "AUTO_VERIFIED" | "UNVERIFIED"
     verifier_model: Optional[str] = None
     evidence_grade: str  # "A" | "B" | "C"
     evidence_label: str  # "Strong" | "Moderate" | "Weak"

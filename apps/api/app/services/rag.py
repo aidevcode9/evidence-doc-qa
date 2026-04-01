@@ -97,12 +97,13 @@ def build_debug_candidates(
             reason = reason_override
         else:
             reason = {
+                "auto_verified": "AUTO_VERIFIED",
                 "verified": "LLM_VERIFIED",
                 "rejected": "LLM_REJECTED",
                 "unverified": "LLM_UNAVAILABLE",
                 "skipped": "NOT_EVALUATED",
             }.get(status, "UNKNOWN")
-            if verification_reasons and status in {"verified", "rejected"}:
+            if verification_reasons and status in {"auto_verified", "verified", "rejected"}:
                 reason = verification_reasons.get(chunk["chunk_id"], reason)
         debug_candidates.append(
             DebugCandidate(

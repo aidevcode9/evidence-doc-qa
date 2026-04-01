@@ -227,6 +227,154 @@ class TestLatencyBreakdownStored:
                 assert breakdown[key] >= 0
 
 
+class TestAutoVerifyHighConfidence:
+    """Verify PERF-5 skip path preserves telemetry and evidence semantics."""
+
+    def test_can_auto_verify_requires_reranker_and_overlap(self) -> None:
+        """Auto-verify should only pass with strong Azure reranker score and overlap."""
+        from app.services.ask_service import _can_auto_verify
+
+        strong_chunk = {
+            "chunk_text": "The indemnification cap under the merger agreement is $15 million.",
+            "azure_reranker_score": 3.2,
+        }
+        weak_reranker_chunk = {
+            "chunk_text": "The indemnification cap under the merger agreement is $15 million.",
+            "azure_reranker_score": 1.8,
+        }
+        weak_overlap_chunk = {
+            "chunk_text": "This section describes unrelated insurance obligations.",
+            "azure_reranker_score": 3.2,
+        }
+
+        assert _can_auto_verify("What is the indemnification cap?", strong_chunk)[0] is True
+        assert _can_auto_verify("What is the indemnification cap?", weak_reranker_chunk)[0] is False
+        assert _can_auto_verify("What is the indemnification cap?", weak_overlap_chunk)[0] is False
+
+    def test_execute_ask_auto_verifies_top_candidate(self) -> None:
+        """High-confidence top candidate should skip verifier calls but still emit telemetry."""
+        from app.schemas import AskRequest
+
+        fake_chunk = {
+            "chunk_id": "c1",
+            "doc_id": "d1",
+            "doc_name": "agreement.pdf",
+            "page_num": 1,
+            "page_end": 1,
+            "char_start": 0,
+            "char_end": 80,
+            "chunk_text": "The indemnification cap under the merger agreement is $15 million.",
+            "rrf_score": 0.92,
+            "azure_search_score": 3.1,
+            "azure_reranker_score": 3.2,
+            "reranker_score": 3.2,
+        }
+
+        with (
+            patch("app.services.ask_service.policy.is_injection_attempt", return_value=False),
+            patch("app.services.ask_service.retrieval.hybrid_search", return_value=([fake_chunk], {})),
+            patch("app.services.ask_service.verification.is_enabled", return_value=True),
+            patch("app.services.ask_service._verify_candidates_parallel") as mock_verify_parallel,
+            patch("app.services.ask_service.get_latest_snapshot_for_matter", return_value="snap-1"),
+            patch("app.services.ask_service.record_telemetry") as mock_telemetry,
+            patch("app.services.ask_service.record_request_metrics"),
+            patch("app.services.ask_service.safe_update_trace"),
+            patch("app.services.ask_service.safe_update_observation") as mock_observation,
+            patch("app.services.ask_service.safe_get_trace_id", return_value=None),
+            patch("app.services.ask_service.redact_for_langfuse", side_effect=lambda **kwargs: kwargs),
+        ):
+            from app.services.ask_service import execute_ask
+
+            payload = AskRequest(question="What is the indemnification cap?")
+            response = execute_ask(
+                payload,
+                session_id=None,
+                tenant_id="t1",
+                matter_id="m1",
+                user_id="u1",
+            )
+
+            mock_verify_parallel.assert_not_called()
+            assert response.evidence.verdict == "AUTO_VERIFIED"
+            assert response.evidence.verifier_model is None
+            assert response.debug_candidates[0].verifier_verdict == "AUTO_VERIFIED"
+            assert response.debug_candidates[0].reason == "HIGH_CONFIDENCE_RERANKER"
+
+            mock_telemetry.assert_called_once()
+            trace_meta = mock_telemetry.call_args.kwargs["trace_metadata"]
+            assert trace_meta["verification_mode"] == "auto"
+            assert trace_meta["verifier_result"]["verdict"] == "AUTO_VERIFIED"
+            assert trace_meta["verifier_result"]["reason"] == "HIGH_CONFIDENCE_RERANKER"
+            assert trace_meta["auto_verify"]["enabled"] is True
+            assert trace_meta["auto_verify"]["status"] == "AUTO_VERIFIED"
+            assert trace_meta["auto_verify"]["candidate_rank"] == 1
+            assert "verifier" not in trace_meta
+
+            observation_meta = mock_observation.call_args.kwargs["metadata"]
+            assert observation_meta["verification_status"] == "AUTO_VERIFIED"
+
+    def test_execute_ask_falls_back_to_llm_when_auto_verify_misses(self) -> None:
+        """Weak overlap should use the normal verifier path even with a high reranker score."""
+        from app.schemas import AskRequest
+
+        fake_chunk = {
+            "chunk_id": "c1",
+            "doc_id": "d1",
+            "doc_name": "agreement.pdf",
+            "page_num": 1,
+            "page_end": 1,
+            "char_start": 0,
+            "char_end": 80,
+            "chunk_text": "This section references indemnification generally.",
+            "rrf_score": 0.92,
+            "azure_search_score": 3.1,
+            "azure_reranker_score": 3.2,
+            "reranker_score": 3.2,
+        }
+        verify_usage = {"prompt_tokens": 100, "completion_tokens": 20}
+
+        with (
+            patch("app.services.ask_service.policy.is_injection_attempt", return_value=False),
+            patch("app.services.ask_service.retrieval.hybrid_search", return_value=([fake_chunk], {})),
+            patch("app.services.ask_service.verification.is_enabled", return_value=True),
+            patch(
+                "app.services.ask_service._verify_candidates_parallel",
+                return_value=[(
+                    fake_chunk,
+                    "verified",
+                    "This section references indemnification generally.",
+                    "FOUND",
+                    verify_usage,
+                )],
+            ) as mock_verify_parallel,
+            patch("app.services.ask_service.get_latest_snapshot_for_matter", return_value="snap-1"),
+            patch("app.services.ask_service.record_telemetry") as mock_telemetry,
+            patch("app.services.ask_service.record_request_metrics"),
+            patch("app.services.ask_service.safe_update_trace"),
+            patch("app.services.ask_service.safe_update_observation"),
+            patch("app.services.ask_service.safe_get_trace_id", return_value=None),
+            patch("app.services.ask_service.redact_for_langfuse", side_effect=lambda **kwargs: kwargs),
+        ):
+            from app.services.ask_service import execute_ask
+
+            response = execute_ask(
+                AskRequest(question="What is the indemnification cap amount?"),
+                session_id=None,
+                tenant_id="t1",
+                matter_id="m1",
+                user_id="u1",
+            )
+
+            assert response.evidence is not None
+            assert response.evidence.verdict == "VERIFIED"
+            assert response.evidence.verifier_model is not None
+            mock_verify_parallel.assert_called_once()
+
+            trace_meta = mock_telemetry.call_args.kwargs["trace_metadata"]
+            assert trace_meta["verification_mode"] == "llm"
+            assert "verifier" in trace_meta
+
+
 class TestConcurrentRequests:
     """Verify 50 concurrent requests don't crash (NFR-012)."""
 
