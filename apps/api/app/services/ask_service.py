@@ -1,3 +1,4 @@
+import concurrent.futures
 import json
 import time
 import uuid
@@ -52,6 +53,51 @@ _query_cache: QueryResultCache | None = (
 def get_query_cache() -> QueryResultCache | None:
     """Return the singleton query cache (for metrics endpoint)."""
     return _query_cache
+
+
+VerifyResult = tuple[ChunkDict, str, str | None, str, dict[str, Any]]
+
+
+def _verify_candidates_parallel(
+    question: str,
+    candidates: list[ChunkDict],
+    request_id: str,
+    max_candidates: int = 3,
+) -> list[VerifyResult]:
+    """Verify up to max_candidates in parallel using ThreadPoolExecutor.
+
+    Returns list of (chunk, status, span, reason, usage) tuples
+    in the original candidate order.
+    """
+    to_verify = candidates[:max_candidates]
+
+    def verify_one(chunk: ChunkDict) -> VerifyResult:
+        status, span, reason, usage = verification.verify_relevance(
+            question,
+            chunk["chunk_text"],
+            request_id=request_id,
+            chunk_id=chunk["chunk_id"],
+        )
+        return (chunk, status, span, reason, usage or {})
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_candidates) as executor:
+        futures = {
+            executor.submit(verify_one, chunk): idx
+            for idx, chunk in enumerate(to_verify)
+        }
+
+        results: list[tuple[int, VerifyResult]] = []
+        for future in concurrent.futures.as_completed(futures):
+            idx = futures[future]
+            try:
+                result = future.result(timeout=30)
+                results.append((idx, result))
+            except Exception:
+                chunk = to_verify[idx]
+                results.append((idx, (chunk, "unverified", None, "ERROR", {})))
+
+    results.sort(key=lambda x: x[0])
+    return [r[1] for r in results]
 
 
 @_observe(name="execute_ask", capture_input=False, capture_output=False)
@@ -320,14 +366,13 @@ def execute_ask(
             **verification.verifier_trace_metadata(),
         }
         with otel.span("verification", candidate_count=len(candidates)) as verify_span:
-            for chunk in candidates[:3]:
-                status, span, reason, usage = verification.verify_relevance(
-                    question,
-                    chunk["chunk_text"],
-                    request_id=request_id,
-                    chunk_id=chunk["chunk_id"],
-                )
-                usage = usage or {}
+            # Fire all verification calls in parallel (NFR-011 latency reduction)
+            parallel_results = _verify_candidates_parallel(
+                question, candidates, request_id=request_id, max_candidates=3,
+            )
+
+            # Process pre-computed results sequentially for accounting/status
+            for chunk, status, span, reason, usage in parallel_results:
                 v_prompt_t = int(usage.get("prompt_tokens") or 0)
                 v_compl_t = int(usage.get("completion_tokens") or 0)
                 v_cost = cost.estimate_cost(
@@ -340,7 +385,7 @@ def execute_ask(
                 tokens_out += v_compl_t
                 cost_est += v_cost
                 v_estimated = bool(usage.get("estimated"))
-                
+
                 if v_prompt_t or v_compl_t or v_cost or v_estimated:
                     v_source = usage.get("source")
                     cost.merge_cost_breakdown(
@@ -354,27 +399,27 @@ def execute_ask(
                     )
                 if v_estimated:
                     usage_fallback = True
-                    
+
                 verification_results[chunk["chunk_id"]] = (status, span)
                 verification_reasons[chunk["chunk_id"]] = reason
                 last_verifier_reason = reason
-                
-                if status == "verified":
-                    verified_chunk = chunk
-                    verification_status = "VERIFIED"
-                    verified_span = span
-                    verification_rejected = False
-                    if verify_span:
-                        verify_span.set_attribute("verifier.verdict", "YES")
-                        verify_span.set_attribute("verifier.reason", reason)
-                    break
-                if status == "unverified":
-                    verification_status = "UNVERIFIED"
-                    verification_rejected = False
-                    if verify_span:
-                        verify_span.set_attribute("verifier.verdict", "UNVERIFIED")
-                    break
-            
+
+                # First verified or unverified chunk wins (same early-exit logic)
+                if verified_chunk is None and not (verification_status == "UNVERIFIED" and not verification_rejected):
+                    if status == "verified":
+                        verified_chunk = chunk
+                        verification_status = "VERIFIED"
+                        verified_span = span
+                        verification_rejected = False
+                        if verify_span:
+                            verify_span.set_attribute("verifier.verdict", "YES")
+                            verify_span.set_attribute("verifier.reason", reason)
+                    elif status == "unverified":
+                        verification_status = "UNVERIFIED"
+                        verification_rejected = False
+                        if verify_span:
+                            verify_span.set_attribute("verifier.verdict", "UNVERIFIED")
+
             if verify_span and verification_rejected and verified_chunk is None:
                 verify_span.set_attribute("verifier.verdict", "NO")
                 verify_span.set_attribute("verifier.reason", last_verifier_reason or "NOT_FOUND")

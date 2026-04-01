@@ -345,3 +345,103 @@ class TestQueryCacheDefault:
 
         assert QUERY_CACHE_ENABLED is True, \
             f"Expected QUERY_CACHE_ENABLED=True, got {QUERY_CACHE_ENABLED}"
+
+
+class TestParallelVerification:
+    """Verify parallel verification reduces latency and preserves correctness (NFR-011)."""
+
+    def test_parallel_verification_faster_than_sequential(self) -> None:
+        """3 verification calls sleeping 1s each should complete in <2s when parallelized."""
+        import time
+
+        def mock_verify(
+            question: str,
+            chunk_text: str,
+            *,
+            request_id: str | None = None,
+            chunk_id: str | None = None,
+        ) -> tuple[str, str | None, str, dict[str, Any]]:
+            time.sleep(1.0)
+            return ("rejected", None, "NOT_FOUND", {"prompt_tokens": 10, "completion_tokens": 5})
+
+        candidates = [
+            {"chunk_id": f"c{i}", "chunk_text": f"text {i}", "doc_id": "d1", "page_num": 1}
+            for i in range(3)
+        ]
+
+        with patch("app.services.ask_service.verification.verify_relevance", side_effect=mock_verify):
+            from app.services.ask_service import _verify_candidates_parallel
+
+            start = time.perf_counter()
+            results = _verify_candidates_parallel("What is X?", candidates, request_id="req-1")
+            elapsed = time.perf_counter() - start
+
+        assert elapsed < 2.0, f"Parallel verification took {elapsed:.2f}s, expected <2s"
+        assert len(results) == 3
+
+    def test_parallel_verification_preserves_order(self) -> None:
+        """Results must come back in original candidate order regardless of completion order."""
+        import time
+
+        def mock_verify(
+            question: str,
+            chunk_text: str,
+            *,
+            request_id: str | None = None,
+            chunk_id: str | None = None,
+        ) -> tuple[str, str | None, str, dict[str, Any]]:
+            # Stagger sleep so they complete in reverse order
+            delay = {"c0": 0.3, "c1": 0.2, "c2": 0.1}.get(chunk_id or "", 0.1)
+            time.sleep(delay)
+            status = {"c0": "verified", "c1": "rejected", "c2": "rejected"}.get(chunk_id or "", "rejected")
+            return (status, f"span-{chunk_id}" if status == "verified" else None, "FOUND" if status == "verified" else "NOT_FOUND", {})
+
+        candidates = [
+            {"chunk_id": "c0", "chunk_text": "text 0", "doc_id": "d1", "page_num": 1},
+            {"chunk_id": "c1", "chunk_text": "text 1", "doc_id": "d1", "page_num": 2},
+            {"chunk_id": "c2", "chunk_text": "text 2", "doc_id": "d1", "page_num": 3},
+        ]
+
+        with patch("app.services.ask_service.verification.verify_relevance", side_effect=mock_verify):
+            from app.services.ask_service import _verify_candidates_parallel
+
+            results = _verify_candidates_parallel("What is X?", candidates, request_id="req-2")
+
+        # Results must be in candidate order: c0, c1, c2
+        assert results[0][0]["chunk_id"] == "c0"
+        assert results[1][0]["chunk_id"] == "c1"
+        assert results[2][0]["chunk_id"] == "c2"
+
+        # c0 should be verified
+        assert results[0][1] == "verified"
+        assert results[0][2] == "span-c0"
+
+    def test_parallel_verification_accumulates_costs(self) -> None:
+        """Token counts from all parallel verification calls must be returned."""
+
+        def mock_verify(
+            question: str,
+            chunk_text: str,
+            *,
+            request_id: str | None = None,
+            chunk_id: str | None = None,
+        ) -> tuple[str, str | None, str, dict[str, Any]]:
+            tokens = {"c0": 100, "c1": 200, "c2": 300}.get(chunk_id or "", 0)
+            return ("rejected", None, "NOT_FOUND", {"prompt_tokens": tokens, "completion_tokens": tokens // 2})
+
+        candidates = [
+            {"chunk_id": "c0", "chunk_text": "text 0", "doc_id": "d1", "page_num": 1},
+            {"chunk_id": "c1", "chunk_text": "text 1", "doc_id": "d1", "page_num": 2},
+            {"chunk_id": "c2", "chunk_text": "text 2", "doc_id": "d1", "page_num": 3},
+        ]
+
+        with patch("app.services.ask_service.verification.verify_relevance", side_effect=mock_verify):
+            from app.services.ask_service import _verify_candidates_parallel
+
+            results = _verify_candidates_parallel("What is X?", candidates, request_id="req-3")
+
+        # All 3 results should have their respective token counts
+        total_prompt = sum(r[4].get("prompt_tokens", 0) for r in results)
+        total_completion = sum(r[4].get("completion_tokens", 0) for r in results)
+        assert total_prompt == 600  # 100 + 200 + 300
+        assert total_completion == 300  # 50 + 100 + 150
