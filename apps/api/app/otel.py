@@ -97,6 +97,17 @@ def setup_otel(app: "FastAPI") -> None:
         logger.warning("OpenTelemetry disabled: APPLICATIONINSIGHTS_CONNECTION_STRING not set.")
         return
 
+    # Azure portal copies connection strings with trailing slashes on endpoints,
+    # which causes the SDK to produce double-slash URLs (//v2.1/track) → 400 errors.
+    # Strip trailing slashes from endpoint values in the connection string.
+    parts = connection_string.split(";")
+    sanitized: list[str] = []
+    for part in parts:
+        if "=" in part and part.split("=", 1)[1].startswith("https://"):
+            part = part.rstrip("/")
+        sanitized.append(part)
+    connection_string = ";".join(sanitized)
+
     try:
         from opentelemetry import trace as otel_trace
         AzureMonitorTraceExporter: Any = None
