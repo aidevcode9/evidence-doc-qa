@@ -18,6 +18,7 @@ from app.db import (
     Chunk,
     Document,
     IndexRecord,
+    Matter,
     MatterAssignment,
     QAMessage,
     QASession,
@@ -256,6 +257,15 @@ def hard_delete_matter(
         stats["matter_assignments"] = _delete_matter_assignments(
             session, tenant_id, matter_id
         )
+
+        # 8. Delete the matter row itself
+        result = session.execute(
+            delete(Matter).where(
+                Matter.tenant_id == tenant_id,
+                Matter.matter_id == matter_id,
+            )
+        )
+        stats["matters"] = result.rowcount  # type: ignore[assignment]
 
     # If we reach here, all deletions succeeded and committed together
     return stats
