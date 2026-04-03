@@ -17,7 +17,6 @@ Last updated: 2026-04-02
 
 | Task | FR | Depends On | Notes | Research |
 |------|-----|------------|-------|----------|
-| **[LOAD-1] Add load tests** | NFR-011, NFR-012 | PERF-3 ✅, PERF-4 ✅ | Prove p95 < 4s under 50 concurrent users. No automated proof currently exists. | `docs/MATURITY_ASSESSMENT.md` §4 |
 | **[ARCH-1] Add request deadline/timeout to execute_ask()** | NFR-011 | — | No global timeout on the ask pipeline — can hang if multiple services are slow. Add 30s deadline. | `docs/ARCHITECTURE_REVIEW.md` §Debt |
 
 ## Next — Phase 8b: Pipeline Restructure (ordered by demo impact)
@@ -37,6 +36,12 @@ Last updated: 2026-04-02
 | **[DOC-2] Cross-document comparison** | FR-081 | "Compare indemnification across these 3 contracts." High-value for attorneys. | `docs/ARCHITECTURE_REVIEW.md` §3 |
 | **[DOC-3] Privilege flag on documents** | FR-082 | Filter privileged docs from retrieval + exports. `privilege_status` column + retrieval filter + audit logging. | `docs/ARCHITECTURE_REVIEW.md` §4 |
 | **[DOC-4] Document versioning** | FR-083 | Track v1/v2/v3 of same document. "What changed between v2 and v3?" | `docs/ARCHITECTURE_REVIEW.md` §5 |
+
+## Later — End of Phase 9: Load Testing
+
+| Task | FR | Depends On | Notes | Research |
+|------|-----|------------|-------|----------|
+| **[LOAD-1] Add load tests** | NFR-011, NFR-012 | PERF-3 ✅, PERF-4 ✅ | Prove p95 < 4s under 50 concurrent users. No automated proof currently exists. | `docs/MATURITY_ASSESSMENT.md` §4 |
 
 ## Later — Phase 10: Production Hardening (pre-scaling)
 
