@@ -1,13 +1,13 @@
 # STATUS.md
 
-Last updated: 2026-03-31
+Last updated: 2026-04-02
 
 ---
 
 ## Current Phase: 8a — Performance Foundation (finishing)
 
 **Goal:** Query latency p95 < 4s, 50 concurrent users, secure defaults
-**Progress:** 9/11 tracked performance tasks shipped (PERF-1-6, SEC-1-2, UI-1). Follow-up hardening also shipped on 03-31: matter creation/access correctness, zero-doc matter visibility, per-user/per-matter session isolation, chat-route rename restoration, web auth proxying, and a production guard against `AUTH_MODE=headers`. 2 Phase 8a tasks remain in "Now". Architecture review surfaced Phase 8b/9/10 roadmap.
+**Progress:** 9/11 tracked performance tasks shipped (PERF-1-6, SEC-1-2, UI-1). Production hotfixes shipped 04-01: matters 500 (session lifecycle + SQL GROUP BY), httpx[http2] missing dep, OTEL double-slash, My Matters nav loop, matter delete, docs refresh. 2 Phase 8a tasks remain in "Now".
 
 > **Research docs:** `docs/LATENCY_FIXES.md`, `docs/ARCHITECTURE_REVIEW.md`, `docs/MULTI_TENANT_READINESS.md`, `docs/UI_MATTERS_DASHBOARD.md`
 
@@ -61,33 +61,16 @@ Last updated: 2026-03-31
 
 | Task | FR | Date |
 |------|-----|------|
-| **[PERF-1] Azure Search timeout (15s)** | NFR-011 | 03-31 |
-| **[PERF-2] DB connection pooling (QueuePool)** | NFR-011 | 03-31 |
-| **[SEC-1] AUTH_BYPASS_ENABLED default → 0** | NFR-001 | 03-31 |
-| **[SEC-2] JWT secret startup enforcement** | NFR-001 | 03-31 |
-| **[PERF-4] Query cache enabled by default** | NFR-011 | 03-31 |
-| **[PERF-3] Parallel verification (ThreadPoolExecutor)** | NFR-011 | 03-31 |
-| **[PERF-5] Auto-verify high-confidence reranker results** | NFR-011 | 03-31 |
-| **[PERF-6] Replace urllib.request with httpx** | NFR-011, NFR-012 | 03-31 |
-| **[UI-1] My Matters dashboard — default landing page** | FR-UI-001 | 03-31 |
-| **[UI-2] Matters follow-up hardening (empty matters, detail route, inline rename)** | FR-UI-001 | 03-31 |
-| **[SEC-3] Matter creation/access + session/export isolation** | FR-004, FR-032 | 03-31 |
-| **[AUTH-1] Web API proxy + production auth-mode guard** | FR-053, NFR-001 | 03-31 |
-| **UI modernization (light/dark, login, logo, shadcn/ui)** | — | 03-31 |
-| **Test suite stability: 582 pass, 0 fail (was 53 fail + 13 error)** | FR-060 | 03-20 |
-| **409 duplicate upload UX fix (shows existing document name)** | FR-011 | 03-15 |
-| **401 demo mode console noise fix (fetchCapabilities pattern)** | FR-054 | 03-15 |
-| **Slash commands reorganization (wsauto, persona frontmatter)** | INFRA | 03-15 |
-| **NFR-022 observability + caching (OTEL metrics, Langfuse, cost tracking)** | NFR-022 | 03-15 |
-| **Async ingestion status (queued→processing→ready/failed)** | FR-015 | 03-15 |
-| **Optional local reranker (term+phrase analysis post-RRF)** | FR-022 | 03-15 |
-| **Cited-only packet export (PDF/DOCX)** | FR-033 | 03-15 |
-| **Document deduplication (SHA256 matter-level)** | FR-011 | 03-15 |
-| **Metadata extraction (title, author, page_count)** | FR-014 | 03-15 |
-| **User menu with sign out** | FR-056 | 03-15 |
-| **Fix LANGFUSE_HOST + PARSER_PROVIDER in CI workflow** | INFRA | 03-15 |
-| **Auth bypass mode for demos (validated)** | FR-054 | 03-15 |
-| **PyPDF-only mode (validated)** | FR-055 | 03-15 |
+| **Fix matters 500 — session lifecycle + PostgreSQL GROUP BY** | — | 04-01 |
+| **Add debug logging to matter queries (list, detail, access, backfill)** | — | 04-01 |
+| **Fix httpx[http2] missing dep — indexing crash in prod** | NFR-011 | 04-01 |
+| **Fix OTEL double-slash 400 — strip trailing slashes from App Insights endpoints** | NFR-022 | 04-01 |
+| **Fix My Matters nav — remove localStorage redirect loop** | FR-UI-001 | 04-01 |
+| **Add matter delete from dashboard (confirmation dialog, hard delete)** | FR-043 | 04-01 |
+| **Fix hard_delete_matter — was missing matters row deletion** | FR-043 | 04-01 |
+| **Disable Google SSO button for demo** | — | 04-01 |
+| **Update stale architecture docs (versions, SQL, schema, test counts)** | DOCS | 04-01 |
+| **DB cleanup — removed 6 orphaned/test matters from prod** | — | 04-01 |
 
 ## Blocked
 
@@ -250,6 +233,9 @@ Last updated: 2026-03-31
 | 01-25 | **httpOnly cookies for JWT** | Access + refresh tokens stored in httpOnly/Secure/SameSite=Lax cookies; prevents XSS; wsskeptic approved |
 | 01-25 | **Google SSO redirect flow** | Backend redirects to frontend /auth/callback with tokens; frontend stores in cookies immediately |
 | 01-24 | **Langfuse for LLM observability** | Optional dependency; graceful degradation; @observe decorators for LLM tracing (NFR-045) |
+| 04-01 | **Fresh session for DB fallback queries** | Reusing a rolled-back session for fallback causes commit crash. Always open a new session_scope() for fallback paths. |
+| 04-01 | **Sanitize Azure connection strings in code, not secrets** | Azure portal always copies trailing slashes on endpoints. Strip in otel.py rather than relying on correct secret values. |
+| 04-01 | **Clear localStorage on dashboard load** | The single-matter migration redirect created an infinite loop once per-matter routing was added. Dashboard always clears stale state. |
 
 > **Current Stack:** Azure AI Search + Azure OpenAI + configurable parser
 > **LLM Providers:** Azure OpenAI, Anthropic Claude, Google Gemini, Ollama (local)
@@ -303,6 +289,33 @@ Last updated: 2026-03-31
 ---
 
 ## Archive
+
+<details>
+<summary>Week of 03-15 to 03-31 (Phase 8a)</summary>
+
+| Task | FR | Date |
+|------|-----|------|
+| [PERF-1] Azure Search timeout (15s) | NFR-011 | 03-31 |
+| [PERF-2] DB connection pooling (QueuePool) | NFR-011 | 03-31 |
+| [SEC-1] AUTH_BYPASS_ENABLED default → 0 | NFR-001 | 03-31 |
+| [SEC-2] JWT secret startup enforcement | NFR-001 | 03-31 |
+| [PERF-3] Parallel verification (ThreadPoolExecutor) | NFR-011 | 03-31 |
+| [PERF-4] Query cache enabled by default | NFR-011 | 03-31 |
+| [PERF-5] Auto-verify high-confidence reranker results | NFR-011 | 03-31 |
+| [PERF-6] Replace urllib.request with httpx | NFR-011, NFR-012 | 03-31 |
+| [UI-1] My Matters dashboard — default landing page | FR-UI-001 | 03-31 |
+| [UI-2] Matters follow-up hardening | FR-UI-001 | 03-31 |
+| [SEC-3] Matter creation/access + session isolation | FR-004, FR-032 | 03-31 |
+| [AUTH-1] Web API proxy + production auth-mode guard | FR-053, NFR-001 | 03-31 |
+| UI modernization (light/dark, login, logo, shadcn/ui) | — | 03-31 |
+| Test suite stability: 624 pass, 0 fail | FR-060 | 03-20 |
+| NFR-022 observability + caching (OTEL, Langfuse, cost) | NFR-022 | 03-15 |
+| Async ingestion status tracking | FR-015 | 03-15 |
+| Cited-only packet export (PDF/DOCX) | FR-033 | 03-15 |
+| Document deduplication (SHA256) | FR-011 | 03-15 |
+| Metadata extraction | FR-014 | 03-15 |
+
+</details>
 
 <details>
 <summary>Week of 01-22 (Phase 5-6)</summary>
