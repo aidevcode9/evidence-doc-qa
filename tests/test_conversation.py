@@ -63,6 +63,33 @@ class TestConversationalMemory:
         assert "What is the indemnification cap in the merger agreement?" in effective_question
         assert meta["history_dropped_count"] == 1
 
+    def test_contextualize_always_applies_when_session_has_history(self) -> None:
+        """Non-follow-up questions should STILL get context when session has history.
+
+        EDD: A question like 'What are the exclusions?' doesn't look like a follow-up
+        but benefits from knowing the user was asking about a specific agreement.
+        """
+        from app.services.ask_service import _contextualize_question
+
+        messages = [
+            MagicMock(role="user", content="What is the indemnification cap in the merger agreement?"),
+            MagicMock(role="assistant", content="The cap is $15 million per Section 8.2."),
+        ]
+
+        with patch("app.services.ask_service.get_session_messages", return_value=messages):
+            effective_question, meta = _contextualize_question(
+                "What are the exclusions?",  # NOT a follow-up by prefix/pronoun
+                session_id="sess-456",
+                tenant_id="tenant-1",
+                matter_id="matter-1",
+            )
+
+        assert meta["applied"] is True, (
+            "Context should be applied even when follow-up is not detected, "
+            "because session has conversation history"
+        )
+        assert "indemnification cap" in effective_question
+
     def test_execute_ask_uses_contextualized_question_for_retrieval(self) -> None:
         """execute_ask should retrieve against contextualized follow-up text."""
         from app.schemas import AskRequest

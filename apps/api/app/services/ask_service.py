@@ -224,7 +224,7 @@ def _contextualize_question(
     matter_id: str,
 ) -> tuple[str, dict[str, Any]]:
     follow_up_detected = _is_follow_up_question(question)
-    if not session_id or not follow_up_detected:
+    if not session_id:
         return question, {
             "applied": False,
             "follow_up_detected": follow_up_detected,
