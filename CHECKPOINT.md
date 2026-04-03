@@ -4,6 +4,56 @@
 
 ---
 
+## 2026-04-02 ARCH-1: Request Deadline (NFR-011)
+
+**Status:** ✅ Complete
+**Files changed:**
+- apps/api/app/config.py (added REQUEST_DEADLINE_SECONDS)
+- apps/api/app/services/ask_service.py (added RequestDeadlineExceeded, _check_deadline, 2 checkpoint calls)
+- apps/api/app/routers/ask.py (catch deadline → HTTP 504)
+- tests/test_performance.py (4 new tests)
+
+**Verification:**
+- [x] TDD: 4 tests written first (RED), then implemented (GREEN)
+- [x] Pre-commit hook: ruff + mypy + pytest passed
+
+**Commits:** `01b0a96` feat(perf): add 30s request deadline to execute_ask (ARCH-1, NFR-011)
+
+---
+
+## 2026-04-02 DOCS-1: GitHub Pages (INFRA)
+
+**Status:** ✅ Complete
+**Files changed:**
+- .github/workflows/pages.yml (new — Pages deploy workflow)
+- docs/_config.yml (new — Jekyll config)
+- docs/index.md (new — landing page with doc tree)
+
+**Notes:** Pages deploy on push to main when docs/ changes. URL: https://aidevcode9.github.io/evidence-doc-qa/
+Need to enable GitHub Pages in repo Settings → source: GitHub Actions.
+
+**Commits:** `05d75f6` feat(infra): add GitHub Pages auto-deploy for published docs (DOCS-1)
+
+---
+
+## 2026-04-02 CONV-1: Conversational Memory (FR-070)
+
+**Status:** ✅ Complete
+**Files changed:**
+- apps/api/app/services/ask_service.py (removed follow-up gate on contextualization)
+- tests/test_conversation.py (1 new EDD test)
+
+**Verification:**
+- [x] EDD: Wrote failing eval first (RED), one-line fix (GREEN), all 4 conversation tests pass
+- [x] Pre-commit hook: ruff + mypy + pytest passed
+- [x] Existing 3 conversation tests still pass (no regressions)
+
+**Notes:** Contextualization now always applies when session has history, not just on detected follow-ups. Improves retrieval for all questions in a conversation.
+
+**Commits:** `11c0739` feat(conv): always contextualize when session has history (CONV-1, FR-070)
+
+---
+
 ## 2026-03-15 FR-011: Document Deduplication + FR-014: Metadata Extraction
 
 **Status:** ✅ Complete

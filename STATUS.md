@@ -13,19 +13,11 @@ Last updated: 2026-04-02
 
 ---
 
-## Now — Phase 8a: Finish Performance Foundation
+## Now — Phase 8b: Pipeline Restructure
 
 | Task | FR | Depends On | Notes | Research |
 |------|-----|------------|-------|----------|
-| **[ARCH-1] Add request deadline/timeout to execute_ask()** | NFR-011 | — | No global timeout on the ask pipeline — can hang if multiple services are slow. Add 30s deadline. | `docs/ARCHITECTURE_REVIEW.md` §Debt |
-| **[DOCS-1] GitHub Pages for published docs** | INFRA | — | Auto-deploy docs/ to GitHub Pages on push to main. Shareable URL for stakeholders, interviewers, and future engineers. `/wsdocs` skill tracks what needs updating. | — |
-
-## Next — Phase 8b: Pipeline Restructure (ordered by demo impact)
-
-| Task | FR | Depends On | Notes | Research |
-|------|-----|------------|-------|----------|
-| **[CONV-1] Conversational memory (multi-turn Q&A)** | FR-070 | — | Pass last 3-5 QA messages as context to LLM prompt. Data model already supports it (qa_sessions/qa_messages). Prompt engineering change, not architecture. Huge demo impact — lawyers expect follow-up questions to work. | `docs/ARCHITECTURE_REVIEW.md` §2 |
-| **[ARCH-2] Decompose execute_ask() into retrieve/verify/synthesize/cite** | NFR-050 | — | 700-line function is hard to modify/test. Split into composable steps. Enables future async migration. | `docs/ARCHITECTURE_REVIEW.md` §Debt |
+| **[ARCH-2] Decompose execute_ask() into retrieve/verify/synthesize/cite** | NFR-050 | — | 700-line function is hard to modify/test. Split into composable steps. Enables future async migration. **⚠️ Needs user review — high blast radius.** | `docs/ARCHITECTURE_REVIEW.md` §Debt |
 | **[ARCH-3] Replace verification loop with single LLM synthesis call** | NFR-011 | ARCH-2 | Reranker already handles relevance. Use LLM for answer synthesis, not binary relevance check. Eliminates redundant step, saves latency. | `docs/ARCHITECTURE_REVIEW.md` §1 |
 | **Security NFRs full pass** | NFR-001–022 | SEC-1 ✅, SEC-2 ✅ | Per-tenant rate limiting, CORS hardening, input fuzzing, penetration testing prep. | `docs/MULTI_TENANT_READINESS.md` |
 
@@ -67,6 +59,9 @@ Last updated: 2026-04-02
 
 | Task | FR | Date |
 |------|-----|------|
+| **[ARCH-1] Request deadline (30s) on execute_ask()** | NFR-011 | 04-02 |
+| **[DOCS-1] GitHub Pages auto-deploy** | INFRA | 04-02 |
+| **[CONV-1] Conversational memory — always contextualize with session history** | FR-070 | 04-02 |
 | **Fix matters 500 — session lifecycle + PostgreSQL GROUP BY** | — | 04-01 |
 | **Add debug logging to matter queries (list, detail, access, backfill)** | — | 04-01 |
 | **Fix httpx[http2] missing dep — indexing crash in prod** | NFR-011 | 04-01 |
