@@ -27,7 +27,7 @@ This project uses a **command-driven workflow system** that enforces:
 | `/wsverify` | QA | Run lint, types, tests (also enforced by pre-commit hook) |
 | `/wsskeptic` | Security Auditor | Adversarial review for AI failure modes |
 | `/wsedd` | Eval Engineer | Write failing eval before retrieval/LLM changes |
-| `/wsredteam` | Red Team | Attack the system, find weaknesses across 6 vectors |
+| `/wsredteam` | Red Team | Full adversarial attack suite (6 vectors). For major features/pre-release. Lightweight version runs automatically on every push via hook. |
 | `/wsdocs` | Technical Writer | Check which docs/diagrams need updating after changes |
 | `/wsstatus` | Reporter | Update STATUS.md |
 | `/wsmistake` | Historian | Document mistakes for future reference |
@@ -39,7 +39,7 @@ Configured in `.claude/settings.json`. These fire on every matching tool call:
 | Hook | Trigger | What it does |
 |------|---------|-------------|
 | **Pre-commit gates** | `git commit` | Runs `ruff + mypy --strict + pytest`. Blocks commit on failure. |
-| **Pre-push reminder** | `git push` | Reminds to run `/wsskeptic` |
+| **Pre-push adversarial scan** | `git push` | Agent scans diff for: missing tenant_id, raw LLM calls, PII in logs, unauthed endpoints, hardcoded secrets. Blocks on failure. |
 | **DB safety** | `DELETE`, `alembic` | Prompt hook blocks destructive DB commands without approval |
 | **Post-edit lint** | Edit/Write `.py` | Auto-runs `ruff` after every Python file change |
 

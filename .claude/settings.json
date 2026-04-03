@@ -27,10 +27,11 @@
         "matcher": "Bash",
         "hooks": [
           {
-            "type": "command",
+            "type": "agent",
             "if": "Bash(git push *)",
-            "command": "echo '{\"systemMessage\": \"⚠️  Pre-push: Have you run /wsskeptic on this change?\"}'",
-            "statusMessage": "Pre-push check..."
+            "prompt": "Quick adversarial review of staged changes. Run `git diff HEAD~1` and scan for: (1) tenant_id missing from new DB queries, (2) raw LLM calls bypassing telemetry wrapper, (3) PII in log statements (user emails, document content), (4) new endpoints missing auth/RBAC checks, (5) hardcoded secrets or credentials. Report PASS if clean, or BLOCK with specific file:line references if any issue found. Be concise — this runs on every push.",
+            "timeout": 60,
+            "statusMessage": "Pre-push adversarial scan..."
           }
         ]
       },
