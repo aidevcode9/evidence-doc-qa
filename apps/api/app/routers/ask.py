@@ -24,13 +24,21 @@ def ask(
             status_code=403,
             detail="Permission denied: query requires authentication",
         )
-    return execute_ask(
-        payload,
-        session_id=x_docqa_session,
-        tenant_id=context.tenant_id,
-        matter_id=context.matter_id,
-        user_id=context.user_id,
-    )
+    from app.services.ask_service import RequestDeadlineExceeded
+
+    try:
+        return execute_ask(
+            payload,
+            session_id=x_docqa_session,
+            tenant_id=context.tenant_id,
+            matter_id=context.matter_id,
+            user_id=context.user_id,
+        )
+    except RequestDeadlineExceeded as exc:
+        raise HTTPException(
+            status_code=504,
+            detail=f"Request timed out after {exc.deadline_seconds}s during {exc.phase}. Please try again.",
+        )
 
 
 # Apply shared rate limiter if enabled (NFR-012)

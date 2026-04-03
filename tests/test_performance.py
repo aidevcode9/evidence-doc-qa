@@ -227,6 +227,48 @@ class TestLatencyBreakdownStored:
                 assert breakdown[key] >= 0
 
 
+class TestRequestDeadline:
+    """ARCH-1: Verify request deadline config and exception exist."""
+
+    def test_request_deadline_config_exists(self) -> None:
+        """REQUEST_DEADLINE_SECONDS must be 30 by default."""
+        from app.config import REQUEST_DEADLINE_SECONDS
+
+        assert REQUEST_DEADLINE_SECONDS == 30
+
+    def test_request_deadline_exceeded_exception_exists(self) -> None:
+        """RequestDeadlineExceeded must be importable from ask_service."""
+        from app.services.ask_service import RequestDeadlineExceeded
+
+        exc = RequestDeadlineExceeded(30.0, "verification")
+        assert "verification" in str(exc)
+        assert "30" in str(exc)
+
+    def test_check_deadline_raises_when_exceeded(self) -> None:
+        """_check_deadline should raise when elapsed > deadline."""
+        import time
+
+        from app.services.ask_service import RequestDeadlineExceeded, _check_deadline
+
+        # Simulate a start_time 31 seconds ago
+        fake_start = time.perf_counter() - 31.0
+        raised = False
+        try:
+            _check_deadline(fake_start, 30.0, "test_phase")
+        except RequestDeadlineExceeded:
+            raised = True
+        assert raised, "_check_deadline should raise when elapsed > deadline"
+
+    def test_check_deadline_passes_when_within_budget(self) -> None:
+        """_check_deadline should not raise when within budget."""
+        import time
+
+        from app.services.ask_service import _check_deadline
+
+        _check_deadline(time.perf_counter(), 30.0, "test_phase")
+        # No exception = pass
+
+
 class TestAutoVerifyHighConfidence:
     """Verify PERF-5 skip path preserves telemetry and evidence semantics."""
 

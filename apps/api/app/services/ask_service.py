@@ -32,6 +32,7 @@ from app.config import (
     QUERY_CACHE_ENABLED,
     QUERY_CACHE_MAX_SIZE,
     QUERY_CACHE_TTL_SECONDS,
+    REQUEST_DEADLINE_SECONDS,
 )
 from app.db import get_latest_snapshot_for_matter
 from app.schemas import AskRequest, AskResponse, Citation, DebugCandidate, EvidenceSupport, RefusalCode
@@ -56,6 +57,24 @@ _query_cache: QueryResultCache | None = (
 def get_query_cache() -> QueryResultCache | None:
     """Return the singleton query cache (for metrics endpoint)."""
     return _query_cache
+
+
+class RequestDeadlineExceeded(Exception):
+    """Raised when execute_ask() exceeds the configured deadline."""
+
+    def __init__(self, deadline_seconds: float, phase: str) -> None:
+        self.deadline_seconds = deadline_seconds
+        self.phase = phase
+        super().__init__(
+            f"Request deadline of {deadline_seconds}s exceeded during {phase}"
+        )
+
+
+def _check_deadline(start_time: float, deadline: float, phase: str) -> None:
+    """Raise RequestDeadlineExceeded if elapsed time exceeds deadline."""
+    elapsed = time.perf_counter() - start_time
+    if elapsed > deadline:
+        raise RequestDeadlineExceeded(deadline, phase)
 
 
 VerifyResult = tuple[ChunkDict, str, str | None, str, dict[str, Any]]
@@ -413,7 +432,10 @@ def execute_ask(
                 "azure" if "azure_search_score" in results[0] else "local",
             )
     retrieval_ms = int((time.perf_counter() - retrieval_start) * 1000)
-    
+
+    # ARCH-1: Deadline check after retrieval
+    _check_deadline(start_time, REQUEST_DEADLINE_SECONDS, "retrieval")
+
     # Azure Search cost (Cost Reduction visibility)
     azure_search_cost = cost.AZURE_SEARCH_COST_PER_QUERY
     cost_est += azure_search_cost
@@ -737,6 +759,9 @@ def execute_ask(
         trace_metadata = {**(trace_metadata or {}), "verification_mode": "disabled"}
         verified_chunk = candidates[0]
     verification_ms = int((time.perf_counter() - verification_start) * 1000)
+
+    # ARCH-1: Deadline check after verification
+    _check_deadline(start_time, REQUEST_DEADLINE_SECONDS, "verification")
 
     if verification_status == AUTO_VERIFY_STATUS and verified_chunk:
         verifier_result = {
