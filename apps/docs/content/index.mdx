@@ -1,0 +1,45 @@
+# Evidence-Bound Documentation
+
+**Enterprise Document Q&A with Verified Citations**
+
+Evidence-Bound is a RAG system for law firms where every answer must cite source documents — or the system refuses to answer. No hallucinations by design.
+
+---
+
+## Quick Navigation
+
+### Getting Started
+- [Getting Started](/getting-started) — Clone to running in 10 minutes
+
+### Architecture
+- [Architecture Diagrams](/architecture) — System overview, RAG pipeline, data model, deployment
+- [Architecture Overview](/architecture-overview) — Stack, security, providers, deployment tiers
+- [Architecture Review](/architecture-review) — Honest gaps, competitive analysis, roadmap
+
+### Technical Reference
+- [Technical Deep Dive](/technical-deep-dive) — RAG pipeline internals, caching, cost tracking, PII
+- [LLM Providers](/llm-providers) — Configure Azure OpenAI, Anthropic, Gemini, Ollama
+- [Data Model](/data-model) — Full database schema (11 tables)
+- [Provider Interfaces](/interfaces) — LLM, Search, Embedding, Parser abstractions
+
+### Operations
+- [Operations Runbook](/operations) — Deploy, monitor, diagnose, rollback
+- [Development Workflow](/workflow) — TDD, skills, hooks, review gates
+
+### Strategic
+- [RAG Harness Spec](/rag-harness) — Extracting a reusable RAG framework
+- [Multi-Tenant Readiness](/multi-tenant) — SaaS gap analysis
+
+---
+
+## Core Guarantee
+
+```
+If the system returns an answer:
+  1. It cites a specific document, page, and character range
+  2. The cited text exists verbatim in the source
+  3. Confidence score is above threshold (default 0.70)
+  4. Evidence grade (A/B/C) based on verification status
+
+If it can't verify → it refuses. Every time.
+```

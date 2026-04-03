@@ -1,0 +1,8 @@
+node_modules/
+.next/
+out/
+
+# Synced content (generated from docs/*.md — don't edit directly)
+content/*.mdx
+!content/index.mdx
+!content/_meta.tsx

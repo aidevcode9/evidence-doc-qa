@@ -43,9 +43,26 @@ Configured in `.claude/settings.json`. These fire on every matching tool call:
 | **DB safety** | `DELETE`, `alembic` | Prompt hook blocks destructive DB commands without approval |
 | **Post-edit lint** | Edit/Write `.py` | Auto-runs `ruff` after every Python file change |
 
-### Published Documentation
+### Published Documentation — knowledge.bound.legal
 
-When docs change, the GitHub Pages site auto-deploys. Run `/wsdocs` after code changes to check which docs need updating. The published site is the stakeholder-facing view of the same in-repo docs.
+Docs are published to `knowledge.bound.legal` via Nextra (Next.js docs framework) on Vercel.
+
+**How it works:**
+- Source of truth: `docs/*.md` in the repo (edit these, not the site)
+- `apps/docs/scripts/sync-docs.sh` copies `docs/*.md` → `apps/docs/content/*.mdx`
+- Nextra renders them as a searchable, navigable docs site
+- Vercel auto-deploys on push to `main` when `docs/` or `apps/docs/` changes
+
+**To update published docs:**
+1. Edit files in `docs/` (never edit `apps/docs/content/*.mdx` directly)
+2. Run `/wsdocs` to check what else needs updating
+3. Commit and push — site auto-deploys
+
+**Local preview:**
+```bash
+cd apps/docs && npm run dev
+# Opens http://localhost:3000
+```
 
 ---
 

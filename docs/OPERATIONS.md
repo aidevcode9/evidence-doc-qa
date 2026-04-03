@@ -14,6 +14,7 @@
 | LLM | Azure OpenAI | `az-openai-docqa` |
 | Storage | Azure Blob | `docqafiles` container `docqa-raw` |
 | Frontend | Vercel | `evidence-doc-qa-v2.vercel.app` |
+| Knowledge Site | Vercel | `knowledge.bound.legal` (Nextra, `apps/docs/`) |
 | Registry | Azure Container Registry | `docqaregistry.azurecr.io` |
 | Observability | Langfuse | `us.cloud.langfuse.com` |
 

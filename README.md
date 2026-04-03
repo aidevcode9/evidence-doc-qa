@@ -6,6 +6,8 @@ Evidence-Bound is a RAG system for law firms where **every answer must cite sour
 
 **Stack:** FastAPI + Next.js 16 | PostgreSQL | Azure AI Search | Azure OpenAI | Langfuse
 
+**Docs:** [knowledge.bound.legal](https://knowledge.bound.legal) — architecture, operations, technical deep dive
+
 ![Design](docs/sy-phil.png)
 
 ---
