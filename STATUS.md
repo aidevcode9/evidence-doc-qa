@@ -18,6 +18,7 @@ Last updated: 2026-04-02
 | Task | FR | Depends On | Notes | Research |
 |------|-----|------------|-------|----------|
 | **[ARCH-1] Add request deadline/timeout to execute_ask()** | NFR-011 | — | No global timeout on the ask pipeline — can hang if multiple services are slow. Add 30s deadline. | `docs/ARCHITECTURE_REVIEW.md` §Debt |
+| **[DOCS-1] GitHub Pages for published docs** | INFRA | — | Auto-deploy docs/ to GitHub Pages on push to main. Shareable URL for stakeholders, interviewers, and future engineers. `/wsdocs` skill tracks what needs updating. | — |
 
 ## Next — Phase 8b: Pipeline Restructure (ordered by demo impact)
 

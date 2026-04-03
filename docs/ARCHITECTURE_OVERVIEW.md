@@ -134,68 +134,11 @@ Returns confidence score (0.0-1.0) used by policy engine.
 
 ## Data Model
 
-### Core Tables
+11 tables, all with `tenant_id` column (indexed). Every query enforces tenant/matter scope.
 
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│    documents    │     │     chunks      │     │  index_records  │
-├─────────────────┤     ├─────────────────┤     ├─────────────────┤
-│ doc_id (PK)     │────<│ chunk_id (PK)   │────<│ chunk_id (PK)   │
-│ tenant_id       │     │ doc_id (FK)     │     │ tenant_id       │
-│ matter_id       │     │ tenant_id       │     │ matter_id       │
-│ docs_snapshot_id│     │ matter_id       │     │ embedding_json  │
-│ doc_name        │     │ page_num        │     │ indexed_at_utc  │
-│ doc_sha256      │     │ chunk_text      │     │ index_version   │
-│ storage_path    │     │ char_start/end  │     └─────────────────┘
-└─────────────────┘     └─────────────────┘
+**Key tables:** `documents` → `chunks` → `index_records` (ingestion pipeline), `qa_sessions` → `qa_messages` (conversations), `users` → `matter_assignments` (RBAC), `telemetry` (per-request metrics), `audit_events` (immutable log).
 
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   qa_sessions   │     │   qa_messages   │     │    telemetry    │
-├─────────────────┤     ├─────────────────┤     ├─────────────────┤
-│ session_id (PK) │────<│ message_id (PK) │     │ request_id (PK) │
-│ tenant_id       │     │ session_id (FK) │     │ tenant_id       │
-│ matter_id       │     │ tenant_id       │     │ matter_id       │
-│ docs_snapshot_id│     │ role            │     │ tokens_in/out   │
-│ created_at_utc  │     │ content         │     │ latency_ms      │
-└─────────────────┘     │ citations_json  │     │ cost_est        │
-                        │ evidence_json   │     │ trace_metadata  │
-                        └─────────────────┘     └─────────────────┘
-
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│      users      │     │matter_assignments│    │ refresh_tokens  │
-├─────────────────┤     ├─────────────────┤     ├─────────────────┤
-│ user_id (PK)    │────<│ assignment_id   │     │ token_id (PK)   │
-│ tenant_id       │     │ user_id (FK)    │     │ user_id (FK)    │
-│ email           │     │ tenant_id       │     │ tenant_id       │
-│ role            │     │ matter_id       │     │ token_hash      │
-│ password_hash   │     │ granted_by      │     │ expires_at_utc  │
-│ auth_provider   │     │ granted_at_utc  │     │ revoked_at_utc  │
-│ is_active       │     └─────────────────┘     └─────────────────┘
-│ failed_login_ct │
-│ locked_until_utc│     ┌─────────────────┐     ┌─────────────────┐
-└─────────────────┘     │   sso_states    │     │  audit_events   │
-                        ├─────────────────┤     ├─────────────────┤
-                        │ state_token (PK)│     │ event_id (PK)   │
-                        │ provider        │     │ tenant_id       │
-                        │ tenant_id       │     │ matter_id       │
-                        │ code_verifier   │     │ user_id         │
-                        │ nonce           │     │ event_type      │
-                        │ expires_at_utc  │     │ event_json      │
-                        └─────────────────┘     │ created_at_utc  │
-                                                └─────────────────┘
-```
-
-### Tenant Isolation Pattern
-
-Every query enforces tenant/matter scope:
-```sql
-SELECT * FROM chunks
-WHERE tenant_id = :tenant_id
-  AND matter_id = :matter_id
-  AND docs_snapshot_id = :snapshot_id
-```
-
-**See [data-model.md](./architecture/data-model.md) for complete schemas.**
+See [Architecture Diagrams](./ARCHITECTURE_DIAGRAM.md#data-model) for the ER diagram and [data-model.md](./architecture/data-model.md) for complete SQL schemas.
 
 ---
 
@@ -215,51 +158,7 @@ EMBEDDINGS_MODE = "remote"         # remote (Azure) | local (hash-based)
 PARSER_PROVIDER = "marker"         # marker | llamaparse | pypdf
 ```
 
-### Provider Interfaces
-
-```python
-# LLM Provider (NFR-032) - app/llm/
-class LLMClient(Protocol):
-    async def complete(
-        self,
-        system_prompt: str,
-        user_prompt: str,
-        temperature: float = 0.0,
-    ) -> LLMResponse: ...
-
-# Implementations: AzureOpenAIClient, AnthropicClient, GeminiClient, OllamaClient
-
-# Search Provider (NFR-034) - app/search/
-class SearchClient(Protocol):
-    async def hybrid_search(
-        self,
-        query_text: str,
-        query_embedding: list[float],
-        tenant_id: str,
-        matter_id: str,
-        top_k: int = 10,
-    ) -> SearchResponse: ...
-
-# Implementations: AzureSearchClient, LocalSearchClient (pgvector)
-
-# Embedding Provider (NFR-035) - app/embedding/
-class EmbeddingClient(Protocol):
-    async def embed(
-        self,
-        texts: list[str],
-    ) -> EmbeddingResult: ...
-
-# Implementations: AzureOpenAIEmbeddingClient, LocalEmbeddingClient
-
-# Parser Provider (NFR-036) - app/parser/
-class ParserClient(Protocol):
-    async def parse(
-        self,
-        file_path: str,
-    ) -> ParseResult: ...
-
-# Implementations: MarkerClient, LlamaParseClient, PyPDFClient
-```
+All four abstractions use Python Protocol interfaces. See [interfaces.md](./architecture/interfaces.md) for full definitions, method signatures, and per-provider configuration.
 
 **No code changes needed** — swap providers via environment variables only.
 
@@ -341,49 +240,7 @@ PARSER_PROVIDER=marker                 # Marker (offline PDF parsing)
 
 ### Authentication Flow (FR-050, FR-051)
 
-```
-┌──────────┐                                                    ┌──────────┐
-│  Client  │                                                    │   API    │
-└────┬─────┘                                                    └────┬─────┘
-     │                                                               │
-     │ 1. POST /auth/login (email, password)                         │
-     │───────────────────────────────────────────────────────────────>│
-     │                                                                │
-     │                                      2. Validate credentials   │
-     │                                         Check failed_login_ct  │
-     │                                         Check locked_until_utc │
-     │                                                                │
-     │ 3. Return JWT access token (30 min) + refresh token (7 days)   │
-     │<───────────────────────────────────────────────────────────────│
-     │                                                                │
-     │ 4. API request with Authorization: Bearer <access_token>       │
-     │───────────────────────────────────────────────────────────────>│
-     │                                                                │
-     │                                      5. Validate JWT signature │
-     │                                         Extract tenant_id      │
-     │                                         Check expiration       │
-     │                                                                │
-     │ 6. Response with data                                          │
-     │<───────────────────────────────────────────────────────────────│
-     │                                                                │
-     │ (After 15 min, access token expires)                           │
-     │                                                                │
-     │ 7. POST /auth/refresh (refresh_token)                          │
-     │───────────────────────────────────────────────────────────────>│
-     │                                                                │
-     │                                      8. Validate refresh token │
-     │                                         Check revoked_at_utc   │
-     │                                         Check expires_at_utc   │
-     │                                                                │
-     │ 9. Return new access token + refresh token                     │
-     │<───────────────────────────────────────────────────────────────│
-```
-
-**SSO Flow (Microsoft/Google OIDC):**
-```
-User → /auth/sso/microsoft → OIDC Provider → Callback → Validate ID Token
-  → Create/Link User → Issue JWT + Refresh Token
-```
+See [Architecture Diagrams — Authentication Flow](./ARCHITECTURE_DIAGRAM.md#authentication-flow) for the full sequence diagram.
 
 **Security Features (FR-050):**
 - Password hashing: Argon2id (OWASP recommended)

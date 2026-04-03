@@ -220,10 +220,14 @@ record_telemetry(
 | Doc | Purpose | When to Check |
 |-----|---------|---------------|
 | `REQUIREMENTS.md` | FRs/NFRs with acceptance criteria | Starting a new feature |
-| `ARCHITECTURE.md` | Overview + pointers to detailed docs | Quick reference |
 | `STATUS.md` | Current phase, active tasks, blockers | Daily; before picking work |
-| `docs/WORKFLOW.md` | Development workflow commands | Understanding the process |
-| `docs/architecture/*.md` | Detailed: data-model, interfaces, deployment, observability | Deep implementation work |
+| `docs/ARCHITECTURE_DIAGRAM.md` | Mermaid diagrams: system, pipeline, data model, deploy, auth | Quick visual reference |
+| `docs/ARCHITECTURE_OVERVIEW.md` | System overview for external audiences | Architecture questions |
+| `docs/TECHNICAL_DEEP_DIVE.md` | RAG pipeline internals, caching, cost, PII | Deep implementation work |
+| `docs/WORKFLOW.md` | Development workflow: skills, hooks, review gates | Understanding the process |
+| `docs/OPERATIONS.md` | Deploy, monitor, diagnose, rollback | Production ops |
+| `docs/architecture/data-model.md` | Full DB schema reference | Adding tables or columns |
+| `docs/architecture/interfaces.md` | Provider abstraction interfaces | Adding new providers |
 | `EVALS.md` | Golden queries and pass/fail criteria | Adding/changing retrieval or LLM logic |
 | `CHECKPOINT.md` | Autonomous work log | Resuming work, auditing sessions |
 

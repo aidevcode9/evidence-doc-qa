@@ -17,16 +17,35 @@ This project uses a **command-driven workflow system** that enforces:
 
 ## Workflow Commands
 
+### Skills (user-invoked, require judgment)
+
 | Command | Role | When to Use |
 |---------|------|-------------|
 | `/wsorchestrate` | Project Manager | Starting a session, picking work, batching FRs |
 | `/wsresearch` | Investigator | Before coding, gather context and patterns |
 | `/wsstart` | Developer | Plan + implement with TDD |
-| `/wsverify` | QA | Run lint, types, tests |
+| `/wsverify` | QA | Run lint, types, tests (also enforced by pre-commit hook) |
 | `/wsskeptic` | Security Auditor | Adversarial review for AI failure modes |
+| `/wsedd` | Eval Engineer | Write failing eval before retrieval/LLM changes |
+| `/wsredteam` | Red Team | Attack the system, find weaknesses across 6 vectors |
+| `/wsdocs` | Technical Writer | Check which docs/diagrams need updating after changes |
 | `/wsstatus` | Reporter | Update STATUS.md |
-| `/wscommit` | Release Manager | Commit, push, create PR |
 | `/wsmistake` | Historian | Document mistakes for future reference |
+
+### Hooks (enforced automatically, can't be skipped)
+
+Configured in `.claude/settings.json`. These fire on every matching tool call:
+
+| Hook | Trigger | What it does |
+|------|---------|-------------|
+| **Pre-commit gates** | `git commit` | Runs `ruff + mypy --strict + pytest`. Blocks commit on failure. |
+| **Pre-push reminder** | `git push` | Reminds to run `/wsskeptic` |
+| **DB safety** | `DELETE`, `alembic` | Prompt hook blocks destructive DB commands without approval |
+| **Post-edit lint** | Edit/Write `.py` | Auto-runs `ruff` after every Python file change |
+
+### Published Documentation
+
+When docs change, the GitHub Pages site auto-deploys. Run `/wsdocs` after code changes to check which docs need updating. The published site is the stakeholder-facing view of the same in-repo docs.
 
 ---
 
