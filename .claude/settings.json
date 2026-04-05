@@ -27,10 +27,21 @@
         "matcher": "Bash",
         "hooks": [
           {
+            "type": "command",
+            "if": "Bash(git push *)",
+            "command": "BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null); if [ \"$BRANCH\" = \"main\" ]; then echo '{\"decision\": \"block\", \"reason\": \"Direct push to main is not allowed. Use feature branches + PRs. Create a branch: git checkout -b feat/your-feature\"}'; fi",
+            "statusMessage": "Branch protection check..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
             "type": "agent",
             "if": "Bash(git push *)",
-            "prompt": "Quick adversarial review of staged changes. Run `git diff HEAD~1` and scan for: (1) tenant_id missing from new DB queries, (2) raw LLM calls bypassing telemetry wrapper, (3) PII in log statements (user emails, document content), (4) new endpoints missing auth/RBAC checks, (5) hardcoded secrets or credentials. Report PASS if clean, or BLOCK with specific file:line references if any issue found. Be concise — this runs on every push.",
-            "timeout": 60,
+            "prompt": "Adversarial review of changes being pushed. Run `git diff main...HEAD` (or `git diff HEAD~1` if on main) and scan for: (1) tenant_id missing from new DB queries, (2) raw LLM calls bypassing telemetry wrapper, (3) PII in log statements (user emails, document content), (4) new endpoints missing auth/RBAC checks, (5) hardcoded secrets or credentials. Report PASS if clean, or BLOCK with specific file:line references if any issue found.",
+            "timeout": 120,
             "statusMessage": "Pre-push adversarial scan..."
           }
         ]

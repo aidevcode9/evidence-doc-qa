@@ -15,22 +15,43 @@ This project uses a **command-driven workflow system** that enforces:
 
 ---
 
+## Git Flow
+
+**`main` is protected. All changes go through feature branches + PRs.**
+
+```
+main (production — no direct push)
+  ↑ PR required, /wsreview must pass
+  │
+feat/TASK-ID-description (where work happens)
+  ↑ git checkout -b feat/ARCH-1-request-deadline
+  │
+  ├── code → commit [hook: ruff + mypy + pytest]
+  ├── push to feature branch [hook: adversarial agent scan]
+  ├── /wsreview (full adversarial review)
+  ├── gh pr create → merge to main
+  └── main auto-deploys (API → Container Apps, Web → Vercel, Docs → knowledge.bound.legal)
+```
+
+**Branch naming:** `feat/TASK-ID-description`, `fix/TASK-ID-description`, `chore/description`
+
+---
+
 ## Workflow Commands
 
 ### Skills (user-invoked, require judgment)
 
 | Command | Role | When to Use |
 |---------|------|-------------|
-| `/wsorchestrate` | Project Manager | Starting a session, picking work, batching FRs |
-| `/wsresearch` | Investigator | Before coding, gather context and patterns |
+| `/wsorchestrate` | Project Manager | Starting a session, picking work |
+| `/wsresearch` | Investigator | Before coding — NON-NEGOTIABLE |
 | `/wsstart` | Developer | Plan + implement with TDD |
-| `/wsverify` | QA | Run lint, types, tests (also enforced by pre-commit hook) |
-| `/wsskeptic` | Security Auditor | Adversarial review for AI failure modes |
 | `/wsedd` | Eval Engineer | Write failing eval before retrieval/LLM changes |
-| `/wsredteam` | Red Team | Full adversarial attack suite (6 vectors). For major features/pre-release. Lightweight version runs automatically on every push via hook. |
-| `/wsdocs` | Technical Writer | Check which docs/diagrams need updating after changes |
+| `/wsreview` | Adversarial Reviewer | Before PR merge — code review + security attack surface — NON-NEGOTIABLE |
+| `/wsdocs` | Technical Writer | After changes — check docs/diagrams for drift |
 | `/wsstatus` | Reporter | Update STATUS.md |
-| `/wsmistake` | Historian | Document mistakes for future reference |
+| `/wsverify` | QA | Manual "run everything" (pre-commit hook handles this automatically) |
+| `/wsmistake` | Historian | Document mistakes in CLAUDE.md |
 
 ### Hooks (enforced automatically, can't be skipped)
 
@@ -38,10 +59,11 @@ Configured in `.claude/settings.json`. These fire on every matching tool call:
 
 | Hook | Trigger | What it does |
 |------|---------|-------------|
-| **Pre-commit gates** | `git commit` | Runs `ruff + mypy --strict + pytest`. Blocks commit on failure. |
+| **Branch protection** | `git push` | Blocks direct push to `main`. Use feature branches. |
+| **Pre-commit gates** | `git commit` | Runs `ruff + mypy --strict + pytest`. Blocks on failure. |
 | **Pre-push adversarial scan** | `git push` | Agent scans diff for: missing tenant_id, raw LLM calls, PII in logs, unauthed endpoints, hardcoded secrets. Blocks on failure. |
-| **DB safety** | `DELETE`, `alembic` | Prompt hook blocks destructive DB commands without approval |
-| **Post-edit lint** | Edit/Write `.py` | Auto-runs `ruff` after every Python file change |
+| **DB safety** | `DELETE`, `alembic` | Prompt hook blocks destructive DB commands without approval. |
+| **Post-edit lint** | Edit/Write `.py` | Auto-runs `ruff` after every Python file change. |
 
 ### Published Documentation — knowledge.bound.legal
 
@@ -69,55 +91,31 @@ cd apps/docs && npm run dev
 ## Typical Development Session
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        SESSION START                             │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  /wsorchestrate                                                  │
-│  ─────────────────                                               │
-│  • Reads STATUS.md, REQUIREMENTS.md, CHECKPOINT.md               │
-│  • Identifies current phase and available work                   │
-│  • Creates session plan with batched FRs                         │
-│  • Waits for approval before proceeding                          │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  FOR EACH FR/NFR IN BATCH:                                       │
-│  ═══════════════════════════                                     │
-│                                                                  │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐       │
-│  │ /wsresearch  │ →  │  /wsstart    │ →  │  /wsverify   │       │
-│  │              │    │              │    │              │       │
-│  │ • Patterns   │    │ • TDD cycle  │    │ • ruff       │       │
-│  │ • Similar    │    │ • RED→GREEN  │    │ • mypy       │       │
-│  │   code       │    │ • Implement  │    │ • pytest     │       │
-│  │ • Risks      │    │              │    │              │       │
-│  └──────────────┘    └──────────────┘    └──────────────┘       │
-│                                                 │                │
-│                                                 ▼                │
-│                                          ┌──────────────┐       │
-│                                          │  /wsskeptic  │       │
-│                                          │              │       │
-│                                          │ • Failure    │       │
-│                                          │   modes      │       │
-│                                          │ • Data leak  │       │
-│                                          │ • Citations  │       │
-│                                          └──────────────┘       │
-│                                                 │                │
-│                                                 ▼                │
-│                                          Log to CHECKPOINT.md   │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  SESSION END                                                     │
-│  ───────────                                                     │
-│  • /wsstatus → Update STATUS.md                                  │
-│  • /wscommit → Commit with (FR-XXX) reference, push, PR          │
-└─────────────────────────────────────────────────────────────────┘
+SESSION START
+  │
+  ├── /wsorchestrate → pick work from STATUS.md
+  ├── git checkout -b feat/TASK-ID-description
+  │
+  FOR EACH TASK:
+  │
+  ├── /wsresearch            ← gather context (NON-NEGOTIABLE)
+  ├── /wsedd                 ← write failing eval (if LLM/retrieval)
+  ├── /wsstart               ← TDD: red → green → refactor
+  │     └── [hook: post-edit lint auto-runs on .py]
+  │
+  ├── git commit             ← [hook: ruff + mypy + pytest BLOCKS on fail]
+  │     └── repeat for each task in batch
+  │
+  ├── /wsreview              ← adversarial review (NON-NEGOTIABLE)
+  ├── /wsdocs                ← check doc/diagram drift
+  │
+  ├── git push               ← [hook: blocks if on main]
+  │                             [hook: adversarial agent scan]
+  ├── gh pr create           ← PR to main with summary
+  │
+  SESSION END:
+  ├── /wsstatus              ← update STATUS.md
+  └── Log to CHECKPOINT.md
 ```
 
 ---

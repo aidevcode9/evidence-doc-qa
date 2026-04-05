@@ -39,7 +39,7 @@
 → Do NOT skip this step even under time pressure.
 
 ### Before every PR/commit:
-→ **NON-NEGOTIABLE:** Run `/wsskeptic` adversarial code review.
+→ **NON-NEGOTIABLE:** Run `/wsreview` adversarial code review.
 → Fix all CRITICAL and HIGH severity issues before committing.
 → Document any accepted risks in commit message.
 → Do NOT skip this step even under time pressure.
@@ -241,7 +241,7 @@ record_telemetry(
 5. **Write test first (TDD)**
 6. Implement → run tests + evals
 7. **Verify LLM telemetry if applicable**
-8. **Run `/wsskeptic`** → adversarial review (NON-NEGOTIABLE)
+8. **Run `/wsreview`** → adversarial review (NON-NEGOTIABLE)
 9. Update `STATUS.md` → move task to "Shipped"
 10. Commit with `(FR-NNN)` reference
 
@@ -433,8 +433,9 @@ Types: `feat`, `fix`, `test`, `docs`, `refactor`, `chore`
 - **Writing code before tests**
 - **LLM calls bypassing telemetry wrapper**
 - **Skipping LLM telemetry "for speed"**
+- **Pushing directly to main** — use feature branches + PRs
 - **Skipping `/wsresearch` "to save time"** — NON-NEGOTIABLE
-- **Skipping `/wsskeptic` "just this once"** — NON-NEGOTIABLE
+- **Skipping `/wsreview` "just this once"** — NON-NEGOTIABLE
 - **Documentation drift** — Code changed but docs not updated
 
 ---
