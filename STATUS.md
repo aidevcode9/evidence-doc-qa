@@ -1,15 +1,15 @@
 # STATUS.md
 
-Last updated: 2026-04-02
+Last updated: 2026-04-05
 
 ---
 
-## Current Phase: 8a — Performance Foundation (finishing)
+## Current Phase: 8b — Pipeline Restructure
 
-**Goal:** Query latency p95 < 4s, 50 concurrent users, secure defaults
-**Progress:** 9/11 tracked performance tasks shipped (PERF-1-6, SEC-1-2, UI-1). Production hotfixes shipped 04-01: matters 500 (session lifecycle + SQL GROUP BY), httpx[http2] missing dep, OTEL double-slash, My Matters nav loop, matter delete, docs refresh. 2 Phase 8a tasks remain in "Now".
+**Goal:** Conversational Q&A, pipeline decomposition, production-grade workflow
+**Progress:** Phase 8a complete (ARCH-1, DOCS-1 shipped). CONV-1 shipped. Production workflow established: feature branches + PRs, `/wsreview`, enforced hooks. Knowledge site live at knowledge.bound.legal. ARCH-2/ARCH-3 next (need review — high blast radius).
 
-> **Research docs:** `docs/LATENCY_FIXES.md`, `docs/ARCHITECTURE_REVIEW.md`, `docs/MULTI_TENANT_READINESS.md`, `docs/UI_MATTERS_DASHBOARD.md`
+> **Research docs:** `docs/ARCHITECTURE_REVIEW.md`, `docs/planning/MULTI_TENANT_READINESS.md`
 
 ---
 
@@ -59,19 +59,15 @@ Last updated: 2026-04-02
 
 | Task | FR | Date |
 |------|-----|------|
+| **Production workflow — feature branches + PRs + /wsreview (PR #29)** | INFRA | 04-05 |
+| **Merge /wsskeptic + /wsredteam → /wsreview** | INFRA | 04-05 |
+| **Branch protection hook — blocks direct push to main** | INFRA | 04-05 |
+| **Nextra knowledge site → knowledge.bound.legal** | INFRA | 04-03 |
+| **Doc consolidation — 32 files → 16 (52% reduction)** | DOCS | 04-02 |
+| **Hooks: pre-commit gates, pre-push adversarial scan, post-edit lint, DB safety** | INFRA | 04-02 |
+| **New skills: /wsedd (EDD), /wsdocs (technical writer)** | INFRA | 04-02 |
 | **[ARCH-1] Request deadline (30s) on execute_ask()** | NFR-011 | 04-02 |
-| **[DOCS-1] GitHub Pages auto-deploy** | INFRA | 04-02 |
 | **[CONV-1] Conversational memory — always contextualize with session history** | FR-070 | 04-02 |
-| **Fix matters 500 — session lifecycle + PostgreSQL GROUP BY** | — | 04-01 |
-| **Add debug logging to matter queries (list, detail, access, backfill)** | — | 04-01 |
-| **Fix httpx[http2] missing dep — indexing crash in prod** | NFR-011 | 04-01 |
-| **Fix OTEL double-slash 400 — strip trailing slashes from App Insights endpoints** | NFR-022 | 04-01 |
-| **Fix My Matters nav — remove localStorage redirect loop** | FR-UI-001 | 04-01 |
-| **Add matter delete from dashboard (confirmation dialog, hard delete)** | FR-043 | 04-01 |
-| **Fix hard_delete_matter — was missing matters row deletion** | FR-043 | 04-01 |
-| **Disable Google SSO button for demo** | — | 04-01 |
-| **Update stale architecture docs (versions, SQL, schema, test counts)** | DOCS | 04-01 |
-| **DB cleanup — removed 6 orphaned/test matters from prod** | — | 04-01 |
 
 ## Blocked
 
@@ -236,6 +232,11 @@ Last updated: 2026-04-02
 | 01-24 | **Langfuse for LLM observability** | Optional dependency; graceful degradation; @observe decorators for LLM tracing (NFR-045) |
 | 04-01 | **Fresh session for DB fallback queries** | Reusing a rolled-back session for fallback causes commit crash. Always open a new session_scope() for fallback paths. |
 | 04-01 | **Sanitize Azure connection strings in code, not secrets** | Azure portal always copies trailing slashes on endpoints. Strip in otel.py rather than relying on correct secret values. |
+| 04-02 | **Hooks over CLAUDE.md rules** | Rules in CLAUDE.md get skipped under pressure. Hooks can't be skipped. Put mechanical checks in hooks, judgment calls in skills. |
+| 04-02 | **EDD for retrieval/LLM changes** | Write a failing eval before changing any AI behavior. Prevents regressions that unit tests miss. |
+| 04-03 | **Nextra on Vercel for knowledge site** | Private repo can't use GitHub Pages. Nextra + Vercel renders docs/*.md as knowledge.bound.legal. Source of truth stays in-repo. |
+| 04-05 | **Feature branches + PRs required** | Build processes for a dev team, not solo shortcuts. Direct push to main blocked by hook. /wsreview required before merge. |
+| 04-05 | **Merge /wsskeptic + /wsredteam → /wsreview** | One adversarial review skill, not two with unclear boundaries. Pre-push hook handles lightweight scan automatically. |
 | 04-01 | **Clear localStorage on dashboard load** | The single-matter migration redirect created an infinite loop once per-matter routing was added. Dashboard always clears stale state. |
 
 > **Current Stack:** Azure AI Search + Azure OpenAI + configurable parser
@@ -290,6 +291,24 @@ Last updated: 2026-04-02
 ---
 
 ## Archive
+
+<details>
+<summary>Week of 04-01 to 04-02 (Prod hotfixes + DOCS-1)</summary>
+
+| Task | FR | Date |
+|------|-----|------|
+| [DOCS-1] GitHub Pages → Nextra/Vercel upgrade | INFRA | 04-02 |
+| Fix matters 500 — session lifecycle + GROUP BY | — | 04-01 |
+| Debug logging on matter queries | — | 04-01 |
+| Fix httpx[http2] missing dep — indexing crash | NFR-011 | 04-01 |
+| Fix OTEL double-slash 400 | NFR-022 | 04-01 |
+| Fix My Matters nav redirect loop | FR-UI-001 | 04-01 |
+| Matter delete from dashboard + hard_delete fix | FR-043 | 04-01 |
+| Disable Google SSO for demo | — | 04-01 |
+| Stale architecture docs update | DOCS | 04-01 |
+| DB cleanup — 6 orphaned matters | — | 04-01 |
+
+</details>
 
 <details>
 <summary>Week of 03-15 to 03-31 (Phase 8a)</summary>
