@@ -8,6 +8,15 @@
 
 **These rules activate automatically. No command needed.**
 
+### When I say "next task", "what's next", or "start next":
+→ `git pull origin main`
+→ Read `STATUS.md` → find the top item in "Now" or "Next"
+→ Present it: **"Next task: [TASK-ID] — [description]. Confirm, or pick another?"**
+→ On confirm:
+  1. `git checkout -b feat/TASK-ID-description`
+  2. Spawn `researcher` subagent → present brief
+  3. Wait for approval before implementation
+
 ### When I describe wanting to build something:
 → **STOP.** Do not write code immediately.
 → Activate brainstorming: Ask clarifying questions, explore alternatives, present design.
