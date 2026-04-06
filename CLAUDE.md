@@ -34,12 +34,12 @@
 → If more tasks in "Next": Ask if I should continue to next task.
 
 ### Before starting ANY FR/NFR implementation:
-→ **NON-NEGOTIABLE:** Run `/wsresearch` first.
-→ Gather patterns, similar code, risks, and invariants.
-→ Do NOT skip this step even under time pressure.
+→ **NON-NEGOTIABLE:** Spawn `researcher` subagent first.
+→ Gathers patterns, similar code, risks, and invariants in isolated context.
+→ Returns structured research brief. Do NOT skip even under time pressure.
 
 ### Before every PR/commit:
-→ **NON-NEGOTIABLE:** Run `/wsreview` adversarial code review.
+→ **NON-NEGOTIABLE:** Spawn `skeptic` subagent for adversarial review.
 → Fix all CRITICAL and HIGH severity issues before committing.
 → Document any accepted risks in commit message.
 → Do NOT skip this step even under time pressure.
@@ -66,13 +66,16 @@ For each task:
 
 ### 2. Per-Task Loop
 ```
-1. Create/switch to feature branch
-2. Write failing test (TDD - RED)
-3. Implement minimal code to pass (GREEN)
-4. Run: ruff check && mypy --strict && pytest tests/ -v
-5. If LLM code touched: Verify telemetry (see checklist)
-6. Run: pytest evals/ -v
-7. If all pass: 
+1. Spawn `researcher` subagent → get research brief (runs in parallel with branch setup)
+2. Create/switch to feature branch
+3. Write failing test (TDD - RED)
+4. Implement minimal code to pass (GREEN)
+5. Spawn `verifier` subagent → lint + types + tests (isolated, doesn't eat main context)
+6. If LLM code touched: Verify telemetry (see checklist)
+7. If all pass:
+   - Spawn `skeptic` subagent → adversarial review
+   - Fix any CRITICAL/HIGH issues
+   - Spawn `doc-sync` subagent → check if docs need updating
    - Commit with (FR-NNN) reference
    - Update STATUS.md → move to "Shipped"
    - Log checkpoint
@@ -80,6 +83,12 @@ For each task:
    - Attempt fix (max 2 tries)
    - If still failing: Stop, document issue, wait for user
 ```
+
+**Subagent advantages over slash commands:**
+- Run in isolated context (don't consume main conversation tokens)
+- Can run in parallel (researcher + branch setup simultaneously)
+- Deterministic output format (structured briefs, not free-form)
+- Cheaper (researcher/verifier/doc-sync use sonnet/haiku, not opus)
 
 ### 3. Checkpoint Log
 After each completed task, append to `CHECKPOINT.md`:
@@ -235,13 +244,13 @@ record_telemetry(
 
 **Workflow:**
 1. Check `STATUS.md` → find task in "Next" or "Now"
-2. **Run `/wsresearch`** → gather context, patterns, risks (NON-NEGOTIABLE)
+2. **Spawn `researcher` subagent** → gather context, patterns, risks (NON-NEGOTIABLE)
 3. Look up FR in `REQUIREMENTS.md` → read acceptance criteria
 4. Check `ARCHITECTURE.md` → find relevant schema/interface
 5. **Write test first (TDD)**
 6. Implement → run tests + evals
 7. **Verify LLM telemetry if applicable**
-8. **Run `/wsreview`** → adversarial review (NON-NEGOTIABLE)
+8. **Spawn `skeptic` subagent** → adversarial review (NON-NEGOTIABLE)
 9. Update `STATUS.md` → move task to "Shipped"
 10. Commit with `(FR-NNN)` reference
 
@@ -434,8 +443,8 @@ Types: `feat`, `fix`, `test`, `docs`, `refactor`, `chore`
 - **LLM calls bypassing telemetry wrapper**
 - **Skipping LLM telemetry "for speed"**
 - **Pushing directly to main** — use feature branches + PRs
-- **Skipping `/wsresearch` "to save time"** — NON-NEGOTIABLE
-- **Skipping `/wsreview` "just this once"** — NON-NEGOTIABLE
+- **Skipping `researcher` subagent "to save time"** — NON-NEGOTIABLE
+- **Skipping `skeptic` subagent "just this once"** — NON-NEGOTIABLE
 - **Documentation drift** — Code changed but docs not updated
 
 ---
