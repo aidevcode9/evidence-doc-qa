@@ -462,6 +462,13 @@ def check_cache(
     if cached is None:
         return None
 
+    # Defensive: validate snapshot matches to prevent stale cache hits
+    if cached.get("evidence") and isinstance(cached["evidence"], dict):
+        cached_snapshot = cached["evidence"].get("docs_snapshot_id", "")
+        if cached_snapshot and cached_snapshot != ctx.docs_snapshot_id:
+            logger.warning(f"Cache stale [{ctx.request_id}]: snapshot mismatch, skipping")
+            return None
+
     logger.info(f"Cache hit [{ctx.request_id}]: returning cached response")
     cached_response = AskResponse(**cached)
     cached_response.request_id = ctx.request_id
@@ -598,6 +605,7 @@ def retrieve(
     )
 
 
+@_observe(name="_run_verification", capture_input=False, capture_output=False)
 def _run_verification(
     effective_question: str,
     candidates: list[ChunkDict],
@@ -608,7 +616,10 @@ def _run_verification(
     """Step 4: Auto-verify or parallel LLM verification.
 
     Returns VerificationResult with the verified chunk (or None) and cost data.
+    Raises ValueError if candidates is empty.
     """
+    if not candidates:
+        raise ValueError("_run_verification requires non-empty candidates list")
     verified_chunk: ChunkDict | None = None
     verification_status = "UNVERIFIED"
     verification_rejected = False
@@ -784,6 +795,7 @@ def synthesize(
     conf_min: float,
     trace_metadata: TraceMetadata,
     tenant_id: str,
+    docs_snapshot_id: str,
 ) -> SynthesisResult:
     """Step 5: Span extraction, evidence grading, citations, answer text."""
     q_tokens = evidence.tokenize(effective_question)
@@ -902,7 +914,7 @@ def synthesize(
         supporting_span=supporting_span,
         supporting_page_num=primary_citation.page_num,
         supporting_doc_name=primary_citation.doc_name,
-        docs_snapshot_id=trace_metadata.get("docs_snapshot_id") or "",
+        docs_snapshot_id=docs_snapshot_id,
         index_version=INDEX_VERSION,
         confidence_threshold=conf_min,
     )
@@ -1095,7 +1107,7 @@ def execute_ask(
     tokens_in += vr.tokens_in
     tokens_out += vr.tokens_out
     cost_est += vr.cost_est
-    trace_metadata = dict(vr.trace_metadata)
+    trace_metadata = {**trace_metadata, **vr.trace_metadata}
     verified_chunk = vr.verified_chunk
     verification_status = vr.verification_status
     verification_rejected = vr.verification_rejected
@@ -1150,6 +1162,10 @@ def execute_ask(
                 matter_id=matter_id,
                 user_id=user_id,
             )
+        logger.warning(
+            f"Verification fallthrough [{request_id}]: All candidates unverified "
+            f"(not rejected). Promoting top candidate as unverified answer."
+        )
         verified_chunk = candidates[0]
 
     if not verification.is_enabled():
@@ -1202,7 +1218,8 @@ def execute_ask(
     trace_metadata = {**trace_metadata, "verifier_result": verifier_result}
 
     # --- Step 5: Synthesize ----------------------------------------------
-    assert verified_chunk is not None  # guaranteed by refusal branches above
+    if verified_chunk is None:
+        raise RuntimeError("verified_chunk is None after refusal branches — this should be unreachable")
     sr = synthesize(
         effective_question,
         verified_chunk,
@@ -1216,6 +1233,7 @@ def execute_ask(
         conf_min=conf_min,
         trace_metadata=trace_metadata,
         tenant_id=tenant_id,
+        docs_snapshot_id=docs_snapshot_id,
     )
     answer_text = sr.answer_text
     citations = sr.citations

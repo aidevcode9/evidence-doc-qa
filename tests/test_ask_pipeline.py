@@ -428,6 +428,7 @@ class TestSynthesizeStep:
                 conf_min=0.7,
                 trace_metadata={},
                 tenant_id="t1",
+                docs_snapshot_id="snap-test",
             )
 
         assert isinstance(sr, SynthesisResult)
