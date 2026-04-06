@@ -1,4 +1,5 @@
 import concurrent.futures
+import dataclasses
 import json
 import time
 import uuid
@@ -110,6 +111,77 @@ FOLLOW_UP_TERMS = {
     "former",
     "latter",
 }
+
+
+# ---------------------------------------------------------------------------
+# ARCH-2: Pipeline step dataclasses
+# ---------------------------------------------------------------------------
+
+
+@dataclasses.dataclass(frozen=True)
+class SetupContext:
+    """Output of validate_and_setup(): everything needed before retrieval."""
+
+    request_id: str
+    question: str
+    effective_question: str
+    question_hash: str | None
+    question_len: int
+    docs_snapshot_id: str
+    doc_id: str | None
+    version_snapshot: VersionSnapshot
+    trace_metadata: TraceMetadata
+    conversation_meta: dict[str, Any]
+
+
+@dataclasses.dataclass
+class RetrievalResult:
+    """Output of retrieve(): search results, candidates, and cost accounting."""
+
+    results: list[ChunkDict]
+    candidates: list[ChunkDict]
+    retrieval_ms: int
+    embedding_usage: dict[str, Any]
+    tokens_in: int
+    cost_est: float
+    cost_breakdown: CostBreakdown
+    usage_fallback: bool
+    ret_score_key: str
+    conf_score_key: str
+    conf_min: float
+    conf_version: str
+    trace_metadata: TraceMetadata = dataclasses.field(default_factory=dict)
+
+
+@dataclasses.dataclass
+class VerificationResult:
+    """Output of the verification phase."""
+
+    verified_chunk: ChunkDict | None
+    verification_status: str
+    verification_rejected: bool
+    verification_results: dict[str, tuple[str, str | None]]
+    verification_reasons: dict[str, str]
+    last_verifier_reason: str | None
+    verified_span: str | None
+    verification_ms: int
+    tokens_in: int
+    tokens_out: int
+    cost_est: float
+    cost_breakdown: CostBreakdown
+    usage_fallback: bool
+    trace_metadata: TraceMetadata = dataclasses.field(default_factory=dict)
+
+
+@dataclasses.dataclass
+class SynthesisResult:
+    """Output of synthesize(): final answer text, citations, evidence."""
+
+    answer_text: str | None
+    citations: list[Citation]
+    evidence_support: EvidenceSupport | None
+    debug_candidates: list[DebugCandidate] | None
+    trace_metadata: TraceMetadata = dataclasses.field(default_factory=dict)
 
 
 def _verify_candidates_parallel(
@@ -289,21 +361,26 @@ def _contextualize_question(
     }
 
 
-@_observe(name="execute_ask", capture_input=False, capture_output=False)
-def execute_ask(
+# ---------------------------------------------------------------------------
+# ARCH-2: Pipeline step functions
+# ---------------------------------------------------------------------------
+
+
+def validate_and_setup(
     payload: AskRequest,
     session_id: str | None = None,
     *,
     tenant_id: str,
     matter_id: str,
-    user_id: str,
-) -> AskResponse:
-    start_time = time.perf_counter()
+) -> SetupContext:
+    """Step 1: Input validation, snapshot lookup, conversation context.
+
+    Raises HTTPException on empty or over-length questions.
+    """
     question = payload.question.strip()
     if not question:
         raise HTTPException(status_code=400, detail="Question is required.")
 
-    # Security: Prevent token overflow attacks (HIGH severity fix)
     if len(question) > MAX_QUERY_LENGTH:
         raise HTTPException(
             status_code=400,
@@ -311,8 +388,12 @@ def execute_ask(
         )
 
     request_id = str(uuid.uuid4())
-    docs_snapshot_id = payload.docs_snapshot_id or get_latest_snapshot_for_matter(tenant_id=tenant_id, matter_id=matter_id) or "none"
-    doc_id = payload.doc_id  # Optional: pin query to a single document
+    docs_snapshot_id = (
+        payload.docs_snapshot_id
+        or get_latest_snapshot_for_matter(tenant_id=tenant_id, matter_id=matter_id)
+        or "none"
+    )
+    doc_id = payload.doc_id
     question_len = len(question)
     effective_question, conversation_meta = _contextualize_question(
         question,
@@ -321,44 +402,6 @@ def execute_ask(
         matter_id=matter_id,
     )
     question_hash = rag.hash_text(effective_question) if effective_question else None
-
-    # Query cache check (Cost Reduction)
-    if _query_cache is not None and question_hash:
-        cached = _query_cache.get(tenant_id, matter_id, docs_snapshot_id, question_hash, doc_id=doc_id)
-        if cached is not None:
-            logger.info(f"Cache hit [{request_id}]: returning cached response")
-            cached_response = AskResponse(**cached)
-            cached_response.request_id = request_id
-            _record_request_internal(
-                request_id=request_id,
-                tenant_id=tenant_id,
-                matter_id=matter_id,
-                docs_snapshot_id=docs_snapshot_id,
-                version_snapshot={
-                    "request_id": request_id,
-                    "docs_snapshot_id": docs_snapshot_id,
-                    "prompt_version": PROMPT_VERSION,
-                    "verifier_prompt_version": verification.VERIFIER_PROMPT_VERSION,
-                    "retrieval_version": RETRIEVAL_VERSION,
-                    "model_id": MODEL_ID,
-                    "parser_mode": PARSER_MODE,
-                },
-                refusal_code=None,
-                failure_label=None,
-                start_time=start_time,
-                question_len=question_len,
-                answer_len=len(cached_response.answer_text or ""),
-                cache_hit=True,
-            )
-            return cached_response
-
-    tokens_in = 0
-    tokens_out = 0
-    cost_est = 0.0
-    cost_breakdown: CostBreakdown = {}
-    usage_fallback = False
-    
-    logger.info(f"Incoming Request [{request_id}] - Snapshot: {docs_snapshot_id}")
 
     version_snapshot: VersionSnapshot = {
         "request_id": request_id,
@@ -387,26 +430,71 @@ def execute_ask(
         metadata={"docs_snapshot_id": docs_snapshot_id, "request_id": request_id},
     )
 
-    if policy.is_injection_attempt(question):
-        logger.warning(f"Policy Trigger [{request_id}]: Injection Attempt Detected")
-        return _emit_refusal(
-            request_id=request_id,
-            docs_snapshot_id=docs_snapshot_id,
-            version_snapshot=version_snapshot,
-            refusal_code=RefusalCode.INJECTION_DETECTED,
-            reason="Injection heuristics triggered.",
-            failure_label="INJECTION_DETECTED",
-            start_time=start_time,
-            question_len=question_len,
-            tokens_in=tokens_in,
-            tokens_out=tokens_out,
-            cost_est=cost_est,
-            trace_metadata=trace_metadata,
-            session_id=session_id,
-            question=question,
-            tenant_id=tenant_id,
-            matter_id=matter_id,
-        )
+    return SetupContext(
+        request_id=request_id,
+        question=question,
+        effective_question=effective_question,
+        question_hash=question_hash,
+        question_len=question_len,
+        docs_snapshot_id=docs_snapshot_id,
+        doc_id=doc_id,
+        version_snapshot=version_snapshot,
+        trace_metadata=trace_metadata,
+        conversation_meta=conversation_meta,
+    )
+
+
+def check_cache(
+    ctx: SetupContext,
+    *,
+    cache: QueryResultCache | None,
+    tenant_id: str,
+    matter_id: str,
+    start_time: float,
+) -> AskResponse | None:
+    """Step 2: Cache lookup. Returns cached AskResponse or None."""
+    if cache is None or not ctx.question_hash:
+        return None
+
+    cached = cache.get(
+        tenant_id, matter_id, ctx.docs_snapshot_id, ctx.question_hash, doc_id=ctx.doc_id,
+    )
+    if cached is None:
+        return None
+
+    logger.info(f"Cache hit [{ctx.request_id}]: returning cached response")
+    cached_response = AskResponse(**cached)
+    cached_response.request_id = ctx.request_id
+    _record_request_internal(
+        request_id=ctx.request_id,
+        tenant_id=tenant_id,
+        matter_id=matter_id,
+        docs_snapshot_id=ctx.docs_snapshot_id,
+        version_snapshot=ctx.version_snapshot,
+        refusal_code=None,
+        failure_label=None,
+        start_time=start_time,
+        question_len=ctx.question_len,
+        answer_len=len(cached_response.answer_text or ""),
+        cache_hit=True,
+    )
+    return cached_response
+
+
+def retrieve(
+    effective_question: str,
+    docs_snapshot_id: str,
+    *,
+    tenant_id: str,
+    matter_id: str,
+    doc_id: str | None,
+    trace_metadata: TraceMetadata,
+) -> RetrievalResult:
+    """Step 3: Hybrid search + confidence filtering + cost accounting."""
+    tokens_in = 0
+    cost_est = 0.0
+    cost_breakdown: CostBreakdown = {}
+    usage_fallback = False
 
     retrieval_start = time.perf_counter()
     with otel.span("retrieval", docs_snapshot_id=docs_snapshot_id) as retrieval_span:
@@ -418,7 +506,6 @@ def execute_ask(
             doc_id=doc_id,
             return_usage=True,
         )
-        # hybrid_search with return_usage=True returns tuple
         results: list[ChunkDict]
         embedding_usage: dict[str, Any]
         if isinstance(search_result, tuple):
@@ -433,10 +520,7 @@ def execute_ask(
             )
     retrieval_ms = int((time.perf_counter() - retrieval_start) * 1000)
 
-    # ARCH-1: Deadline check after retrieval
-    _check_deadline(start_time, REQUEST_DEADLINE_SECONDS, "retrieval")
-
-    # Azure Search cost (Cost Reduction visibility)
+    # Azure Search cost
     azure_search_cost = cost.AZURE_SEARCH_COST_PER_QUERY
     cost_est += azure_search_cost
     cost.merge_cost_breakdown(
@@ -455,7 +539,7 @@ def execute_ask(
     tokens_in += embed_prompt_tokens
     cost_est += embed_cost
     embed_estimated = bool(embedding_usage.get("estimated"))
-    
+
     if embed_prompt_tokens or embed_cost or embed_estimated:
         embed_source = embedding_usage.get("source")
         cost.merge_cost_breakdown(
@@ -469,14 +553,15 @@ def execute_ask(
         )
     if embed_estimated:
         usage_fallback = True
-        
-    retrieval_trace = rag.build_retrieval_trace(results)
-    if retrieval_trace:
-        trace_metadata = {**trace_metadata, **retrieval_trace}
 
-    attached_trace = cost.attach_cost_trace(trace_metadata, cost_breakdown, usage_fallback)
+    retrieval_trace = rag.build_retrieval_trace(results)
+    updated_metadata = {**trace_metadata}
+    if retrieval_trace:
+        updated_metadata = {**updated_metadata, **retrieval_trace}
+
+    attached_trace = cost.attach_cost_trace(updated_metadata, cost_breakdown, usage_fallback)
     if attached_trace is not None:
-        trace_metadata = attached_trace
+        updated_metadata = attached_trace
 
     ret_score_key = rag.retrieval_score_key(results)
     conf_score_key = rag.confidence_score_key(results)
@@ -489,79 +574,55 @@ def execute_ask(
         "confidence_score_key": conf_score_key,
         "confidence_threshold": conf_min,
     }
-    trace_metadata = {**trace_metadata, **confidence_meta}
-
-    if not results or rag.score_value(results[0], ret_score_key) == 0.0:
-        logger.warning(f"Retrieval Fail [{request_id}]: No evidence found")
-        debug_candidates = (
-            rag.build_debug_candidates(effective_question, results, tenant_id=tenant_id, reason_override="NO_SUPPORTING_EVIDENCE")
-            if results
-            else None
-        )
-        return _emit_refusal(
-            request_id=request_id,
-            docs_snapshot_id=docs_snapshot_id,
-            version_snapshot=version_snapshot,
-            refusal_code=RefusalCode.NO_SUPPORTING_EVIDENCE,
-            reason="No supporting evidence found.",
-            failure_label="NO_EVIDENCE",
-            start_time=start_time,
-            question_len=question_len,
-            tokens_in=tokens_in,
-            tokens_out=tokens_out,
-            cost_est=cost_est,
-            debug_candidates=debug_candidates,
-            trace_metadata=trace_metadata,
-            session_id=session_id,
-            question=question,
-            tenant_id=tenant_id,
-            matter_id=matter_id,
-            user_id=user_id,
-        )
+    updated_metadata = {**updated_metadata, **confidence_meta}
 
     # Filter by confidence
     candidates = [
         r for r in results if rag.score_value(r, conf_score_key) >= conf_min
     ]
-    if not candidates:
-        logger.warning(
-            f"Confidence Fail [{request_id}]: No results met threshold {conf_min} ({conf_score_key})"
-        )
-        debug_candidates = rag.build_debug_candidates(
-            effective_question,
-            results,
-            tenant_id=tenant_id,
-            reason_override="BELOW_CONFIDENCE_THRESHOLD",
-        )
-        return _emit_refusal(
-            request_id=request_id,
-            docs_snapshot_id=docs_snapshot_id,
-            version_snapshot=version_snapshot,
-            refusal_code=RefusalCode.LOW_RETRIEVAL_CONFIDENCE,
-            reason="Insufficient retrieval confidence.",
-            failure_label="LOW_CONFIDENCE",
-            start_time=start_time,
-            question_len=question_len,
-            tokens_in=tokens_in,
-            tokens_out=tokens_out,
-            cost_est=cost_est,
-            debug_candidates=debug_candidates,
-            trace_metadata=trace_metadata,
-            session_id=session_id,
-            question=question,
-            tenant_id=tenant_id,
-            matter_id=matter_id,
-            user_id=user_id,
-        )
 
-    verified_chunk = None
+    return RetrievalResult(
+        results=results,
+        candidates=candidates,
+        retrieval_ms=retrieval_ms,
+        embedding_usage=embedding_usage,
+        tokens_in=tokens_in,
+        cost_est=cost_est,
+        cost_breakdown=cost_breakdown,
+        usage_fallback=usage_fallback,
+        ret_score_key=ret_score_key,
+        conf_score_key=conf_score_key,
+        conf_min=conf_min,
+        conf_version=conf_version,
+        trace_metadata=updated_metadata,
+    )
+
+
+def _run_verification(
+    effective_question: str,
+    candidates: list[ChunkDict],
+    request_id: str,
+    *,
+    trace_metadata: TraceMetadata,
+) -> VerificationResult:
+    """Step 4: Auto-verify or parallel LLM verification.
+
+    Returns VerificationResult with the verified chunk (or None) and cost data.
+    """
+    verified_chunk: ChunkDict | None = None
     verification_status = "UNVERIFIED"
     verification_rejected = False
     verification_results: dict[str, tuple[str, str | None]] = {}
     verification_reasons: dict[str, str] = {}
-    last_verifier_reason = None
+    last_verifier_reason: str | None = None
     verified_span: str | None = None
-    
+    tokens_in = 0
+    tokens_out = 0
+    cost_est = 0.0
+    cost_breakdown: CostBreakdown = {}
+    usage_fallback = False
+    updated_metadata = {**trace_metadata}
+
     verification_start = time.perf_counter()
     if verification.is_enabled():
         verification_rejected = True
@@ -582,8 +643,8 @@ def execute_ask(
                 )
                 verification_reasons[verified_chunk["chunk_id"]] = AUTO_VERIFY_REASON
                 last_verifier_reason = AUTO_VERIFY_REASON
-                trace_metadata = {
-                    **(trace_metadata or {}),
+                updated_metadata = {
+                    **updated_metadata,
                     "verification_mode": "auto",
                     "auto_verify": {
                         "enabled": True,
@@ -619,17 +680,15 @@ def execute_ask(
                         round(float(verified_chunk.get("azure_reranker_score") or 0.0), 4),
                     )
             else:
-                trace_metadata = {
-                    **(trace_metadata or {}),
+                updated_metadata = {
+                    **updated_metadata,
                     **verification.verifier_trace_metadata(),
                     "verification_mode": "llm",
                 }
-                # Fire all verification calls in parallel (NFR-011 latency reduction)
                 parallel_results = _verify_candidates_parallel(
                     effective_question, candidates, request_id=request_id, max_candidates=3,
                 )
 
-                # Process pre-computed results sequentially for accounting/status
                 for chunk, status, span, reason, usage in parallel_results:
                     v_prompt_t = int(usage.get("prompt_tokens") or 0)
                     v_compl_t = int(usage.get("completion_tokens") or 0)
@@ -662,7 +721,6 @@ def execute_ask(
                     verification_reasons[chunk["chunk_id"]] = reason
                     last_verifier_reason = reason
 
-                    # First verified or unverified chunk wins (same early-exit logic)
                     if verified_chunk is None and not (verification_status == "UNVERIFIED" and not verification_rejected):
                         if status == "verified":
                             verified_chunk = chunk
@@ -685,132 +743,77 @@ def execute_ask(
                 verify_span.set_attribute("verifier.reason", last_verifier_reason or "NOT_FOUND")
                 verify_span.set_attribute("verifier.mode", "llm")
 
-        attached_trace2 = cost.attach_cost_trace(trace_metadata, cost_breakdown, usage_fallback)
+        attached_trace2 = cost.attach_cost_trace(updated_metadata, cost_breakdown, usage_fallback)
         if attached_trace2 is not None:
-            trace_metadata = attached_trace2
-
-        if verified_chunk is None:
-            if verification_rejected:
-                logger.warning(f"Verification Fail [{request_id}]: All top candidates rejected by LLM.")
-                return _emit_refusal(
-                    request_id=request_id,
-                    docs_snapshot_id=docs_snapshot_id,
-                    version_snapshot=version_snapshot,
-                    refusal_code=RefusalCode.NO_SUPPORTING_EVIDENCE,
-                    reason="Retrieval found matches, but they were judged irrelevant by the model.",
-                    failure_label="LLM_VERIFICATION_FAILED",
-                    start_time=start_time,
-                    question_len=question_len,
-                    tokens_in=tokens_in,
-                    tokens_out=tokens_out,
-                    cost_est=cost_est,
-                    trace_metadata=trace_metadata,
-                    session_id=session_id,
-                    question=question,
-                    tenant_id=tenant_id,
-                    matter_id=matter_id,
-                    user_id=user_id,
-                )
-
-            if STRICT_EVIDENCE and not ALLOW_UNVERIFIED:
-                logger.warning(f"Verification Fail [{request_id}]: LLM verification unavailable (strict mode).")
-                return _emit_refusal(
-                    request_id=request_id,
-                    docs_snapshot_id=docs_snapshot_id,
-                    version_snapshot=version_snapshot,
-                    refusal_code=RefusalCode.POLICY_REFUSAL,
-                    reason="LLM verification required but unavailable.",
-                    failure_label="LLM_VERIFICATION_UNAVAILABLE",
-                    start_time=start_time,
-                    question_len=question_len,
-                    tokens_in=tokens_in,
-                    tokens_out=tokens_out,
-                    cost_est=cost_est,
-                    trace_metadata=trace_metadata,
-                    session_id=session_id,
-                    question=question,
-                    tenant_id=tenant_id,
-                    matter_id=matter_id,
-                    user_id=user_id,
-                )
-            verified_chunk = candidates[0]
+            updated_metadata = attached_trace2
     else:
-        if STRICT_EVIDENCE and not ALLOW_UNVERIFIED:
-            logger.warning(f"Verification Fail [{request_id}]: LLM verification disabled (strict mode).")
-            return _emit_refusal(
-                request_id=request_id,
-                docs_snapshot_id=docs_snapshot_id,
-                version_snapshot=version_snapshot,
-                refusal_code=RefusalCode.POLICY_REFUSAL,
-                reason="LLM verification required but not configured.",
-                failure_label="LLM_VERIFICATION_DISABLED",
-                start_time=start_time,
-                question_len=question_len,
-                tokens_in=tokens_in,
-                tokens_out=tokens_out,
-                cost_est=cost_est,
-                trace_metadata=trace_metadata,
-                session_id=session_id,
-                question=question,
-                tenant_id=tenant_id,
-                matter_id=matter_id,
-                user_id=user_id,
-            )
-        trace_metadata = {**(trace_metadata or {}), "verification_mode": "disabled"}
+        updated_metadata = {**updated_metadata, "verification_mode": "disabled"}
         verified_chunk = candidates[0]
+
     verification_ms = int((time.perf_counter() - verification_start) * 1000)
 
-    # ARCH-1: Deadline check after verification
-    _check_deadline(start_time, REQUEST_DEADLINE_SECONDS, "verification")
+    return VerificationResult(
+        verified_chunk=verified_chunk,
+        verification_status=verification_status,
+        verification_rejected=verification_rejected,
+        verification_results=verification_results,
+        verification_reasons=verification_reasons,
+        last_verifier_reason=last_verifier_reason,
+        verified_span=verified_span,
+        verification_ms=verification_ms,
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        cost_est=cost_est,
+        cost_breakdown=cost_breakdown,
+        usage_fallback=usage_fallback,
+        trace_metadata=updated_metadata,
+    )
 
-    if verification_status == AUTO_VERIFY_STATUS and verified_chunk:
-        verifier_result = {
-            "verdict": AUTO_VERIFY_STATUS,
-            "reason": AUTO_VERIFY_REASON,
-        }
-    elif verification_status == "VERIFIED" and verified_chunk:
-        verifier_result = {
-            "verdict": "YES",
-            "reason": verification_reasons.get(verified_chunk["chunk_id"], "FOUND"),
-        }
-    elif verification_rejected:
-        verifier_result = {
-            "verdict": "NO",
-            "reason": last_verifier_reason or "NOT_FOUND",
-        }
-    else:
-        verifier_result = {
-            "verdict": "UNVERIFIED",
-            "reason": "UNVERIFIED",
-        }
-    trace_metadata = {**(trace_metadata or {}), "verifier_result": verifier_result}
 
+def synthesize(
+    effective_question: str,
+    verified_chunk: ChunkDict,
+    *,
+    verification_status: str,
+    verification_results: dict[str, tuple[str, str | None]],
+    verification_reasons: dict[str, str],
+    verified_span: str | None,
+    results: list[ChunkDict],
+    candidates: list[ChunkDict],
+    ret_score_key: str,
+    conf_min: float,
+    trace_metadata: TraceMetadata,
+    tenant_id: str,
+) -> SynthesisResult:
+    """Step 5: Span extraction, evidence grading, citations, answer text."""
     q_tokens = evidence.tokenize(effective_question)
     supporting_span = evidence.best_supporting_span(effective_question, verified_chunk["chunk_text"])
     if not supporting_span:
         supporting_span = rag.snippet_for(verified_chunk["chunk_text"])
 
     stored_verified_span = verification_results.get(verified_chunk["chunk_id"], (None, None))[1]
-    if verification_status in {"VERIFIED", AUTO_VERIFY_STATUS} and (verified_span or stored_verified_span):
-        supporting_span = verified_span or stored_verified_span
-    
+    if verification_status in {"VERIFIED", AUTO_VERIFY_STATUS}:
+        override_span = verified_span or stored_verified_span
+        if override_span:
+            supporting_span = override_span
+
     overlap = evidence.overlap_score(q_tokens, supporting_span)
     if verification_status == "VERIFIED" and trace_metadata.get("verification_mode") != "auto":
         overlap = max(overlap, 0.6)
-    
+
     top_score = rag.score_value(results[0], ret_score_key)
     second_score = rag.score_value(results[1], ret_score_key) if len(results) > 1 else 0.0
     rrf_margin = top_score - second_score
     ret_score = rag.score_value(verified_chunk, ret_score_key)
     azure_rerank_score = rag.score_value(verified_chunk, "azure_reranker_score")
-    
+
     support_count = sum(
         1
         for r in candidates
         if evidence.overlap_score(q_tokens, r["chunk_text"]) >= 0.2
     )
     support_count = max(1, support_count)
-    
+
     with otel.span(
         "evidence.grade",
         verification_status=verification_status,
@@ -825,7 +828,7 @@ def execute_ask(
             overlap,
             reranker_score=azure_rerank_score,
         )
-        
+
     # Build multiple citations from verified/high-confidence chunks (FR-023)
     verified_chunks = [verified_chunk]
     for chunk in candidates[:3]:
@@ -837,10 +840,9 @@ def execute_ask(
         if len(verified_chunks) >= 3:
             break
 
-    citations = []
-    answer_parts = []
+    citations: list[Citation] = []
+    answer_parts: list[str] = []
     for idx, chunk in enumerate(verified_chunks, start=1):
-        # Get span for this chunk
         chunk_span = verification_results.get(chunk["chunk_id"], (None, None))[1]
         if not chunk_span:
             chunk_span = evidence.best_supporting_span(effective_question, chunk["chunk_text"])
@@ -866,13 +868,11 @@ def execute_ask(
         )
         citations.append(citation)
 
-        # Build answer part with [N] marker (FR-023)
         if idx == 1:
             answer_parts.append(f"According to {doc_name} (page {page}) [{idx}], {chunk_span}")
         else:
             answer_parts.append(f"Additionally, {doc_name} (page {page}) [{idx}] states: {chunk_span}")
-    
-    # Use first citation for evidence support metadata
+
     primary_citation = citations[0]
 
     evidence_support = EvidenceSupport(
@@ -902,11 +902,11 @@ def execute_ask(
         supporting_span=supporting_span,
         supporting_page_num=primary_citation.page_num,
         supporting_doc_name=primary_citation.doc_name,
-        docs_snapshot_id=docs_snapshot_id,
+        docs_snapshot_id=trace_metadata.get("docs_snapshot_id") or "",
         index_version=INDEX_VERSION,
-        confidence_threshold=conf_min,  # FR-024: Show threshold in response
+        confidence_threshold=conf_min,
     )
-    
+
     debug_candidates = rag.build_debug_candidates(
         effective_question,
         candidates,
@@ -914,7 +914,320 @@ def execute_ask(
         verification_results=verification_results,
         verification_reasons=verification_reasons,
     )
-    
+
+    answer_text = ". ".join(answer_parts) + "."
+
+    updated_metadata = {**trace_metadata}
+
+    return SynthesisResult(
+        answer_text=answer_text,
+        citations=citations,
+        evidence_support=evidence_support,
+        debug_candidates=debug_candidates,
+        trace_metadata=updated_metadata,
+    )
+
+
+@_observe(name="execute_ask", capture_input=False, capture_output=False)
+def execute_ask(
+    payload: AskRequest,
+    session_id: str | None = None,
+    *,
+    tenant_id: str,
+    matter_id: str,
+    user_id: str,
+) -> AskResponse:
+    """Orchestrator: calls pipeline steps and handles refusal branches.
+
+    ARCH-2: Decomposed into validate_and_setup, check_cache, retrieve,
+    _run_verification, and synthesize.  All refusal branches, deadline checks,
+    _record_request_internal, and _store_qa_messages remain here.
+
+    NOTE: MAX_QUERY_LENGTH check delegated to validate_and_setup (see step 1).
+    """
+    start_time = time.perf_counter()
+
+    # --- Step 1: Validate & setup ----------------------------------------
+    ctx = validate_and_setup(
+        payload,
+        session_id,
+        tenant_id=tenant_id,
+        matter_id=matter_id,
+    )
+    request_id = ctx.request_id
+    question = ctx.question
+    effective_question = ctx.effective_question
+    question_hash = ctx.question_hash
+    question_len = ctx.question_len
+    docs_snapshot_id = ctx.docs_snapshot_id
+    doc_id = ctx.doc_id
+    version_snapshot = ctx.version_snapshot
+    trace_metadata: TraceMetadata = dict(ctx.trace_metadata)
+
+    # --- Step 2: Cache check ---------------------------------------------
+    cached_response = check_cache(
+        ctx,
+        cache=_query_cache,
+        tenant_id=tenant_id,
+        matter_id=matter_id,
+        start_time=start_time,
+    )
+    if cached_response is not None:
+        return cached_response
+
+    # --- Accumulated cost state (stays in orchestrator) ------------------
+    tokens_in = 0
+    tokens_out = 0
+    cost_est = 0.0
+
+    logger.info(f"Incoming Request [{request_id}] - Snapshot: {docs_snapshot_id}")
+
+    # --- Injection gate (stays in orchestrator) --------------------------
+    if policy.is_injection_attempt(question):
+        logger.warning(f"Policy Trigger [{request_id}]: Injection Attempt Detected")
+        return _emit_refusal(
+            request_id=request_id,
+            docs_snapshot_id=docs_snapshot_id,
+            version_snapshot=version_snapshot,
+            refusal_code=RefusalCode.INJECTION_DETECTED,
+            reason="Injection heuristics triggered.",
+            failure_label="INJECTION_DETECTED",
+            start_time=start_time,
+            question_len=question_len,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            cost_est=cost_est,
+            trace_metadata=trace_metadata,
+            session_id=session_id,
+            question=question,
+            tenant_id=tenant_id,
+            matter_id=matter_id,
+        )
+
+    # --- Step 3: Retrieve ------------------------------------------------
+    rr = retrieve(
+        effective_question,
+        docs_snapshot_id,
+        tenant_id=tenant_id,
+        matter_id=matter_id,
+        doc_id=doc_id,
+        trace_metadata=trace_metadata,
+    )
+    tokens_in += rr.tokens_in
+    cost_est += rr.cost_est
+    trace_metadata = dict(rr.trace_metadata)
+    results = rr.results
+    candidates = rr.candidates
+    ret_score_key = rr.ret_score_key
+    conf_score_key = rr.conf_score_key
+    conf_min = rr.conf_min
+
+    # ARCH-1: Deadline check after retrieval
+    _check_deadline(start_time, REQUEST_DEADLINE_SECONDS, "retrieval")
+
+    # --- Retrieval refusal branches (stay in orchestrator) ---------------
+    if not results or rag.score_value(results[0], ret_score_key) == 0.0:
+        logger.warning(f"Retrieval Fail [{request_id}]: No evidence found")
+        debug_candidates = (
+            rag.build_debug_candidates(effective_question, results, tenant_id=tenant_id, reason_override="NO_SUPPORTING_EVIDENCE")
+            if results
+            else None
+        )
+        return _emit_refusal(
+            request_id=request_id,
+            docs_snapshot_id=docs_snapshot_id,
+            version_snapshot=version_snapshot,
+            refusal_code=RefusalCode.NO_SUPPORTING_EVIDENCE,
+            reason="No supporting evidence found.",
+            failure_label="NO_EVIDENCE",
+            start_time=start_time,
+            question_len=question_len,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            cost_est=cost_est,
+            debug_candidates=debug_candidates,
+            trace_metadata=trace_metadata,
+            session_id=session_id,
+            question=question,
+            tenant_id=tenant_id,
+            matter_id=matter_id,
+            user_id=user_id,
+        )
+
+    if not candidates:
+        logger.warning(
+            f"Confidence Fail [{request_id}]: No results met threshold {conf_min} ({conf_score_key})"
+        )
+        debug_candidates = rag.build_debug_candidates(
+            effective_question,
+            results,
+            tenant_id=tenant_id,
+            reason_override="BELOW_CONFIDENCE_THRESHOLD",
+        )
+        return _emit_refusal(
+            request_id=request_id,
+            docs_snapshot_id=docs_snapshot_id,
+            version_snapshot=version_snapshot,
+            refusal_code=RefusalCode.LOW_RETRIEVAL_CONFIDENCE,
+            reason="Insufficient retrieval confidence.",
+            failure_label="LOW_CONFIDENCE",
+            start_time=start_time,
+            question_len=question_len,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            cost_est=cost_est,
+            debug_candidates=debug_candidates,
+            trace_metadata=trace_metadata,
+            session_id=session_id,
+            question=question,
+            tenant_id=tenant_id,
+            matter_id=matter_id,
+            user_id=user_id,
+        )
+
+    # --- Step 4: Verify --------------------------------------------------
+    vr = _run_verification(
+        effective_question,
+        candidates,
+        request_id,
+        trace_metadata=trace_metadata,
+    )
+    tokens_in += vr.tokens_in
+    tokens_out += vr.tokens_out
+    cost_est += vr.cost_est
+    trace_metadata = dict(vr.trace_metadata)
+    verified_chunk = vr.verified_chunk
+    verification_status = vr.verification_status
+    verification_rejected = vr.verification_rejected
+    verification_results = vr.verification_results
+    verification_reasons = vr.verification_reasons
+    last_verifier_reason = vr.last_verifier_reason
+    verified_span = vr.verified_span
+    verification_ms = vr.verification_ms
+
+    # --- Verification refusal branches (stay in orchestrator) ------------
+    if verification.is_enabled() and verified_chunk is None:
+        if verification_rejected:
+            logger.warning(f"Verification Fail [{request_id}]: All top candidates rejected by LLM.")
+            return _emit_refusal(
+                request_id=request_id,
+                docs_snapshot_id=docs_snapshot_id,
+                version_snapshot=version_snapshot,
+                refusal_code=RefusalCode.NO_SUPPORTING_EVIDENCE,
+                reason="Retrieval found matches, but they were judged irrelevant by the model.",
+                failure_label="LLM_VERIFICATION_FAILED",
+                start_time=start_time,
+                question_len=question_len,
+                tokens_in=tokens_in,
+                tokens_out=tokens_out,
+                cost_est=cost_est,
+                trace_metadata=trace_metadata,
+                session_id=session_id,
+                question=question,
+                tenant_id=tenant_id,
+                matter_id=matter_id,
+                user_id=user_id,
+            )
+
+        if STRICT_EVIDENCE and not ALLOW_UNVERIFIED:
+            logger.warning(f"Verification Fail [{request_id}]: LLM verification unavailable (strict mode).")
+            return _emit_refusal(
+                request_id=request_id,
+                docs_snapshot_id=docs_snapshot_id,
+                version_snapshot=version_snapshot,
+                refusal_code=RefusalCode.POLICY_REFUSAL,
+                reason="LLM verification required but unavailable.",
+                failure_label="LLM_VERIFICATION_UNAVAILABLE",
+                start_time=start_time,
+                question_len=question_len,
+                tokens_in=tokens_in,
+                tokens_out=tokens_out,
+                cost_est=cost_est,
+                trace_metadata=trace_metadata,
+                session_id=session_id,
+                question=question,
+                tenant_id=tenant_id,
+                matter_id=matter_id,
+                user_id=user_id,
+            )
+        verified_chunk = candidates[0]
+
+    if not verification.is_enabled():
+        if STRICT_EVIDENCE and not ALLOW_UNVERIFIED:
+            logger.warning(f"Verification Fail [{request_id}]: LLM verification disabled (strict mode).")
+            return _emit_refusal(
+                request_id=request_id,
+                docs_snapshot_id=docs_snapshot_id,
+                version_snapshot=version_snapshot,
+                refusal_code=RefusalCode.POLICY_REFUSAL,
+                reason="LLM verification required but not configured.",
+                failure_label="LLM_VERIFICATION_DISABLED",
+                start_time=start_time,
+                question_len=question_len,
+                tokens_in=tokens_in,
+                tokens_out=tokens_out,
+                cost_est=cost_est,
+                trace_metadata=trace_metadata,
+                session_id=session_id,
+                question=question,
+                tenant_id=tenant_id,
+                matter_id=matter_id,
+                user_id=user_id,
+            )
+
+    # ARCH-1: Deadline check after verification
+    _check_deadline(start_time, REQUEST_DEADLINE_SECONDS, "verification")
+
+    # Build verifier_result trace entry
+    if verification_status == AUTO_VERIFY_STATUS and verified_chunk:
+        verifier_result = {
+            "verdict": AUTO_VERIFY_STATUS,
+            "reason": AUTO_VERIFY_REASON,
+        }
+    elif verification_status == "VERIFIED" and verified_chunk:
+        verifier_result = {
+            "verdict": "YES",
+            "reason": verification_reasons.get(verified_chunk["chunk_id"], "FOUND"),
+        }
+    elif verification_rejected:
+        verifier_result = {
+            "verdict": "NO",
+            "reason": last_verifier_reason or "NOT_FOUND",
+        }
+    else:
+        verifier_result = {
+            "verdict": "UNVERIFIED",
+            "reason": "UNVERIFIED",
+        }
+    trace_metadata = {**trace_metadata, "verifier_result": verifier_result}
+
+    # --- Step 5: Synthesize ----------------------------------------------
+    assert verified_chunk is not None  # guaranteed by refusal branches above
+    sr = synthesize(
+        effective_question,
+        verified_chunk,
+        verification_status=verification_status,
+        verification_results=verification_results,
+        verification_reasons=verification_reasons,
+        verified_span=verified_span,
+        results=results,
+        candidates=candidates,
+        ret_score_key=ret_score_key,
+        conf_min=conf_min,
+        trace_metadata=trace_metadata,
+        tenant_id=tenant_id,
+    )
+    answer_text = sr.answer_text
+    citations = sr.citations
+    evidence_support = sr.evidence_support
+    debug_candidates = sr.debug_candidates
+    trace_metadata = dict(sr.trace_metadata)
+
+    assert evidence_support is not None
+    grade = evidence_support.evidence_grade
+    label = evidence_support.evidence_label
+
+    # --- Evidence strength refusal (stays in orchestrator) ---------------
     if (
         STRICT_EVIDENCE
         and verification_status != "VERIFIED"
@@ -945,9 +1258,7 @@ def execute_ask(
             user_id=user_id,
         )
 
-    # Build answer with [N] citation markers (FR-023)
-    answer_text = ". ".join(answer_parts) + "."
-
+    # --- Build response --------------------------------------------------
     response = AskResponse(
         request_id=request_id,
         answer_text=answer_text,
@@ -962,7 +1273,7 @@ def execute_ask(
     # Enrich Langfuse with PII-safe summary (NFR-004 compliant)
     safe_update_observation(metadata=redact_for_langfuse(
         question_len=question_len,
-        answer_len=len(answer_text),
+        answer_len=len(answer_text or ""),
         citation_count=len(citations),
         evidence_grade=grade,
         evidence_label=label,
@@ -972,6 +1283,7 @@ def execute_ask(
 
     # Sub-component latency breakdown (NFR-011)
     total_ms = int((time.perf_counter() - start_time) * 1000)
+    retrieval_ms = rr.retrieval_ms
     overhead_ms = max(0, total_ms - (retrieval_ms + verification_ms))
     trace_metadata["latency_breakdown"] = {
         "retrieval_ms": retrieval_ms,
@@ -979,6 +1291,7 @@ def execute_ask(
         "overhead_ms": overhead_ms,
     }
 
+    # --- End-of-pipeline side effects (stay in orchestrator) -------------
     _record_request_internal(
         request_id=request_id,
         tenant_id=tenant_id,
@@ -989,7 +1302,7 @@ def execute_ask(
         failure_label=None,
         start_time=start_time,
         question_len=question_len,
-        answer_len=len(answer_text),
+        answer_len=len(answer_text or ""),
         tokens_in=tokens_in,
         tokens_out=tokens_out,
         cost_est=cost_est,
@@ -1021,6 +1334,7 @@ def execute_ask(
             doc_id=doc_id,
         )
 
+    primary_citation = citations[0]
     logger.info(f"Success [{request_id}]: Response returned with {len(citations)} citation(s) from {primary_citation.doc_name}")
     return response
 
