@@ -122,7 +122,7 @@ FastAPI (Azure Container Apps)
 ```bash
 ruff check apps/                    # Lint
 mypy apps/api/app --strict          # Type check
-pytest tests/ -v                    # 624 unit + integration tests
+pytest tests/ -v                    # 646+ unit + integration tests
 pytest evals/ -v                    # Golden query evals (>95% pass)
 ```
 
