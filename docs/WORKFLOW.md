@@ -31,7 +31,7 @@ Main Conversation (opus) — talks to you, picks tasks, spawns agents
   ├── researcher (sonnet) ← "what should we build?"
   ├── coder (opus)        ← "build it with TDD"
   ├── eval-writer (sonnet) ← "write the eval first" (LLM/retrieval only)
-  ├─�� verifier (haiku)    ← "did it pass?"
+  ├── verifier (haiku)    ← "did it pass?"
   ├── skeptic (sonnet)    ← "is it safe?"
   └── doc-sync (haiku)    ← "are docs current?"
 ```
@@ -87,7 +87,7 @@ HOW A FEATURE GETS BUILT
    │  • implements (GREEN)                    │
    │  • spawns eval-writer if LLM code        │
    │  • returns files changed + test results  │
-   └───────────────��──────────────────────────┘
+   └──────────────────────────────────────────┘
                  │
    ┌─────────────────────────────────┐
    │ verifier (haiku)                │ ← lint + types + tests + telemetry check
