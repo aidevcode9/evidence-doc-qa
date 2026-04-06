@@ -39,3 +39,17 @@ jobs:
         env:
           EVAL_API_URL: "http://localhost:8000"
         run: python -m evals.run --suite golden
+
+  telemetry_check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for raw httpx calls bypassing telemetry wrapper
+        run: |
+          VIOLATIONS=$(grep -rn "httpx\.\(post\|get\)" apps/api/app/ | grep -v telemetry | grep -v test | grep -v __pycache__ || true)
+          if [ -n "$VIOLATIONS" ]; then
+            echo "::error::Raw httpx calls found bypassing telemetry wrapper:"
+            echo "$VIOLATIONS"
+            exit 1
+          fi
+          echo "✓ All httpx calls go through telemetry wrapper"

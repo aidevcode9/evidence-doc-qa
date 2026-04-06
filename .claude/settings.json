@@ -28,6 +28,17 @@
         "hooks": [
           {
             "type": "command",
+            "if": "Bash(git commit *)",
+            "command": "jq -r '.tool_input.command' | grep -oP '(?<=-m \").*(?=\")' | head -1 | { read -r MSG; if [ -n \"$MSG\" ] && ! echo \"$MSG\" | grep -qE '^(feat|fix|test|docs|refactor|chore)\\('; then echo '{\"decision\": \"block\", \"reason\": \"Commit message must follow: type(scope): description. Types: feat, fix, test, docs, refactor, chore\"}'; fi; } 2>/dev/null || true",
+            "statusMessage": "Validating commit format..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
             "if": "Bash(git push *)",
             "command": "BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null); if [ \"$BRANCH\" = \"main\" ]; then echo '{\"decision\": \"block\", \"reason\": \"Direct push to main is not allowed. Use feature branches + PRs. Create a branch: git checkout -b feat/your-feature\"}'; fi",
             "statusMessage": "Branch protection check..."
@@ -43,6 +54,30 @@
             "prompt": "Adversarial review of changes being pushed. Run `git diff main...HEAD` (or `git diff HEAD~1` if on main) and scan for: (1) tenant_id missing from new DB queries, (2) raw LLM calls bypassing telemetry wrapper, (3) PII in log statements (user emails, document content), (4) new endpoints missing auth/RBAC checks, (5) hardcoded secrets or credentials. Report PASS if clean, or BLOCK with specific file:line references if any issue found.",
             "timeout": 120,
             "statusMessage": "Pre-push adversarial scan..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "agent",
+            "if": "Bash(git push *)",
+            "prompt": "Check if documentation is stale relative to changes being pushed. Run `git diff main...HEAD --stat` and compare changed files against docs (TECHNICAL_DEEP_DIVE.md, ARCHITECTURE_DIAGRAM.md, OPERATIONS.md, README.md, data-model.md, interfaces.md). Report STALE docs that need updating, or PASS if all current.",
+            "timeout": 60,
+            "statusMessage": "Doc sync check..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "agent",
+            "if": "Bash(git checkout -b feat/*)",
+            "prompt": "A feature branch was just created. Read STATUS.md to find the task matching this branch name. Run the full research protocol: read REQUIREMENTS.md for acceptance criteria, find existing patterns in the codebase, check data model impact, identify risks against project invariants (tenant isolation, telemetry, PII, citations). Return a structured research brief.",
+            "timeout": 120,
+            "statusMessage": "Spawning researcher..."
           }
         ]
       },
@@ -76,6 +111,17 @@
             "command": "jq -r '.tool_input.file_path // .tool_response.filePath // empty' | { read -r f; case \"$f\" in *.py) ruff check \"$f\" --quiet 2>&1 || true ;; esac; }",
             "timeout": 15,
             "statusMessage": "Linting..."
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath // empty' | { read -r f; case \"$f\" in *retrieval.py|*evidence.py|*policy.py|*verification.py|*ask_service.py) echo '{\"systemMessage\": \"⚠️ Core RAG file modified. Ensure a failing eval exists for this change (spawn eval-writer agent).\"}' ;; esac; } 2>/dev/null || true",
+            "timeout": 10,
+            "statusMessage": "Checking RAG file..."
           }
         ]
       }
