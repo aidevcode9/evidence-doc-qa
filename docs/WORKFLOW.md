@@ -6,14 +6,18 @@
 
 ## How to Start Working
 
+Say **"next task"** — Claude handles the rest:
+
 ```
-1. git pull origin main
-2. Read STATUS.md → pick a task from "Now" or "Next"
-3. git checkout -b feat/TASK-ID-description
-4. Tell Claude what you're building — agents handle the rest
+You:    "next task"
+Claude: "Next task: [ARCH-2] Decompose execute_ask(). Confirm, or pick another?"
+You:    "confirm"
+Claude: → pulls main → creates branch → spawns researcher → presents brief
+You:    "looks good"
+Claude: → spawns coder → TDD implementation → verifier → skeptic → PR
 ```
 
-That's it. Claude (opus) orchestrates the subagents automatically based on CLAUDE.md auto-trigger rules. You don't need to remember which agent to spawn — Claude reads the task, spawns `researcher`, gets your approval, spawns `coder`, runs `verifier`, runs `skeptic`, and creates the PR.
+That's it. One prompt to start, one confirmation to approve the approach. Claude orchestrates all 6 subagents automatically.
 
 ---
 
