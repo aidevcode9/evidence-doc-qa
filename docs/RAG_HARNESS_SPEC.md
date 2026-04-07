@@ -1,6 +1,6 @@
 # RAG Harness: Extracting a Trusted Foundation from Evidence-Bound
 
-**Date:** 2026-03-31
+**Date:** 2026-03-31 (updated 2026-04-07)
 **Goal:** Extract a repeatable, tested, production-grade RAG harness from the Evidence-Bound codebase that can serve as a starting point for any domain.
 
 ---
@@ -16,11 +16,11 @@ Scoring our current system against each principle from the enterprise RAG bluepr
 | 3 | **Tables as Structured Objects** -- dual embedding for tables | Zero table handling. Chunking treats tables as text. Financial tables get shredded into token soup. | 1/10 | No table detection, no structured extraction, no dual embedding. This is the biggest gap for legal contracts with indemnification schedules. |
 | 4 | **Hybrid Retrieval** -- BM25 + Dense + Graph | BM25 + vector with RRF fusion. Azure semantic reranker as cross-encoder. Local reranker fallback. | 7/10 | No GraphRAG for entity relationships or cross-document multi-hop. Legal: "find all clauses referencing Party B across 50 documents" fails. |
 | 5 | **Hierarchy / TreeRAG** -- respect document structure | Flat chunking with page offsets and char positions. No document hierarchy (section, subsection, clause). | 2/10 | Legal documents are deeply hierarchical (Article > Section > Clause > Sub-clause). Flat chunking loses this entirely. |
-| 6 | **Agentic Loop** -- hypothesize, retrieve, verify, refine | Retrieve + verify (parallel LLM verification). Auto-verify fast path. But: single-shot. No refinement if first retrieval misses. No query rewriting. | 5/10 | No re-retrieval, no query decomposition, no "the first answer wasn't good enough, let me try differently." |
+| 6 | **Agentic Loop** -- hypothesize, retrieve, verify, refine | Retrieve + verify (parallel LLM verification). Auto-verify fast path. **ARCH-2 (04-05): Pipeline decomposed into composable steps** — `retrieve()` → `_run_verification()` → `synthesize()` — enabling iterative loops. But: still single-shot. No refinement if first retrieval misses. No query rewriting. | 5/10 → **6/10** | Steps are composable (prerequisite met). Still need: re-retrieval, query decomposition, confidence-gated retry loop. |
 | 7 | **Retrieval as Security Boundary** -- chunks are untrusted | Injection gate pre-LLM. Chunk marked `<chunk>` (untrusted) in verifier prompt. Span blocklist. Homoglyph normalization. | 8/10 | Strongest area. Missing: content hash verification (confirm chunk wasn't tampered between index and retrieval). |
 | 8 | **Observability + Citations from Day 1** | Langfuse full pipeline tracing. OTEL custom metrics. Per-request cost. Citation validation with 90% similarity threshold. Negation flip detection. | 9/10 | This is where Evidence-Bound shines. Built in from the start, not retrofitted. |
 
-**Overall: 5.1/10** -- Strong on observability, citations, and security. Weak on document intelligence (tables, hierarchy, quality routing).
+**Overall: 5.25/10** (was 5.1) — Strong on observability, citations, and security. ARCH-2 pipeline decomposition improved composability (+1 on agentic loop). Still weak on document intelligence (tables, hierarchy, quality routing).
 
 ---
 
@@ -51,7 +51,7 @@ Evidence-Bound has five clean abstraction layers that are immediately extractabl
 | httpx connection pool | `http_client.py` | 95% -- singleton, HTTP/2, configurable limits |
 | Cost tracking | `cost.py` | 100% -- token-based, per-component breakdown |
 | OTEL + Langfuse setup | `otel.py` | 95% -- GenAI semantic conventions, PII-safe |
-| Parallel verification | `ask_service.py` | 80% -- ThreadPoolExecutor pattern |
+| Parallel verification | `ask_service.py:_run_verification()` | 90% -- standalone step function with `@_observe`, ThreadPoolExecutor pattern (ARCH-2) |
 | Chunking with offsets | `ingestion.py` | 70% -- page/char offset preservation |
 
 ---
@@ -61,6 +61,8 @@ Evidence-Bound has five clean abstraction layers that are immediately extractabl
 ### Core Idea
 
 The harness is a **configured pipeline**, not a framework. You compose it from interchangeable providers and plug in domain-specific logic at defined extension points.
+
+> **Update (ARCH-2, 04-05):** The Evidence-Bound pipeline is now decomposed into 5 composable step functions: `validate_and_setup()`, `check_cache()`, `retrieve()`, `_run_verification()`, `synthesize()`. Each step takes typed dataclass inputs and returns typed dataclass outputs (`SetupContext`, `RetrievalResult`, `VerificationResult`, `SynthesisResult`). This is the foundation for the harness `pipeline.ask()` orchestrator.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
