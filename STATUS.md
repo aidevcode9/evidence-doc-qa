@@ -1,13 +1,13 @@
 # STATUS.md
 
-Last updated: 2026-04-05
+Last updated: 2026-04-07
 
 ---
 
 ## Current Phase: 8b — Pipeline Restructure
 
 **Goal:** Conversational Q&A, pipeline decomposition, production-grade workflow
-**Progress:** Phase 8a complete (ARCH-1, DOCS-1 shipped). CONV-1 shipped. Production workflow established: feature branches + PRs, `/wsreview`, enforced hooks. Knowledge site live at knowledge.bound.legal. ARCH-2/ARCH-3 next (need review — high blast radius).
+**Progress:** ARCH-2 shipped (PR #33) — execute_ask decomposed into 5 composable steps. Enforcement gaps closed (PR #34) — 10 hooks wired. Subagent migration complete (PR #31). ARCH-3 + Security NFRs next.
 
 > **Research docs:** `docs/ARCHITECTURE_REVIEW.md`, `docs/planning/MULTI_TENANT_READINESS.md`
 
@@ -17,9 +17,8 @@ Last updated: 2026-04-05
 
 | Task | FR | Depends On | Notes | Research |
 |------|-----|------------|-------|----------|
-| **[ARCH-2] Decompose execute_ask() into retrieve/verify/synthesize/cite** | NFR-050 | — | 700-line function is hard to modify/test. Split into composable steps. Enables future async migration. **⚠️ Needs user review — high blast radius.** | `docs/ARCHITECTURE_REVIEW.md` §Debt |
-| **[ARCH-3] Replace verification loop with single LLM synthesis call** | NFR-011 | ARCH-2 | Reranker already handles relevance. Use LLM for answer synthesis, not binary relevance check. Eliminates redundant step, saves latency. | `docs/ARCHITECTURE_REVIEW.md` §1 |
-| **Security NFRs full pass** | NFR-001–022 | SEC-1 ✅, SEC-2 ✅ | Per-tenant rate limiting, CORS hardening, input fuzzing, penetration testing prep. | `docs/MULTI_TENANT_READINESS.md` |
+| **[ARCH-3] Replace verification loop with single LLM synthesis call** | NFR-011 | ARCH-2 ✅ | Reranker already handles relevance. Use LLM for answer synthesis, not binary relevance check. Eliminates redundant step, saves latency. | `docs/ARCHITECTURE_REVIEW.md` §1 |
+| **Security NFRs full pass** | NFR-001–022 | SEC-1 ✅, SEC-2 ✅ | Per-tenant rate limiting, CORS hardening, input fuzzing, penetration testing prep. | `docs/planning/MULTI_TENANT_READINESS.md` |
 
 ## Later — Phase 9: Document Intelligence (product gaps for paid product)
 
@@ -59,6 +58,9 @@ Last updated: 2026-04-05
 
 | Task | FR | Date |
 |------|-----|------|
+| **[ARCH-2] Decompose execute_ask into 5 composable steps (PR #33)** | NFR-050 | 04-05 |
+| **Close 5 enforcement gaps — hooks + CI (PR #34)** | INFRA | 04-05 |
+| **Migrate 11 slash commands → 6 subagents + 2 commands (PR #31)** | INFRA | 04-05 |
 | **Production workflow — feature branches + PRs + /wsreview (PR #29)** | INFRA | 04-05 |
 | **Merge /wsskeptic + /wsredteam → /wsreview** | INFRA | 04-05 |
 | **Branch protection hook — blocks direct push to main** | INFRA | 04-05 |
